@@ -243,7 +243,7 @@ literalList
        
 application : Parser AST.Expr       
 application
-    = succeed (\fun args -> List.foldl (\x y -> AST.App y x) fun args)
+    = succeed AST.App
          |= delimited
          |. spaces
          |= delimitedList
@@ -262,12 +262,12 @@ delimitedList
 
 lambda : Parser AST.Expr                      
 lambda
-    = succeed (\xs e -> List.foldr AST.Lam e xs)
+    = succeed AST.Lam 
          |. symbol "\\"
          |. spaces
          |= identifierList
          |. spaces
-         |. symbol "->"
+         |. operator "->"
          |. spaces
          |= lazy (\_ -> topExpr)
 

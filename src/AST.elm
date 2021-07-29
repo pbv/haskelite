@@ -8,8 +8,8 @@ type alias Name
     = String
 
 type Expr
-    = App Expr Expr
-    | Lam Name Expr
+    = App Expr (List Expr)    -- non-empty list of arguments
+    | Lam (List Name) Expr    -- non-empty list of variables
     | Var Name
     | Number Int
     | Boolean Bool
@@ -49,14 +49,14 @@ applySubst s e
                   Nothing -> e
                   Just e1 -> e1
                              
-          Lam x e1 ->
+          Lam xs e1 ->
               let
-                  s1 = Dict.remove x s
+                  s1 = List.foldr Dict.remove s xs
               in
-                  Lam x (applySubst s1 e1)
+                  Lam xs (applySubst s1 e1)
                       
-          App e1 e2 ->
-              App (applySubst s e1) (applySubst s e2)
+          App e1 args ->
+              App (applySubst s e1) <| List.map (applySubst s) args
                   
           Cons e1 e2 ->
               Cons (applySubst s e1) (applySubst s e2)

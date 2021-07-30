@@ -19,7 +19,6 @@ type Expr
     | IfThenElse Expr Expr Expr
     | Fail String                  -- pattern match failure, type errors, etc
 
-
 type Decl
     = TypeSig Name String 
     | Equation Name (List Pattern) Expr 
@@ -30,7 +29,6 @@ type Pattern
     | NumberP Int
     | NilP
     | ConsP Pattern Pattern
-      
 
 -- variable substitutions
 type alias Subst = Dict Name Expr

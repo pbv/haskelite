@@ -3,7 +3,7 @@ module Eval exposing (..)
 
 import AST exposing (Expr(..), Pattern(..), Decl(..), Name, Subst)
 import Dict exposing (Dict)
-
+import Context exposing (Context)
 
 -- * semantics
 -- function definitions
@@ -21,6 +21,38 @@ type alias Function
 type alias Alt 
     = (List Pattern, Expr)
 
+
+-- transform a list of declarations into a dictionary for functions
+collectFunctions : List Decl -> Functions -> Functions
+collectFunctions decls accum
+    = case decls of
+          [] ->
+              accum
+          (TypeSig _ _ :: rest) ->
+              collectFunctions rest accum
+          (Equation fun ps e :: rest) ->
+              let
+                  (alts1,rest1) = collectAlts fun rest
+                  semantic = dispatchAlts ((ps,e)::alts1)
+                  accum1 = Dict.insert fun semantic accum
+              in collectFunctions rest1 accum1
+                  
+                  
+
+-- collect all contiguous equations for a given name
+collectAlts : Name -> List Decl -> (List Alt, List Decl)
+collectAlts fun decls
+    = case decls of
+          [] -> ([], [])
+          (TypeSig _ _ :: rest) ->
+              ([], rest)
+          (Equation f ps e :: rest) ->
+              if f==fun then
+                  let (alts, rest1) = collectAlts fun rest
+                  in ((ps,e)::alts, rest1)
+              else
+                  ([], decls)
+    
     
 -- built-in operations
 primitives : Functions
@@ -68,36 +100,6 @@ normalForm expr
           _ -> False
       
 
--- transform a list of declarations into a dictionary for functions
-collectFunctions : List Decl -> Functions -> Functions
-collectFunctions decls accum
-    = case decls of
-          [] ->
-              accum
-          (TypeSig _ _ :: rest) ->
-              collectFunctions rest accum
-          (Equation fun ps e :: rest) ->
-              let
-                  (alts1,rest1) = collectAlts fun rest
-                  semantic = dispatchAlts ((ps,e)::alts1)
-                  accum1 = Dict.insert fun semantic accum
-              in collectFunctions rest1 accum1
-                  
-                  
-
--- collect all contiguous equations for a given name
-collectAlts : Name -> List Decl -> (List Alt, List Decl)
-collectAlts fun decls
-    = case decls of
-          [] -> ([], [])
-          (TypeSig _ _ :: rest) ->
-              ([], rest)
-          (Equation f ps e :: rest) ->
-              if f==fun then
-                  let (alts, rest1) = collectAlts fun rest
-                  in ((ps,e)::alts, rest1)
-              else
-                  ([], decls)
 
 -- apply a function specifified by a list of alterantives
 -- to a list of arguments
@@ -233,4 +235,17 @@ matchingList ps es s
           (p1::ps1, e1::es1) -> matching p1 e1 s
                                |> Maybe.andThen (\s1 -> matchingList ps1 es1 s1)
           (_, _) -> Just s
+
+
+       
+-- * perform a single reduction under a context
+redexCtx : Functions -> Expr -> Context -> Maybe Expr
+redexCtx functions expr ctx
+    = ctx.getOption expr
+          |> Maybe.andThen
+             (\subexpr ->
+                  redex functions subexpr
+             |> Maybe.andThen
+                  (\new -> Just (ctx.set new expr)))
+
 

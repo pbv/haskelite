@@ -3,11 +3,11 @@ module Haskell exposing (..)
 
 import Parser exposing
     (Parser, (|.), (|=), int, symbol, keyword, variable, 
-     succeed, problem, oneOf, andThen, backtrackable, lazy, run )
+     succeed, problem, oneOf, andThen, backtrackable, lazy)
 import AST
 import Char
 import Set
-
+import List.Extra as List
 
 
 -- declarations
@@ -127,8 +127,14 @@ patternList =
     }
     
 
-
+    
 -- top-level expressions
+topExprEnd : Parser AST.Expr
+topExprEnd = succeed identity
+              |= topExpr
+              |. Parser.end
+
+
 topExpr : Parser AST.Expr
 topExpr = infix4
 
@@ -243,7 +249,9 @@ literalList
        
 application : Parser AST.Expr       
 application
-    = succeed AST.App
+    = succeed (\e0 args -> case args of
+                               [] -> e0
+                               _ -> AST.App e0 args)
          |= delimited
          |. spaces
          |= delimitedList
@@ -317,3 +325,32 @@ spaces
 newlines
     = Parser.chompWhile (\c -> c=='\n' || c=='\r')
 
+
+
+deadEndsToString : List Parser.DeadEnd -> String
+deadEndsToString deadEnds
+    =
+      let
+          groups = List.groupWhile (\a b -> a.row==b.row &&
+                                            a.col==b.col) deadEnds
+      in
+          String.join "; " <|
+          List.map (\(a,r) ->
+                        "line " ++ String.fromInt a.row  ++ "," ++
+                        "col " ++ String.fromInt a.col ++ ": " ++
+                        "expecting " ++
+                        (String.join ", " <|
+                             List.map (\d -> problemToString d.problem) (a::r))
+                   ) groups
+      
+problemToString : Parser.Problem -> String
+problemToString prob
+    = case prob of
+          Parser.Expecting s -> s
+          Parser.ExpectingInt -> "integer"
+          Parser.ExpectingVariable -> "variable"
+          Parser.ExpectingSymbol s -> s
+          Parser.ExpectingKeyword s -> s
+          Parser.ExpectingEnd -> "end of input"
+          Parser.Problem s -> s
+          _ -> "?"

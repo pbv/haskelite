@@ -1,0 +1,25 @@
+<html>
+  <head>
+    <style>
+      .lines   {
+	  font-family: monospace;
+          padding: 1em;
+          margin: 5em;
+          margin: 1em 0;
+          background: lightyellow;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="elm-app"></div>
+    
+    <script src="elm.js"></script>
+    <script>
+      var app = Elm.View.init({
+          node: document.getElementById("elm-app"),
+	  flags: "reverse [1,2,3] "
+      });      
+    </script>
+  </body>
+</html>

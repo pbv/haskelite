@@ -5,11 +5,15 @@ import AST exposing (Expr(..), Name)
 import Haskell
 import Eval
 import Parser
+import Prelude exposing (prelude)
 import Context exposing (Context)
 import Monocle.Optional as Monocle
 import Html exposing (..)
-import Html.Attributes exposing (placeholder,value,style)
+import Html.Attributes exposing (placeholder,value,style,class)
 import Html.Events.Extra.Mouse as Mouse
+import Platform.Cmd as Cmd
+import Platform.Sub as Sub
+
 import Dict exposing (Dict)
 import Browser
 import Debug
@@ -23,64 +27,63 @@ type alias Model
 type Msg
     = Eval Context (Float,Float)
 
-expression = "sum (countdown 3)"
-
-        
-program =
-    """
-length :: [a] -> Int
-length [] = 0
-length (x:xs) = 1 + length xs
-
-countdown :: Int -> [Int]
-countdown 0 = []
-countdown n = n : countdown (n-1)
-
-sum :: [Int] -> Int
-sum [] = 0
-sum (x:xs) = x + sum xs
-"""
+expression = "filter even [1,2,3,4]"
+       
 
 decls =
-    case Parser.run Haskell.declList program of
+    case Parser.run Haskell.declList prelude of
         Ok l -> l
         Err _ -> []
 
 functions = Eval.collectFunctions decls Eval.primitives
-             
-init =
-    { expression =
-          case Parser.run Haskell.topExprEnd expression of
+
+init : String -> (Model, Cmd msg)            
+init str =
+    ({ expression =
+          case Parser.run Haskell.topExprEnd str of
               Result.Ok expr -> expr
               Result.Err _ -> Fail "parse error"
-    , clientPos = (0,0)
-    }
+     , clientPos = (0,0)
+     }
+    , Cmd.none
+    )
 
       
 view : Model -> Html Msg
-view model = renderExpr model.expression Context.hole
+view model =
+    div [class "lines"]
+        [
+         renderExpr model.expression Context.hole
+        ]
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
     case msg of
         Eval ctx newPos ->
             if newPos /= model.clientPos then
                 let
-                    subExpr = Debug.log "eval: " (.getOption ctx model.expression)
+                    -- subExpr = Debug.log "eval: " (.getOption ctx model.expression)
                     newExpr = Maybe.withDefault model.expression
                               (Eval.redexCtx functions model.expression ctx)
                 in 
-                    { expression = newExpr
-                    , clientPos = newPos
-                    }
+                    ({ expression = newExpr
+                     , clientPos = newPos
+                     }
+                    , Cmd.none)
             else
-                model
+                (model, Cmd.none)
+
+subscriptions : Model -> Sub msg
+subscriptions _ = Sub.none
 
                     
-main = Browser.sandbox { init = init
-                       , view = view
-                       , update = update
-                       }
+main =
+    Browser.element
+        { init = init
+        , view = view
+        , update = update
+        , subscriptions = subscriptions
+        }
 
                                     
 renderExpr : Expr -> Context -> Html Msg
@@ -179,7 +182,7 @@ getPrecedence op
 precedence : Dict Name Int
 precedence
     = Dict.fromList
-      [ ("==", 4),  ("/=", 4)
+      [ ("==", 4), ("/=", 4)
       , (":", 5), ("++", 5)
       , ("+", 6), ("-", 6)
       , ("*", 7)
@@ -189,10 +192,10 @@ precedence
                       
 paren : Bool -> Html msg -> Html msg
 paren b html
-    = if b then
+    = --if b then
           span [] [text "(", html, text ")"]
-      else
-          html        
+      --else
+      --    html        
 
         
 

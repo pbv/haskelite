@@ -1,17 +1,19 @@
-
+{-
+-- Parser and pretty printer for a tiny subset of Haskell
+-}
 module Haskell exposing (..)
 
 import Parser exposing
     (Parser, (|.), (|=), int, symbol, keyword, variable, 
      succeed, problem, oneOf, andThen, backtrackable, lazy)
-import AST
+import AST exposing (Expr(..), Pattern(..), Decl(..), Name)
 import Char
 import Set
 import List.Extra as List
 
 
 -- declarations
-declList : Parser (List AST.Decl)
+declList : Parser (List Decl)
 declList
     = Parser.sequence
       { start = ""
@@ -23,7 +25,7 @@ declList
       }
 
          
-declaration : Parser AST.Decl
+declaration : Parser Decl
 declaration
     = oneOf
       [ backtrackable typeSignature
@@ -31,9 +33,9 @@ declaration
       , prefixEquation
       ]
 
-prefixEquation : Parser AST.Decl
+prefixEquation : Parser Decl
 prefixEquation
-    = succeed AST.Equation 
+    = succeed Equation 
          |= identifier
          |= patternList
          |. spaces   
@@ -41,9 +43,9 @@ prefixEquation
          |. spaces
          |= topExpr
 
-infixEquation : Parser AST.Decl
+infixEquation : Parser Decl
 infixEquation
-    = succeed (\p1 fun p2 e -> AST.Equation fun [p1,p2] e)
+    = succeed (\p1 fun p2 e -> Equation fun [p1,p2] e)
          |= pattern
          |. spaces
          |= infixOperator
@@ -56,9 +58,9 @@ infixEquation
 
 
 -- types are parsed but ignored
-typeSignature : Parser AST.Decl
+typeSignature : Parser Decl
 typeSignature
-    = succeed AST.TypeSig
+    = succeed TypeSig
          |= identifierOrOperator
          |. spaces
          |. operator "::"
@@ -67,7 +69,7 @@ typeSignature
             |> Parser.getChompedString)
 
 
-identifierOrOperator : Parser AST.Name
+identifierOrOperator : Parser Name
 identifierOrOperator
     = oneOf [ identifier
             , succeed identity
@@ -79,26 +81,33 @@ identifierOrOperator
             
 infixOperator : Parser String
 infixOperator
-    = Parser.chompWhile isOperator
+    = Parser.chompWhile operatorChar
     |> Parser.getChompedString
-    |> andThen (\s -> if String.length s>0 then succeed s
-                      else problem "null operator")
+    |> andThen (\s -> if String.isEmpty s
+                      then problem "null operator"
+                      else succeed s)
 
-isOperator : Char -> Bool
-isOperator c = c=='+' || c=='*' || c=='-' || c=='>' || c=='<' || c==':' || c=='=' 
-                   
+operatorChar : Char -> Bool
+operatorChar c =
+    c=='+' || c=='*' || c=='-' || c=='>' || c=='<' || c==':' || c=='=' 
+
+
+isOperator : Name -> Bool
+isOperator = String.all operatorChar 
+
+        
 -- patterns
 pattern =
     oneOf
-    [ succeed AST.VarP
+    [ succeed VarP
            |= identifier
-    , succeed (AST.BooleanP True)
+    , succeed (BooleanP True)
            |. keyword "True"
-    , succeed (AST.BooleanP False)
+    , succeed (BooleanP False)
            |. keyword "False"
-    , succeed AST.NumberP
+    , succeed NumberP
            |= backtrackable int
-    , succeed AST.NilP
+    , succeed NilP
            |. symbol "["
            |. spaces
            |. symbol "]"
@@ -112,7 +121,7 @@ pattern =
           } |> andThen
                  (\l -> case List.reverse l of
                             [] -> problem "invalid pattern"
-                            (p::ps) -> succeed (List.foldr AST.ConsP p
+                            (p::ps) -> succeed (List.foldr ConsP p
                                                     (List.reverse ps)))
     ]
 
@@ -129,24 +138,23 @@ patternList =
 
     
 -- top-level expressions
-topExprEnd : Parser AST.Expr
+topExprEnd : Parser Expr
 topExprEnd = succeed identity
               |= topExpr
               |. Parser.end
 
 
-topExpr : Parser AST.Expr
+topExpr : Parser Expr
 topExpr = infix4
 
-infix7 = infixLeft  applicativeExpr [ ("*", AST.InfixOp "*") ]
-infix6 = infixLeft  infix7  [ ("+", AST.InfixOp "+")
-                            , ("-", AST.InfixOp "-") ]
-infix5 = infixRight infix6 [ (":", AST.Cons)
-                           , ("++", AST.InfixOp "++")
-                                 -- \x y -> AST.App (AST.App (AST.Var "++") x) y)
+infix7 = infixLeft  applicativeExpr [ ("*", InfixOp "*") ]
+infix6 = infixLeft  infix7  [ ("+", InfixOp "+")
+                            , ("-", InfixOp "-") ]
+infix5 = infixRight infix6 [ (":", Cons)
+                           , ("++", InfixOp "++")
                            ]
-infix4 = infixLeft  infix5 [ ("==", AST.InfixOp "==")
-                           , ("/=", AST.InfixOp "/=")
+infix4 = infixLeft  infix5 [ ("==", InfixOp "==")
+                           , ("/=", InfixOp "/=")
                            ]
 -- TODO: these should be non-associative
 
@@ -156,24 +164,25 @@ infix4 = infixLeft  infix5 [ ("==", AST.InfixOp "==")
 operator : String -> Parser ()
 operator s
     = backtrackable 
-      (Parser.chompWhile isOperator
+      (Parser.chompWhile operatorChar
       |> Parser.getChompedString
-      |> andThen (\r -> if s==r then succeed ()
+      |> andThen (\r -> if s==r
+                        then succeed ()
                         else problem ("expecting operator " ++ s ++ ", got "++r)))
 
 
-type alias Operator = AST.Expr -> AST.Expr -> AST.Expr
+type alias BinOp = Expr -> Expr -> Expr
     
 -- parse infix left associative operators
 --
-infixLeft : Parser AST.Expr -> List (AST.Name, Operator) -> Parser AST.Expr
+infixLeft : Parser Expr -> List (Name, BinOp) -> Parser Expr
 infixLeft operand table
     = succeed identity
          |= operand
          |. spaces
       |> andThen (infixLeftCont operand table)
 
-infixLeftCont : Parser AST.Expr -> List (AST.Name, Operator) -> AST.Expr -> Parser AST.Expr     
+infixLeftCont : Parser Expr -> List (Name, BinOp) -> Expr -> Parser Expr     
 infixLeftCont operand table accum
     = oneOf
       <| List.map (\(op, func) -> 
@@ -187,15 +196,14 @@ infixLeftCont operand table accum
 
 -- parse infix right associative operators
 --
-infixRight : Parser AST.Expr -> List (AST.Name, Operator) -> Parser AST.Expr
+infixRight : Parser Expr -> List (Name, BinOp) -> Parser Expr
 infixRight operand table
     = succeed identity
          |= operand
          |. spaces
       |> andThen (infixRightCont operand table)
 
-infixRightCont : Parser AST.Expr -> List (AST.Name, Operator) -> AST.Expr
-               -> Parser AST.Expr     
+infixRightCont : Parser Expr -> List (Name, BinOp) -> Expr -> Parser Expr
 infixRightCont operand table x
     = oneOf
       <| List.map (\(op,func) -> 
@@ -211,31 +219,31 @@ infixRightCont operand table x
               
 
 
-applicativeExpr : Parser AST.Expr    
+applicativeExpr : Parser Expr
 applicativeExpr = oneOf [ if_then_else, lambda, application ]
 
 
 -- self-delimited expressions
 --
-delimited : Parser AST.Expr
+delimited : Parser Expr
 delimited =
     oneOf
-    [ succeed AST.Var
+    [ succeed Var
           |= identifier
-    , succeed AST.Number
+    , succeed Number
           |= backtrackable int -- BUG: int should only consume input if it succeeds
-    , succeed (AST.Boolean True)
+    , succeed (Boolean True)
           |. keyword "True"
-    , succeed (AST.Boolean False)
+    , succeed (Boolean False)
           |. keyword "False"
     , succeed identity
           |. symbol "("
           |= lazy (\_ -> topExpr)
           |. symbol ")"
-    , Parser.map AST.ListLit literalList
+    , Parser.map ListLit literalList
     ]
 
-literalList : Parser (List AST.Expr)
+literalList : Parser (List Expr)
 literalList
     =  Parser.sequence
        { start = "["
@@ -247,16 +255,16 @@ literalList
        }
 
        
-application : Parser AST.Expr       
+application : Parser Expr       
 application
     = succeed (\e0 args -> case args of
                                [] -> e0
-                               _ -> AST.App e0 args)
+                               _ -> App e0 args)
          |= delimited
          |. spaces
          |= delimitedList
 
-delimitedList : Parser (List AST.Expr)
+delimitedList : Parser (List Expr)
 delimitedList
     = Parser.sequence
       { start = ""
@@ -268,9 +276,9 @@ delimitedList
       }
            
 
-lambda : Parser AST.Expr                      
+lambda : Parser Expr
 lambda
-    = succeed AST.Lam 
+    = succeed Lam 
          |. symbol "\\"
          |. spaces
          |= identifierList
@@ -279,9 +287,9 @@ lambda
          |. spaces
          |= lazy (\_ -> topExpr)
 
-if_then_else : Parser AST.Expr                
+if_then_else : Parser Expr                
 if_then_else
-    = succeed AST.IfThenElse
+    = succeed IfThenElse
          |. keyword "if"
          |. spaces
          |= lazy (\_ -> topExpr)
@@ -326,7 +334,7 @@ newlines
     = Parser.chompWhile (\c -> c=='\n' || c=='\r')
 
 
-
+-- * pretty print parsing errors
 deadEndsToString : List Parser.DeadEnd -> String
 deadEndsToString deadEnds
     =
@@ -354,3 +362,79 @@ problemToString prob
           Parser.ExpectingEnd -> "end of input"
           Parser.Problem s -> s
           _ -> "?"
+
+
+-- * pretty printing expressions etc
+prettyExpr : Expr -> String
+prettyExpr e =
+    case e of
+        Number n -> String.fromInt n
+
+        Boolean b -> if b then "True" else "False"
+
+        Var x -> x
+
+        ListLit l ->
+            "[" ++
+            (String.join ", " <| List.map prettyExpr l) ++
+            "]"
+                
+
+        Cons e1 e2 ->
+            "(" ++ prettyExpr e1 ++ ":" ++ prettyExpr e2 ++ ")"
+
+        InfixOp op e1 e2 ->
+            "(" ++ prettyExpr e1 ++ op ++ prettyExpr e2 ++ ")"
+
+        App e0 args ->
+            "(" ++ 
+                (String.join " " <| List.map prettyExpr (e0::args)) ++
+            ")"
+
+        Lam xs e1 ->
+            "(\\" ++ String.join " " xs ++ " -> " ++
+                prettyExpr e1 ++ ")"
+                
+        IfThenElse e1 e2 e3 ->
+            "(if " ++ prettyExpr e1 ++ " then " ++
+                prettyExpr e2 ++ " else " ++ prettyExpr e3 ++ ")"
+
+        Fail msg -> "!"++msg
+
+
+prettyPattern : Pattern -> String
+prettyPattern p =
+    case p of
+        VarP x ->
+            x
+        BooleanP b ->
+            if b then "True" else "False"
+        NumberP n ->
+            String.fromInt n
+        NilP ->
+            "[]"
+        ConsP p1 p2 ->
+            "(" ++ prettyPattern p1 ++ ":" ++
+                prettyPattern p2 ++ ")"
+
+prettyDecl : Decl -> String
+prettyDecl decl =
+    case decl of
+        TypeSig f str ->
+            f ++ " :: " ++ str
+                
+        Equation f ps expr ->
+            case ps of
+                [p1, p2] -> if isOperator f then
+                                prettyInfix f p1 p2 expr
+                            else
+                                prettyEquation f ps expr
+                _ -> prettyEquation f ps expr
+
+prettyEquation f ps expr
+    = (String.join " " <| (f :: List.map prettyPattern ps))
+      ++ " = " ++ prettyExpr expr
+
+prettyInfix f p1 p2 expr
+    = prettyPattern p1 ++ " " ++ f ++ " " ++
+      prettyPattern p2 ++ " = " ++ prettyExpr expr

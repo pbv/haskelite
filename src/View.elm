@@ -1,15 +1,16 @@
 
 module View exposing (..)
 
-import AST exposing (Expr(..), Name)
+import AST exposing (Expr(..), Decl, Name)
 import Haskell
-import Eval
+import Eval exposing (Functions)
 import Parser
+import Pretty
 import Prelude exposing (prelude)
 import Context exposing (Context)
 import Monocle.Optional as Monocle
 import Html exposing (..)
-import Html.Attributes exposing (placeholder,value,style,class)
+import Html.Attributes exposing (class)
 import Html.Events.Extra.Mouse as Mouse
 import Platform.Cmd as Cmd
 import Platform.Sub as Sub
@@ -20,29 +21,32 @@ import Debug
 
 
 type alias Model
-    = { expression : Expr
-      , clientPos : (Float,Float)
+    = { expression : Expr              -- current expression
+      , previous : List (Expr, String) -- list of previous steps
+      , clientPos : (Float,Float)      -- last mouse click position (for debouncing)
       }
 
 type Msg
     = Eval Context (Float,Float)
 
-expression = "filter even [1,2,3,4]"
-       
 
+-- global declarations from the prelude      
+decls : List Decl
 decls =
     case Parser.run Haskell.declList prelude of
         Ok l -> l
         Err _ -> []
 
+functions : Functions                 
 functions = Eval.collectFunctions decls Eval.primitives
 
-init : String -> (Model, Cmd msg)            
+init : String -> (Model, Cmd msg)      
 init str =
     ({ expression =
           case Parser.run Haskell.topExprEnd str of
               Result.Ok expr -> expr
               Result.Err _ -> Fail "parse error"
+     , previous = []
      , clientPos = (0,0)
      }
     , Cmd.none
@@ -52,24 +56,38 @@ init str =
 view : Model -> Html Msg
 view model =
     div [class "lines"]
-        [
-         renderExpr model.expression Context.hole
+        <| (List.map lineView (List.reverse model.previous) ++
+                [
+                 div [class "line"] [
+                      renderExpr model.expression Context.hole
+                     ]
+                ]
+           )
+
+lineView : (Expr, String) -> Html Msg
+lineView (expr,info) =
+    div [] [
+         div [class "line"] [ text (Pretty.prettyExpr expr) ],
+         div [class "info"] [ text "{ ", text info, text " }" ]
         ]
 
+            
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
     case msg of
         Eval ctx newPos ->
             if newPos /= model.clientPos then
-                let
-                    -- subExpr = Debug.log "eval: " (.getOption ctx model.expression)
-                    newExpr = Maybe.withDefault model.expression
-                              (Eval.redexCtx functions model.expression ctx)
-                in 
-                    ({ expression = newExpr
-                     , clientPos = newPos
-                     }
-                    , Cmd.none)
+                case Eval.redexCtx functions model.expression ctx of
+                    Just (newExpr, info) ->
+                        ({ expression = newExpr
+                         , previous = (model.expression, info) :: model.previous
+                         , clientPos = newPos
+                         }
+                        , Cmd.none
+                        )
+                             
+                    Nothing -> ( { model | clientPos = newPos }
+                               , Cmd.none)                        
             else
                 (model, Cmd.none)
 
@@ -87,11 +105,11 @@ main =
 
                                     
 renderExpr : Expr -> Context -> Html Msg
-renderExpr expr ctx = renderExpr_ expr ctx 1 
+renderExpr expr ctx = renderExpr_ expr ctx  
 
- -- worker function with precedence level                       
-renderExpr_ : Expr -> Context -> Int -> Html Msg
-renderExpr_ expr ctx prec 
+ -- worker function 
+renderExpr_ : Expr -> Context -> Html Msg
+renderExpr_ expr ctx 
     = case expr of
           Var x ->
               text x
@@ -114,29 +132,27 @@ renderExpr_ expr ctx prec
 
           Cons e0 e1 ->
               let
-                  prec1 = getPrecedence ":"
                   ctx0 = Monocle.compose ctx Context.cons0
                   ctx1 = Monocle.compose ctx Context.cons1
               in
-                  paren (prec > prec1)
-                      <| span [ Mouse.onClick (\ev -> Eval ctx ev.clientPos) ]
-                          [ renderExpr_ e0 ctx0 prec1
-                          , text ":"
-                          , renderExpr_ e1 ctx1 prec1
-                          ]
+                  paren <|
+                      span (redexStyle expr ctx)
+                      [ renderExpr_ e0 ctx0 
+                      , text ":"
+                      , renderExpr_ e1 ctx1 
+                      ]
 
           InfixOp op e0 e1 ->
               let
-                  prec1 = getPrecedence op
                   ctx0 = Monocle.compose ctx Context.infixOp0
                   ctx1 = Monocle.compose ctx Context.infixOp1
               in
-                  paren (prec > prec1)
-                      <| span [ Mouse.onClick (\ev -> Eval ctx ev.clientPos) ]
-                          [ renderExpr_ e0 ctx0 prec1
-                          , text op
-                          , renderExpr_ e1 ctx1 prec1
-                          ]
+                  paren <|
+                      span (redexStyle expr ctx)
+                      [ renderExpr_ e0 ctx0 
+                      , text op
+                      , renderExpr_ e1 ctx1 
+                      ]
 
           App e0 args ->
               let
@@ -145,34 +161,44 @@ renderExpr_ expr ctx prec
                   ctxs = List.map (\i -> Monocle.compose ctx (Context.appArg i))
                          (List.range 0 n)
                   items = List.intersperse (text " ")
-                          <| List.map2 (\ei ctxi -> renderExpr_ ei ctxi 10) args ctxs
+                          <| List.map2 (\ei ctxi -> renderExpr_ ei ctxi) args ctxs
                               
               in
-                  paren (prec > 9)
-                  <| span [ Mouse.onClick (\ev -> Eval ctx ev.clientPos) ]
+                  paren <|
+                      span (redexStyle expr ctx)
                       <| renderExpr e0 ctx0 :: text " " :: items
                   
           Lam xs e1 ->
+              text (Pretty.prettyExpr expr)
+                  {-
               let
                   items = List.intersperse (text " ") <| List.map text xs
-              in paren (prec > 1)
-                  <| span [] <| (text "\\" :: items) ++ [text " -> ", renderExpr e1 ctx]
+              in paren <|
+                  span [] <| (text "\\" :: items) ++ [text " -> ", renderExpr e1 ctx] -}
                   
           IfThenElse e1 e2 e3 ->
-              paren (prec > 1)
-              <| span [ Mouse.onClick (\ev -> Eval ctx ev.clientPos) ]
+              paren <|
+              span (redexStyle expr ctx)
                   [ text "if "
                   , renderExpr e1 (Monocle.compose ctx Context.if0)
                   , text " then "
-                  , renderExpr e2 ctx
+                  , text (Pretty.prettyExpr e2)
                   , text " else "
-                  , renderExpr e3 ctx
+                  , text (Pretty.prettyExpr e3) 
                   ]
                   
           Fail msg -> span [] [ text "!"
                               , text msg ]
 
 
+redexStyle : Expr -> Context -> List (Html.Attribute Msg)
+redexStyle expr ctx =
+    if Eval.reduces functions expr then
+        [ class "redex"
+        , Mouse.onClick (\ev -> Eval ctx ev.clientPos) ]
+    else []
+        
+                      
 getPrecedence : Name -> Int    
 getPrecedence op
     = case Dict.get op precedence of
@@ -190,12 +216,9 @@ precedence
                      
 
                       
-paren : Bool -> Html msg -> Html msg
-paren b html
-    = --if b then
-          span [] [text "(", html, text ")"]
-      --else
-      --    html        
+paren : Html msg -> Html msg
+paren html
+    =  span [] [text "(", html, text ")"]
 
         
 

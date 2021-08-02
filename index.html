@@ -8,6 +8,13 @@
           margin: 1em 0;
           background: lightyellow;
       }
+      .info   {
+          font-style: italic;
+          color: darkgrey;
+      }
+      .redex:hover   {
+          background: lightgrey;
+      }
     </style>
   </head>
 
@@ -18,8 +25,8 @@
     <script>
       var app = Elm.View.init({
           node: document.getElementById("elm-app"),
-	  flags: "reverse [1,2,3] "
-      });      
+	  flags: "filter odd [1,2,3,4]"
+      });
     </script>
   </body>
 </html>

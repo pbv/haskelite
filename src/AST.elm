@@ -69,3 +69,5 @@ applySubst s e
               IfThenElse (applySubst s e1) (applySubst s e2) (applySubst s e3)
 
           Fail _ -> e
+
+

@@ -2,6 +2,7 @@
 module Eval exposing (..)
 
 import AST exposing (Expr(..), Pattern(..), Decl(..), Name, Subst)
+import Pretty
 import Dict exposing (Dict)
 import Context exposing (Context)
 
@@ -14,12 +15,13 @@ type alias Functions
 -- of arguments after unwinding to an optional expression; a result of
 -- Nothing means that the function cannot be applied, possibly
 -- requiring more evaluation of the arguments
+-- the result string is an explanation for the reducion 
 type alias Function
-    = List Expr -> Maybe Expr
+    = List Expr -> Maybe (Expr, String)
 
 -- alternatives equations for a single function
 type alias Alt 
-    = (List Pattern, Expr)
+    = (List Pattern, Expr, String)
 
 
 -- transform a list of declarations into a dictionary for functions
@@ -32,8 +34,9 @@ collectFunctions decls accum
               collectFunctions rest accum
           (Equation fun ps e :: rest) ->
               let
+                  info = Pretty.prettyDecl (Equation fun ps e)
                   (alts1,rest1) = collectAlts fun rest
-                  semantic = dispatchAlts ((ps,e)::alts1)
+                  semantic = dispatchAlts ((ps,e,info)::alts1)
                   accum1 = Dict.insert fun semantic accum
               in collectFunctions rest1 accum1
                   
@@ -48,8 +51,10 @@ collectAlts fun decls
               ([], rest)
           (Equation f ps e :: rest) ->
               if f==fun then
-                  let (alts, rest1) = collectAlts fun rest
-                  in ((ps,e)::alts, rest1)
+                  let
+                      info = Pretty.prettyDecl (Equation f ps e)
+                      (alts, rest1) = collectAlts fun rest
+                  in ((ps,e,info)::alts, rest1)
               else
                   ([], decls)
     
@@ -66,49 +71,38 @@ primitives
       , ("==", equals)
       ]
 
-arithOp : (Int -> Int -> Int) -> List Expr -> Maybe Expr    
+arithOp : (Int -> Int -> Int) -> List Expr -> Maybe (Expr, String)
 arithOp func args
     = case args of
           [Number x, Number y] ->
-              Just (AST.Number (func x y))
+              Just (AST.Number (func x y), "arithmetic")
           _ -> if List.length args > 2 then
-                   Just (Fail "type error")
+                   Just (Fail "type error", "arithmetic")
                else 
                    Nothing
 
 -- simple equality for numbers only
 -- TODO: extend this to lists
-equals : List Expr -> Maybe Expr
+equals : List Expr -> Maybe (Expr, String)
 equals args
     = case args of
           [Number x, Number y] ->
-              Just (Boolean (x==y))
+              Just (Boolean (x==y), "equality")
           _ -> if List.length args > 2 then
-                   Just (Fail "type error")
+                   Just (Fail "type error", "equality")
                else
                    Nothing
 
 
                        
--- check if an expression is a normal form
-normalForm : Expr -> Bool
-normalForm expr
-    = case expr of
-          Number _ -> True
-          Boolean _ -> True
-          ListLit xs -> List.all normalForm xs
-          _ -> False
-      
-
-
 -- apply a function specifified by a list of alterantives
 -- to a list of arguments
 -- result is Nothing if the expression can't be reduced yet
-dispatchAlts : List Alt -> List Expr -> Maybe Expr
+dispatchAlts : List Alt -> List Expr -> Maybe (Expr, String)
 dispatchAlts alts args
     = case alts of
-          [] -> Just (Fail "pattern match failure")
-          ((ps,e)::alts1) ->
+          [] -> Just (Fail "pattern match failure", "")
+          ((ps,e,info)::alts1) ->
               let nps = List.length ps
                   nargs = List.length args
               in if nargs < nps
@@ -122,18 +116,21 @@ dispatchAlts alts args
                         else
                             case matchingList ps args1 Dict.empty of
                                 Nothing -> dispatchAlts alts1 args
-                                Just s -> Just (applyArgs (AST.applySubst s e) args2)
+                                Just s ->
+                                    Just (applyArgs (AST.applySubst s e) args2
+                                         , info)
+                                        
     
 
 -- perform a single step reduction    
-redex : Functions -> Expr -> Maybe Expr
+redex : Functions -> Expr -> Maybe (Expr, String)
 redex functions expr =
     case expr of
         App e1 es ->
             case unwindArgs e1 es of
                 (Lam xs e0, args) ->
                     let
-                        alt = (List.map VarP xs, e0)
+                        alt = (List.map VarP xs, e0, "beta-reduction")
                     in 
                         dispatchAlts [alt] args
                             
@@ -142,19 +139,20 @@ redex functions expr =
                         Just semantics ->
                             semantics args
                         Nothing ->
-                            Just (Fail "invalid function")
-                _ -> Just (Fail "invalid function")
+                            Just (Fail "invalid function", fun)
+                _ -> Just (Fail "invalid function", "")
                     
         Cons e1 (ListLit l) ->
-            Just <| ListLit (e1::l)
+            Just (ListLit (e1::l)
+                 , "constructor")
                 
         InfixOp op e1 e2 ->
             redex functions (App (Var op) [e1, e2])
 
         IfThenElse e1 e2 e3 ->
             case e1 of
-                Boolean True -> Just e2
-                Boolean False -> Just e3
+                Boolean True -> Just (e2, "if-True")
+                Boolean False -> Just (e3, "if-False")
                 _ -> Nothing
                      
         _ -> Nothing
@@ -239,13 +237,19 @@ matchingList ps es s
 
        
 -- * perform a single reduction under a context
-redexCtx : Functions -> Expr -> Context -> Maybe Expr
+redexCtx : Functions -> Expr -> Context -> Maybe (Expr, String)
 redexCtx functions expr ctx
     = ctx.getOption expr
           |> Maybe.andThen
              (\subexpr ->
                   redex functions subexpr
              |> Maybe.andThen
-                  (\new -> Just (ctx.set new expr)))
+                  (\(new, info) -> Just (ctx.set new expr, info)))
 
 
+reduces : Functions -> Expr -> Bool
+reduces functions expr =
+    case (redex functions expr) of
+        Just _ -> True
+        Nothing -> False
+                            

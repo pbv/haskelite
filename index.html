@@ -27,18 +27,37 @@
           right: 0px;
           z-index: 1;
       }
+      .current .info   {
+          visibility: hidden;
+          background-color: black;
+          color: white;
+          padding: 5px 5px;
+          border-radius: 6px;
+          position: absolute;
+          right: 0px;
+          z-index: 1;
+      }
       .line:hover .info {
           visibility: visible;
       }
       .line:hover {
-          border-bottom: 1px dotted black; /* If you want dots under the hoverable text */
+          border-bottom: 1px dotted black; 
       }
  
       .redex:hover   {
-          background: black;
-          color: white;
+          /* background: black;
+          color: white; */
+          text-decoration: underline;
           cursor: pointer;
-          
+      }
+
+      .redex:hover .info {
+          visibility: visible;
+      }
+      
+      .current {
+          position: relative;
+          display: block;
       }
     </style>
   </head>

@@ -106,7 +106,7 @@ reduceView model =
         [ div [class "lines"]
              <| (List.map lineView (List.reverse model.previous) ++
                      [
-                      div [class "line"]
+                      div [class "current"]
                           [ renderExpr model.expression Context.hole ]
                      ]
                 )
@@ -151,7 +151,7 @@ reduceUpdate msg model =
         Reset ->
             case List.last model.previous of
                 Just (expr,_) ->
-                    Reduce { model | expression= expr, previous = [] }
+                    Reduce { expression = expr, previous = [] }
                 Nothing ->
                     Reduce model
         Edit string ->
@@ -226,7 +226,7 @@ renderExpr expr ctx
                   paren <|
                       span []
                       [ renderExpr e0 ctx0 
-                      , span (redexStyle expr ctx) [text ":"]
+                      , redexSpan expr ctx [text ":"]
                       , renderExpr e1 ctx1 
                       ]
 
@@ -238,7 +238,7 @@ renderExpr expr ctx
                   paren <|
                       span []
                       [ renderExpr e0 ctx0 
-                      , span (redexStyle expr ctx) [ text op ]
+                      , redexSpan expr ctx [ text op ]
                       , renderExpr e1 ctx1 
                       ]
 
@@ -254,9 +254,8 @@ renderExpr expr ctx
               in
                   paren <|
                       span [] 
-                      <| span (redexStyle expr ctx) [renderExpr e0 ctx0] ::
-                          text " " ::
-                          items
+                      <| (redexSpan expr ctx [renderExpr e0 ctx0]) ::
+                          text " " ::  items
                   
           Lam xs e1 ->
               text (Pretty.prettyExpr expr)
@@ -264,22 +263,25 @@ renderExpr expr ctx
           IfThenElse e1 e2 e3 ->
               paren <|
               span []
-                  [ span (redexStyle expr ctx) [ text "if " ]
+                  [ redexSpan expr ctx [ text "if " ]
                   , renderExpr e1 (Monocle.compose ctx Context.if0)
-                  , span (redexStyle expr ctx) [text " then "]
+                  , redexSpan expr ctx [text " then "]
                   , text (Pretty.prettyExpr e2)
-                  , span (redexStyle expr ctx) [text " else "]
+                  , redexSpan expr ctx [text " else "]
                   , text (Pretty.prettyExpr e3) 
                   ]
                   
           Fail msg -> span [class "error"] [ text "!", text msg ]
 
 
-redexStyle : Expr -> Context -> List (Html.Attribute Msg)
-redexStyle expr ctx =
-    if Eval.reduces functions expr then
-        [ class "redex", onClick (Eval ctx) ]
-    else []
+redexSpan : Expr -> Context -> List (Html Msg) -> Html Msg
+redexSpan expr ctx elements =
+    case Eval.redex functions expr of
+        Just (_, info) ->
+            span [class "redex", onClick (Eval ctx)]
+                <| span [class "info"] [text info] :: elements
+        Nothing ->
+            span [] elements
         
                       
                  

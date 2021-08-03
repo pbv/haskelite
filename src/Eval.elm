@@ -247,9 +247,4 @@ redexCtx functions expr ctx
                   (\(new, info) -> Just (ctx.set new expr, info)))
 
 
-reduces : Functions -> Expr -> Bool
-reduces functions expr =
-    case (redex functions expr) of
-        Just _ -> True
-        Nothing -> False
                             

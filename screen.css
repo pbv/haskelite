@@ -1,0 +1,62 @@
+.error   {
+    color: red;
+}
+
+.lines   {
+    font-family: monospace;
+    padding: 1em;
+    margin: 5em;
+    margin: 1em 0;
+    background: lightyellow;
+    cursor: default;
+}
+
+.line {
+    position: relative;
+    display: block;
+}
+
+.current {
+    position: relative;
+    display: block;
+}
+
+.line .info   {
+    visibility: hidden;
+    background-color: black;
+    color: white;
+    padding: 5px 5px;
+    border-radius: 6px;
+    position: absolute;
+    right: 0px;
+    z-index: 1;
+}
+
+.current .info   {
+    visibility: hidden;
+    background-color: black;
+    color: white;
+    padding: 5px 5px;
+    border-radius: 6px;
+    position: absolute;
+    right: 0px;
+    z-index: 1;
+}
+
+.line:hover .info {
+    visibility: visible;
+}
+
+.line:hover {
+    border-bottom: 1px dotted black; 
+}
+
+.redex:hover   {
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.redex:hover .info {
+    visibility: visible;
+}
+      

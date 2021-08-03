@@ -238,7 +238,7 @@ renderExpr expr ctx
                   paren <|
                       span []
                       [ renderExpr e0 ctx0 
-                      , redexSpan expr ctx [ text op ]
+                      , redexSpan expr ctx [text op]
                       , renderExpr e1 ctx1 
                       ]
 
@@ -253,8 +253,8 @@ renderExpr expr ctx
                               
               in
                   paren <|
-                      span [] 
-                      <| (redexSpan expr ctx [renderExpr e0 ctx0]) ::
+                      span []
+                      <| redexSpan expr ctx [renderExpr e0 ctx0] ::
                           text " " ::  items
                   
           Lam xs e1 ->

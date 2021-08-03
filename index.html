@@ -1,19 +1,44 @@
 <html>
   <head>
     <style>
+      .error   {
+          color: red;
+      }
       .lines   {
 	  font-family: monospace;
           padding: 1em;
           margin: 5em;
           margin: 1em 0;
           background: lightyellow;
+          cursor: default;
       }
-      .info   {
-          font-style: italic;
-          color: darkgrey;
+
+      .line {
+          position: relative;
+          display: block;
       }
+      .line .info   {
+          visibility: hidden;
+          background-color: black;
+          color: white;
+          padding: 5px 5px;
+          border-radius: 6px;
+          position: absolute;
+          right: 0px;
+          z-index: 1;
+      }
+      .line:hover .info {
+          visibility: visible;
+      }
+      .line:hover {
+          border-bottom: 1px dotted black; /* If you want dots under the hoverable text */
+      }
+ 
       .redex:hover   {
-          background: lightgrey;
+          background: black;
+          color: white;
+          cursor: pointer;
+          
       }
     </style>
   </head>
@@ -25,7 +50,7 @@
     <script>
       var app = Elm.View.init({
           node: document.getElementById("elm-app"),
-	  flags: "filter odd [1,2,3,4]"
+	  flags: "map even [1,2,3]"
       });
     </script>
   </body>

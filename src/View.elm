@@ -10,24 +10,38 @@ import Prelude exposing (prelude)
 import Context exposing (Context)
 import Monocle.Optional as Monocle
 import Html exposing (..)
-import Html.Attributes exposing (class)
-import Html.Events.Extra.Mouse as Mouse
+import Html.Attributes exposing (value, class, placeholder, size)
+import Html.Events exposing (on, onClick, onInput, onSubmit, keyCode)
 import Platform.Cmd as Cmd
 import Platform.Sub as Sub
+import Json.Decode as Json
 
+import List.Extra as List
 import Dict exposing (Dict)
 import Browser
-import Debug
 
 
-type alias Model
+type alias ReduceModel
     = { expression : Expr              -- current expression
       , previous : List (Expr, String) -- list of previous steps
-      , clientPos : (Float,Float)      -- last mouse click position (for debouncing)
       }
 
+type alias EditModel
+    = { input : String              -- input string
+      , output : Result String Expr  -- result of parsing
+      }
+
+
+
+type Model
+    = Reduce ReduceModel
+    | Editing EditModel
+
 type Msg
-    = Eval Context (Float,Float)
+    = Eval Context 
+    | Reset
+    | Edit String
+    | KeyDown Int
 
 
 -- global declarations from the prelude      
@@ -42,58 +56,134 @@ functions = Eval.collectFunctions decls Eval.primitives
 
 init : String -> (Model, Cmd msg)      
 init str =
-    ({ expression =
-          case Parser.run Haskell.topExprEnd str of
-              Result.Ok expr -> expr
-              Result.Err _ -> Fail "parse error"
-     , previous = []
-     , clientPos = (0,0)
-     }
-    , Cmd.none
-    )
+    let submodel = editInit str
+    in case submodel.output of
+           Ok expr ->
+               (Reduce (reduceInit expr), Cmd.none)
+           Err _ ->
+               (Editing submodel, Cmd.none)
 
-      
+                 
+
+editInit : String -> EditModel
+editInit str =
+    let
+        result = Result.mapError Pretty.deadEndsToString
+                 <| Parser.run Haskell.topExprEnd str
+    in { input = str
+       , output = result
+       }
+
+reduceInit : Expr -> ReduceModel
+reduceInit expr = 
+    { expression = expr
+    , previous = []
+    }
+        
 view : Model -> Html Msg
 view model =
-    div [class "lines"]
-        <| (List.map lineView (List.reverse model.previous) ++
-                [
-                 div [class "line"] [
-                      renderExpr model.expression Context.hole
+    case model of
+        Editing submodel -> editingView submodel
+        Reduce submodel -> reduceView submodel
+
+editingView : EditModel -> Html Msg
+editingView model =
+    div [] [ input [ placeholder "Enter an expression"
+                   , value model.input
+                   , size 80
+                   , onInput Edit
+                   , onKeyDown KeyDown 
+                   ]  []
+           , br [] []
+           , case model.output of
+                       Err msg -> span [class "error"] [text msg]
+                       _ -> span [] []
+           ]
+
+reduceView : ReduceModel -> Html Msg
+reduceView model =
+    div []
+        [ div [class "lines"]
+             <| (List.map lineView (List.reverse model.previous) ++
+                     [
+                      div [class "line"]
+                          [ renderExpr model.expression Context.hole ]
                      ]
-                ]
-           )
-
-lineView : (Expr, String) -> Html Msg
-lineView (expr,info) =
-    div [] [
-         div [class "line"] [ text (Pretty.prettyExpr expr) ],
-         div [class "info"] [ text "{ ", text info, text " }" ]
+                )
+        , span [] [ case model.previous of
+                        [] -> let str = Pretty.prettyExpr model.expression
+                              in button [ onClick (Edit str) ] [text "Edit"]
+                        _ -> button [ onClick Reset ] [text "Reset"]
+                  ]
         ]
+      
+lineView : (Expr, String) -> Html Msg
+lineView (expr, info) =
+    div [class "line"] [
+         text (Pretty.prettyExpr expr)
+        , span [class "info"] [ text info ]
+        ]
+        
 
-            
+
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
-    case msg of
-        Eval ctx newPos ->
-            if newPos /= model.clientPos then
-                case Eval.redexCtx functions model.expression ctx of
-                    Just (newExpr, info) ->
-                        ({ expression = newExpr
-                         , previous = (model.expression, info) :: model.previous
-                         , clientPos = newPos
-                         }
-                        , Cmd.none
-                        )
-                             
-                    Nothing -> ( { model | clientPos = newPos }
-                               , Cmd.none)                        
-            else
-                (model, Cmd.none)
+    case model of
+        Reduce submodel ->
+            (reduceUpdate msg submodel, Cmd.none)
+        Editing submodel ->
+            (editUpdate msg submodel, Cmd.none)
 
+        
+reduceUpdate : Msg -> ReduceModel -> Model
+reduceUpdate msg model =
+    case msg of
+        Eval ctx ->
+            case Eval.redexCtx functions model.expression ctx of
+                Just (newExpr, info) ->
+                    Reduce
+                    { expression = newExpr
+                    , previous = (model.expression, info) :: model.previous
+                    }
+                
+                Nothing -> Reduce model
+
+        Reset ->
+            case List.last model.previous of
+                Just (expr,_) ->
+                    Reduce { model | expression= expr, previous = [] }
+                Nothing ->
+                    Reduce model
+        Edit string ->
+            Editing (editInit string)
+            
+        _ ->
+            Reduce model
+                
+editUpdate : Msg -> EditModel -> Model
+editUpdate msg model =
+    case msg of
+        Edit string ->
+            Editing (editInit string) 
+        KeyDown code ->
+            if code == 13 then 
+                case model.output of
+                    Ok expr -> Reduce (reduceInit expr) 
+                    Err _ -> Editing model
+            else
+                Editing model
+        _ ->
+            Editing model
+
+                       
 subscriptions : Model -> Sub msg
 subscriptions _ = Sub.none
 
+
+onKeyDown : (Int -> msg) -> Html.Attribute msg
+onKeyDown tagger =
+  on "keydown" (Json.map tagger keyCode)
+      
                     
 main =
     Browser.element
@@ -104,12 +194,10 @@ main =
         }
 
                                     
-renderExpr : Expr -> Context -> Html Msg
-renderExpr expr ctx = renderExpr_ expr ctx  
 
  -- worker function 
-renderExpr_ : Expr -> Context -> Html Msg
-renderExpr_ expr ctx 
+renderExpr : Expr -> Context -> Html Msg
+renderExpr expr ctx 
     = case expr of
           Var x ->
               text x
@@ -136,10 +224,10 @@ renderExpr_ expr ctx
                   ctx1 = Monocle.compose ctx Context.cons1
               in
                   paren <|
-                      span (redexStyle expr ctx)
-                      [ renderExpr_ e0 ctx0 
-                      , text ":"
-                      , renderExpr_ e1 ctx1 
+                      span []
+                      [ renderExpr e0 ctx0 
+                      , span (redexStyle expr ctx) [text ":"]
+                      , renderExpr e1 ctx1 
                       ]
 
           InfixOp op e0 e1 ->
@@ -148,10 +236,10 @@ renderExpr_ expr ctx
                   ctx1 = Monocle.compose ctx Context.infixOp1
               in
                   paren <|
-                      span (redexStyle expr ctx)
-                      [ renderExpr_ e0 ctx0 
-                      , text op
-                      , renderExpr_ e1 ctx1 
+                      span []
+                      [ renderExpr e0 ctx0 
+                      , span (redexStyle expr ctx) [ text op ]
+                      , renderExpr e1 ctx1 
                       ]
 
           App e0 args ->
@@ -161,59 +249,40 @@ renderExpr_ expr ctx
                   ctxs = List.map (\i -> Monocle.compose ctx (Context.appArg i))
                          (List.range 0 n)
                   items = List.intersperse (text " ")
-                          <| List.map2 (\ei ctxi -> renderExpr_ ei ctxi) args ctxs
+                          <| List.map2 (\ei ctxi -> renderExpr ei ctxi) args ctxs
                               
               in
                   paren <|
-                      span (redexStyle expr ctx)
-                      <| renderExpr e0 ctx0 :: text " " :: items
+                      span [] 
+                      <| span (redexStyle expr ctx) [renderExpr e0 ctx0] ::
+                          text " " ::
+                          items
                   
           Lam xs e1 ->
               text (Pretty.prettyExpr expr)
-                  {-
-              let
-                  items = List.intersperse (text " ") <| List.map text xs
-              in paren <|
-                  span [] <| (text "\\" :: items) ++ [text " -> ", renderExpr e1 ctx] -}
                   
           IfThenElse e1 e2 e3 ->
               paren <|
-              span (redexStyle expr ctx)
-                  [ text "if "
+              span []
+                  [ span (redexStyle expr ctx) [ text "if " ]
                   , renderExpr e1 (Monocle.compose ctx Context.if0)
-                  , text " then "
+                  , span (redexStyle expr ctx) [text " then "]
                   , text (Pretty.prettyExpr e2)
-                  , text " else "
+                  , span (redexStyle expr ctx) [text " else "]
                   , text (Pretty.prettyExpr e3) 
                   ]
                   
-          Fail msg -> span [] [ text "!"
-                              , text msg ]
+          Fail msg -> span [class "error"] [ text "!", text msg ]
 
 
 redexStyle : Expr -> Context -> List (Html.Attribute Msg)
 redexStyle expr ctx =
     if Eval.reduces functions expr then
-        [ class "redex"
-        , Mouse.onClick (\ev -> Eval ctx ev.clientPos) ]
+        [ class "redex", onClick (Eval ctx) ]
     else []
         
                       
-getPrecedence : Name -> Int    
-getPrecedence op
-    = case Dict.get op precedence of
-          Just p -> p
-          Nothing -> 1
-
-precedence : Dict Name Int
-precedence
-    = Dict.fromList
-      [ ("==", 4), ("/=", 4)
-      , (":", 5), ("++", 5)
-      , ("+", 6), ("-", 6)
-      , ("*", 7)
-      ]
-                     
+                 
 
                       
 paren : Html msg -> Html msg

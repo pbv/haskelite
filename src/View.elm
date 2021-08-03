@@ -200,8 +200,8 @@ renderExpr : Expr -> Context -> Html Msg
 renderExpr expr ctx 
     = case expr of
           Var x ->
-              text x
-
+              text <| if Pretty.isOperator x then "("++x++")" else x
+                  
           Number n ->
               text (String.fromInt n)
 
@@ -283,9 +283,6 @@ redexSpan expr ctx elements =
         Nothing ->
             span [] elements
         
-                      
-                 
-
                       
 paren : Html msg -> Html msg
 paren html

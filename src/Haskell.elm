@@ -1,5 +1,5 @@
 {-
--- Parser and pretty printer for a tiny subset of Haskell
+  Parser for a small subset of Haskell
 -}
 module Haskell exposing (..)
 
@@ -133,10 +133,19 @@ patternList =
     
 -- top-level expressions
 topExprEnd : Parser Expr
-topExprEnd = succeed identity
-              |= topExpr
-              |. Parser.end
+topExprEnd
+    = succeed identity
+        |= topExpr
+        |. Parser.end
 
+topExprOrOperator : Parser Expr
+topExprOrOperator
+    = oneOf
+      [ succeed Var
+            |= backtrackable infixOperator
+      , topExpr
+      ]
+                 
 
 topExpr : Parser Expr
 topExpr = infix4
@@ -232,7 +241,7 @@ delimited =
           |. keyword "False"
     , succeed identity
           |. symbol "("
-          |= lazy (\_ -> topExpr)
+          |= lazy (\_ -> topExprOrOperator)
           |. symbol ")"
     , Parser.map ListLit literalList
     ]

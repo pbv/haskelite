@@ -44,7 +44,7 @@ prettyExpr e =
 
         Boolean b -> if b then "True" else "False"
 
-        Var x -> x
+        Var x -> if isOperator x then "("++x++")" else x
 
         ListLit l ->
             "[" ++

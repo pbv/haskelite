@@ -91,6 +91,7 @@ editingView model =
     div [] [ input [ placeholder "Enter an expression"
                    , value model.input
                    , size 80
+                   , class "editline"
                    , onInput Edit
                    , onKeyDown KeyDown 
                    ]  []
@@ -193,11 +194,15 @@ main =
         , subscriptions = subscriptions
         }
 
-                                    
 
- -- worker function 
+-- render an interactive expression; toplevel function
 renderExpr : Expr -> Context -> Html Msg
-renderExpr expr ctx 
+renderExpr expr ctx =
+    renderExpr_ 0 expr ctx
+
+-- worker function 
+renderExpr_ : Int -> Expr -> Context -> Html Msg
+renderExpr_ prec expr ctx 
     = case expr of
           Var x ->
               text <| if Pretty.isOperator x then "("++x++")" else x
@@ -223,11 +228,11 @@ renderExpr expr ctx
                   ctx0 = Monocle.compose ctx Context.cons0
                   ctx1 = Monocle.compose ctx Context.cons1
               in
-                  paren <|
+                  paren (prec>0) <|
                       span []
-                      [ renderExpr e0 ctx0 
+                      [ renderExpr_ 1 e0 ctx0 
                       , redexSpan expr ctx [text ":"]
-                      , renderExpr e1 ctx1 
+                      , renderExpr_ 1 e1 ctx1 
                       ]
 
           InfixOp op e0 e1 ->
@@ -235,11 +240,11 @@ renderExpr expr ctx
                   ctx0 = Monocle.compose ctx Context.infixOp0
                   ctx1 = Monocle.compose ctx Context.infixOp1
               in
-                  paren <|
+                  paren (prec>0) <|
                       span []
-                      [ renderExpr e0 ctx0 
+                      [ renderExpr_ 1 e0 ctx0 
                       , redexSpan expr ctx [text op]
-                      , renderExpr e1 ctx1 
+                      , renderExpr_ 1 e1 ctx1 
                       ]
 
           App e0 args ->
@@ -249,19 +254,19 @@ renderExpr expr ctx
                   ctxs = List.map (\i -> Monocle.compose ctx (Context.appArg i))
                          (List.range 0 n)
                   items = List.intersperse (text " ")
-                          <| List.map2 (\ei ctxi -> renderExpr ei ctxi) args ctxs
+                          <| List.map2 (\ei ctxi -> renderExpr_ 1 ei ctxi) args ctxs
                               
               in
-                  paren <|
+                  paren (prec>0) <|
                       span []
-                      <| redexSpan expr ctx [renderExpr e0 ctx0] ::
+                      <| redexSpan expr ctx [renderExpr_ 1 e0 ctx0] ::
                           text " " ::  items
                   
           Lam xs e1 ->
-              text (Pretty.prettyExpr expr)
+              text (Pretty.prettyExpr_ prec expr)
                   
           IfThenElse e1 e2 e3 ->
-              paren <|
+              paren (prec>0) <|
               span []
                   [ redexSpan expr ctx [ text "if " ]
                   , renderExpr e1 (Monocle.compose ctx Context.if0)
@@ -284,9 +289,11 @@ redexSpan expr ctx elements =
             span [] elements
         
                       
-paren : Html msg -> Html msg
-paren html
-    =  span [] [text "(", html, text ")"]
-
+paren : Bool -> Html msg -> Html msg
+paren b html
+    =  if b then
+           span [] [text "(", html, text ")"]
+       else
+           html
         
 

@@ -38,7 +38,10 @@ problemToString prob
 
 -- * pretty printing expressions etc
 prettyExpr : Expr -> String
-prettyExpr e =
+prettyExpr e = prettyExpr_ 0 e
+
+prettyExpr_ : Int ->  Expr -> String
+prettyExpr_ prec e =
     case e of
         Number n -> String.fromInt n
 
@@ -53,27 +56,35 @@ prettyExpr e =
                 
 
         Cons e1 e2 ->
-            "(" ++ prettyExpr e1 ++ ":" ++ prettyExpr e2 ++ ")"
+            paren (prec>0)
+                <| prettyExpr_ 1 e1 ++ ":" ++ prettyExpr_ 1 e2 
 
         InfixOp op e1 e2 ->
-            "(" ++ prettyExpr e1 ++ op ++ prettyExpr e2 ++ ")"
+            paren (prec>0)
+                <| prettyExpr_ 1 e1 ++ op ++ prettyExpr_ 1 e2 
 
         App e0 args ->
-            "(" ++ 
-                (String.join " " <| List.map prettyExpr (e0::args)) ++
-            ")"
+            paren (prec>0)
+                <| String.join " "
+                <| List.map (prettyExpr_ 1) (e0::args)
 
         Lam xs e1 ->
-            "(\\" ++ String.join " " xs ++ " -> " ++
-                prettyExpr e1 ++ ")"
+            paren (prec>0)
+                <| "\\" ++ String.join " " xs ++ " -> " ++ prettyExpr_ 1 e1 
                 
         IfThenElse e1 e2 e3 ->
-            "(if " ++ prettyExpr e1 ++ " then " ++
-                prettyExpr e2 ++ " else " ++ prettyExpr e3 ++ ")"
+            paren (prec>0)
+                <|  "if " ++ prettyExpr e1 ++ " then " ++
+                    prettyExpr e2 ++ " else " ++ prettyExpr e3 
 
         Fail msg -> "!"++msg
 
 
+paren : Bool -> String -> String
+paren b str
+    = if b then "("++str++")" else str
+
+                    
 prettyPattern : Pattern -> String
 prettyPattern p =
     case p of

@@ -68,7 +68,12 @@ primitives
       , ("*", arithOp (*))
       , ("div", arithOp (//))
       , ("mod", arithOp (\x y -> modBy y x))
-      , ("==", equals)
+      , ("==", compareOp (==))
+      , ("/=", compareOp (/=))
+      , (">=", compareOp (>=))
+      , ("<=", compareOp (<=))
+      , (">", compareOp (>))
+      , ("<", compareOp (<))
       ]
 
 arithOp : (Int -> Int -> Int) -> List Expr -> Maybe (Expr, String)
@@ -81,15 +86,15 @@ arithOp func args
                else 
                    Nothing
 
--- simple equality for numbers only
--- TODO: extend this to lists
-equals : List Expr -> Maybe (Expr, String)
-equals args
+-- simple comparisons for numbers only
+-- TODO: extend these to lists
+compareOp : (Int -> Int -> Bool) -> List Expr -> Maybe (Expr, String)
+compareOp func args
     = case args of
           [Number x, Number y] ->
-              Just (Boolean (x==y), "equality")
+              Just (Boolean (func x y), "comparison")
           _ -> if List.length args > 2 then
-                   Just (Fail "type error", "equality")
+                   Just (Fail "type error", "comparison")
                else
                    Nothing
 

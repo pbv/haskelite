@@ -2,6 +2,10 @@
     color: red;
 }
 
+.editline {
+    font-family: monospace;
+}
+
 .lines   {
     font-family: monospace;
     padding: 1em;

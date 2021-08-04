@@ -85,7 +85,7 @@ infixOperator
     = Parser.chompWhile Pretty.operatorChar
     |> Parser.getChompedString
     |> andThen (\s -> if String.isEmpty s
-                      then problem "null operator"
+                      then problem "operator"
                       else succeed s)
 
 
@@ -114,7 +114,7 @@ pattern =
           , trailing = Parser.Forbidden
           } |> andThen
                  (\l -> case List.reverse l of
-                            [] -> problem "invalid pattern"
+                            [] -> problem "pattern"
                             (p::ps) -> succeed (List.foldr ConsP p
                                                     (List.reverse ps)))
     ]
@@ -158,6 +158,10 @@ infix5 = infixRight infix6 [ (":", Cons)
                            ]
 infix4 = infixLeft  infix5 [ ("==", InfixOp "==")
                            , ("/=", InfixOp "/=")
+                           , ("<=", InfixOp "<=")
+                           , (">=", InfixOp ">=")
+                           , ("<", InfixOp "<")
+                           , (">", InfixOp ">")
                            ]
 -- TODO: these should be non-associative
 
@@ -171,7 +175,7 @@ operator s
       |> Parser.getChompedString
       |> andThen (\r -> if s==r
                         then succeed ()
-                        else problem ("expecting operator " ++ s ++ ", got "++r)))
+                        else problem ("operator " ++ s)))
 
 
 type alias BinOp = Expr -> Expr -> Expr

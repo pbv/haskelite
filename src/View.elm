@@ -6,186 +6,44 @@ import Haskell
 import Eval exposing (Functions)
 import Parser
 import Pretty
-import Prelude exposing (prelude)
+import Prelude
 import Context exposing (Context)
 import Monocle.Optional as Monocle
 import Html exposing (..)
-import Html.Attributes exposing (value, class, placeholder, size)
-import Html.Events exposing (on, onClick, onInput, onSubmit, keyCode)
+import Html.Attributes exposing (value, class, placeholder,
+                                     size, rows, cols, spellcheck)
+import Html.Events exposing (on, onClick, onInput)
 import Platform.Cmd as Cmd
 import Platform.Sub as Sub
-import Json.Decode as Json
 
 import List.Extra as List
 import Dict exposing (Dict)
 import Browser
 
-
-type alias ReduceModel
+type alias Model
     = { expression : Expr              -- current expression
       , previous : List (Expr, String) -- list of previous steps
+      , functions : Functions
+      , inputExpr : String
+      , outputExpr : Result String Expr
+      , inputDecls : String
+      , outputDecls : Result String (List Decl)
+      , mode : Mode
       }
 
-type alias EditModel
-    = { input : String              -- input string
-      , output : Result String Expr  -- result of parsing
-      }
-
-
-
-type Model
-    = Reduce ReduceModel
-    | Editing EditModel
+type Mode
+    = Reducing | Editing
 
 type Msg
-    = Eval Context 
+    = Step Context 
     | Reset
-    | Edit String
-    | KeyDown Int
+    | EditExpr String
+    | EditDecls String
+    | Edit
+    | SaveEdits
 
 
--- global declarations from the prelude      
-decls : List Decl
-decls =
-    case Parser.run Haskell.declList prelude of
-        Ok l -> l
-        Err _ -> []
-
-functions : Functions                 
-functions = Eval.collectFunctions decls Eval.primitives
-
-init : String -> (Model, Cmd msg)      
-init str =
-    let submodel = editInit str
-    in case submodel.output of
-           Ok expr ->
-               (Reduce (reduceInit expr), Cmd.none)
-           Err _ ->
-               (Editing submodel, Cmd.none)
-
-                 
-
-editInit : String -> EditModel
-editInit str =
-    let
-        result = Result.mapError Pretty.deadEndsToString
-                 <| Parser.run Haskell.topExprEnd str
-    in { input = str
-       , output = result
-       }
-
-reduceInit : Expr -> ReduceModel
-reduceInit expr = 
-    { expression = expr
-    , previous = []
-    }
-        
-view : Model -> Html Msg
-view model =
-    case model of
-        Editing submodel -> editingView submodel
-        Reduce submodel -> reduceView submodel
-
-editingView : EditModel -> Html Msg
-editingView model =
-    div [] [ input [ placeholder "Enter an expression"
-                   , value model.input
-                   , size 80
-                   , class "editline"
-                   , onInput Edit
-                   , onKeyDown KeyDown 
-                   ]  []
-           , br [] []
-           , case model.output of
-                       Err msg -> span [class "error"] [text msg]
-                       _ -> span [] []
-           ]
-
-reduceView : ReduceModel -> Html Msg
-reduceView model =
-    div []
-        [ div [class "lines"]
-             <| (List.map lineView (List.reverse model.previous) ++
-                     [
-                      div [class "current"]
-                          [ renderExpr model.expression Context.hole ]
-                     ]
-                )
-        , span [] [ case model.previous of
-                        [] -> let str = Pretty.prettyExpr model.expression
-                              in button [ onClick (Edit str) ] [text "Edit"]
-                        _ -> button [ onClick Reset ] [text "Reset"]
-                  ]
-        ]
-      
-lineView : (Expr, String) -> Html Msg
-lineView (expr, info) =
-    div [class "line"] [
-         text (Pretty.prettyExpr expr)
-        , span [class "info"] [ text info ]
-        ]
-        
-
-
-update : Msg -> Model -> (Model, Cmd Msg)
-update msg model =
-    case model of
-        Reduce submodel ->
-            (reduceUpdate msg submodel, Cmd.none)
-        Editing submodel ->
-            (editUpdate msg submodel, Cmd.none)
-
-        
-reduceUpdate : Msg -> ReduceModel -> Model
-reduceUpdate msg model =
-    case msg of
-        Eval ctx ->
-            case Eval.redexCtx functions model.expression ctx of
-                Just (newExpr, info) ->
-                    Reduce
-                    { expression = newExpr
-                    , previous = (model.expression, info) :: model.previous
-                    }
-                
-                Nothing -> Reduce model
-
-        Reset ->
-            case List.last model.previous of
-                Just (expr,_) ->
-                    Reduce { expression = expr, previous = [] }
-                Nothing ->
-                    Reduce model
-        Edit string ->
-            Editing (editInit string)
-            
-        _ ->
-            Reduce model
-                
-editUpdate : Msg -> EditModel -> Model
-editUpdate msg model =
-    case msg of
-        Edit string ->
-            Editing (editInit string) 
-        KeyDown code ->
-            if code == 13 then 
-                case model.output of
-                    Ok expr -> Reduce (reduceInit expr) 
-                    Err _ -> Editing model
-            else
-                Editing model
-        _ ->
-            Editing model
-
-                       
-subscriptions : Model -> Sub msg
-subscriptions _ = Sub.none
-
-
-onKeyDown : (Int -> msg) -> Html.Attribute msg
-onKeyDown tagger =
-  on "keydown" (Json.map tagger keyCode)
-      
-                    
+-- the main entry point for the app
 main =
     Browser.element
         { init = init
@@ -194,15 +52,175 @@ main =
         , subscriptions = subscriptions
         }
 
+      
+-- * inicializing the application
+init : {expression:String, declarations:String} -> (Model, Cmd msg) 
+init config  =
+    let outputExpr = Result.mapError Pretty.deadEndsToString
+                     <| Parser.run Haskell.topExprEnd config.expression
+        outputDecls = Result.mapError Pretty.deadEndsToString
+                      <| Parser.run Haskell.declList config.declarations
+    in case (outputExpr, outputDecls) of
+           (Ok expr, Ok decls) ->
+               ({ expression = expr
+                , previous = []
+                , functions = Eval.collectFunctions decls Prelude.functions
+                , inputExpr = config.expression
+                , outputExpr = outputExpr
+                , inputDecls = config.declarations
+                , outputDecls = outputDecls
+                , mode = Reducing
+                }
+               , Cmd.none)
+           _ ->
+               ({ expression = Fail "syntax"
+                , previous = []
+                , functions = Prelude.functions
+                , inputExpr = config.expression
+                , outputExpr = outputExpr
+                , inputDecls = config.declarations
+                , outputDecls = outputDecls
+                , mode = Editing
+                }
+               , Cmd.none)
 
+                 
+
+        
+view : Model -> Html Msg
+view model =
+    case model.mode of
+        Editing -> editingView model
+        Reducing -> reduceView model
+
+editingView : Model -> Html Msg
+editingView model =
+    div [] [ input [ placeholder "Enter an expression"
+                   , value model.inputExpr
+                   , size 80
+                   , spellcheck False
+                   , class "editline"
+                   , onInput EditExpr
+                   ]  []
+           , br [] []
+           , case model.outputExpr of
+                 Err msg -> span [class "error"] [text msg]
+                 _ -> span [] []
+           , br [] []
+           , textarea [ value model.inputDecls
+                      , rows 24
+                      , cols 80
+                      , spellcheck False
+                      , onInput EditDecls
+                      ] []
+           , br [] []
+           , case model.outputDecls of
+                 Err msg -> span [class "error"] [text msg]
+                 _ -> span [] []
+           , br [] []
+           , button [ onClick SaveEdits ] [ text "Save" ]
+           ]
+
+reduceView : Model -> Html Msg
+reduceView model =
+    div []
+        [ div [class "lines"]
+             <| List.map lineView (List.reverse model.previous) ++
+                 [ div [class "current"]
+                          [ renderExpr
+                                model.functions model.expression Context.hole ]
+                 ]
+        , span [] [ case model.previous of
+                        [] -> button [ onClick Edit ] [text "Edit"]
+                        _ -> button [ onClick Reset ] [text "Reset"]
+                  ]
+        ]
+      
+lineView : (Expr, String) -> Html Msg
+lineView (expr, info) =
+    div [class "line"]
+        [ text (Pretty.prettyExpr expr)
+        , span [class "info"] [ text info ]
+        ]
+        
+
+
+update : Msg -> Model -> (Model, Cmd Msg)
+update msg model =
+    case model.mode of
+        Reducing ->
+            (reduceUpdate msg model, Cmd.none)
+        Editing ->
+            (editUpdate msg model, Cmd.none)
+
+        
+reduceUpdate : Msg -> Model -> Model
+reduceUpdate msg model =
+    case msg of
+        Step ctx ->
+            case Eval.redexCtx model.functions model.expression ctx of
+                Just (newExpr, info) ->
+                    { model | expression = newExpr
+                    , previous = (model.expression, info) :: model.previous
+                    }
+                
+                Nothing ->
+                    model
+
+        Reset ->
+            case List.last model.previous of
+                Just (expr,_) ->
+                    { model | expression = expr, previous = [] }
+                Nothing ->
+                    model
+        Edit ->
+            { model | mode = Editing }
+            
+        _ ->
+            model
+                
+editUpdate : Msg -> Model -> Model
+editUpdate msg model =
+    case msg of
+        EditExpr string ->
+            let
+                output = Result.mapError Pretty.deadEndsToString
+                         <| Parser.run Haskell.topExprEnd string
+            in
+                { model | inputExpr = string, outputExpr = output }
+
+        EditDecls string ->
+            let
+                output = Result.mapError Pretty.deadEndsToString
+                         <| Parser.run Haskell.declList string
+            in
+                { model | inputDecls = string, outputDecls = output }
+        
+        SaveEdits ->
+            case (model.outputExpr, model.outputDecls) of
+                (Ok expr, Ok decls) ->
+                    { model | expression = expr
+                    , previous = []
+                    , functions = Eval.collectFunctions decls Prelude.functions
+                    , mode = Reducing
+                    }
+                _ ->
+                    model 
+        _ ->
+            model
+                       
+subscriptions : Model -> Sub msg
+subscriptions _ = Sub.none
+
+                 
 -- render an interactive expression; toplevel function
-renderExpr : Expr -> Context -> Html Msg
-renderExpr expr ctx =
-    renderExpr_ 0 expr ctx
+renderExpr : Functions -> Expr -> Context -> Html Msg
+renderExpr functions expr ctx =
+    renderExpr_ 0 functions expr ctx
 
 -- worker function 
-renderExpr_ : Int -> Expr -> Context -> Html Msg
-renderExpr_ prec expr ctx 
+renderExpr_ : Int -> Functions -> Expr -> Context -> Html Msg
+renderExpr_ prec functions expr ctx 
     = case expr of
           Var x ->
               text <| if Pretty.isOperator x then "("++x++")" else x
@@ -219,7 +237,7 @@ renderExpr_ prec expr ctx
                   ctxs = List.map (\i -> Monocle.compose ctx (Context.listItem i))
                           (List.range 0 n)
                   items = List.intersperse (text ", ")
-                          <| List.map2 renderExpr args ctxs
+                          <| List.map2 (renderExpr functions) args ctxs
               in
                   span [] <| (text "[" :: items) ++ [text "]"]
 
@@ -230,9 +248,9 @@ renderExpr_ prec expr ctx
               in
                   paren (prec>0) <|
                       span []
-                      [ renderExpr_ 1 e0 ctx0 
-                      , redexSpan expr ctx [text ":"]
-                      , renderExpr_ 1 e1 ctx1 
+                      [ renderExpr_ 1 functions e0 ctx0 
+                      , redexSpan functions expr ctx [text ":"]
+                      , renderExpr_ 1 functions e1 ctx1 
                       ]
 
           InfixOp op e0 e1 ->
@@ -242,9 +260,9 @@ renderExpr_ prec expr ctx
               in
                   paren (prec>0) <|
                       span []
-                      [ renderExpr_ 1 e0 ctx0 
-                      , redexSpan expr ctx [text op]
-                      , renderExpr_ 1 e1 ctx1 
+                      [ renderExpr_ 1 functions e0 ctx0 
+                      , redexSpan functions expr ctx [text op]
+                      , renderExpr_ 1 functions e1 ctx1 
                       ]
 
           App e0 args ->
@@ -254,12 +272,12 @@ renderExpr_ prec expr ctx
                   ctxs = List.map (\i -> Monocle.compose ctx (Context.appArg i))
                          (List.range 0 n)
                   items = List.intersperse (text " ")
-                          <| List.map2 (\ei ctxi -> renderExpr_ 1 ei ctxi) args ctxs
+                          <| List.map2 (\ei ctxi -> renderExpr_ 1 functions ei ctxi) args ctxs
                               
               in
                   paren (prec>0) <|
                       span []
-                      <| redexSpan expr ctx [renderExpr_ 1 e0 ctx0] ::
+                      <| redexSpan functions expr ctx [renderExpr_ 1 functions e0 ctx0] ::
                           text " " ::  items
                   
           Lam xs e1 ->
@@ -268,22 +286,22 @@ renderExpr_ prec expr ctx
           IfThenElse e1 e2 e3 ->
               paren (prec>0) <|
               span []
-                  [ redexSpan expr ctx [ text "if " ]
-                  , renderExpr e1 (Monocle.compose ctx Context.if0)
-                  , redexSpan expr ctx [text " then "]
+                  [ redexSpan functions expr ctx [ text "if " ]
+                  , renderExpr functions e1 (Monocle.compose ctx Context.if0)
+                  , redexSpan functions expr ctx [text " then "]
                   , text (Pretty.prettyExpr e2)
-                  , redexSpan expr ctx [text " else "]
+                  , redexSpan functions expr ctx [text " else "]
                   , text (Pretty.prettyExpr e3) 
                   ]
                   
           Fail msg -> span [class "error"] [ text "!", text msg ]
 
-
-redexSpan : Expr -> Context -> List (Html Msg) -> Html Msg
-redexSpan expr ctx elements =
+-- render a redex with info tooltip
+redexSpan : Functions -> Expr -> Context -> List (Html Msg) -> Html Msg
+redexSpan functions expr ctx elements =
     case Eval.redex functions expr of
         Just (_, info) ->
-            span [class "redex", onClick (Eval ctx)]
+            span [class "redex", onClick (Step ctx)]
                 <| span [class "info"] [text info] :: elements
         Nothing ->
             span [] elements

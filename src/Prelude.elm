@@ -1,8 +1,23 @@
 
 module Prelude exposing (..)
 
-prelude : String
+import AST exposing (Decl)
+import Eval exposing (Functions)
+import Haskell
+import Parser
 
+-- global declarations from the prelude      
+declarations : List Decl
+declarations =
+    case Parser.run Haskell.declList prelude of
+        Ok l -> l
+        Err _ -> []  --  NB: this should never happen
+
+functions : Functions                 
+functions = Eval.collectFunctions declarations Eval.primitives
+
+
+prelude : String
 prelude =
     """
 even :: Int -> Bool

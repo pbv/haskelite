@@ -12,15 +12,21 @@ import Char
 import Set
 import List.Extra as List
 
-
 -- declarations
+declListEnd : Parser (List Decl)
+declListEnd
+    = succeed identity
+        |= declList
+        |. Parser.end
+
+
 declList : Parser (List Decl)
 declList
     = Parser.sequence
       { start = ""
       , end = ""
       , separator = ""
-      , spaces = newlines
+      , spaces = whitespace
       , item = declaration
       , trailing = Parser.Mandatory
       }
@@ -101,10 +107,15 @@ pattern =
            |. keyword "False"
     , succeed NumberP
            |= backtrackable int
-    , succeed NilP
-           |. symbol "["
-           |. spaces
-           |. symbol "]"
+    , succeed ListP
+         |= Parser.sequence
+            { start = "["
+            , end = "]"
+            , separator = ","
+            , spaces = spaces
+            , item = lazy (\_ -> pattern)
+            , trailing = Parser.Forbidden
+            }
     , Parser.sequence
           { start = "("
           , end = ")"
@@ -148,7 +159,7 @@ topExprOrOperator
                  
 
 topExpr : Parser Expr
-topExpr = infix4
+topExpr = infix2
 
 infix7 = infixLeft  applicativeExpr [ ("*", InfixOp "*") ]
 infix6 = infixLeft  infix7  [ ("+", InfixOp "+")
@@ -162,8 +173,10 @@ infix4 = infixLeft  infix5 [ ("==", InfixOp "==")
                            , (">=", InfixOp ">=")
                            , ("<", InfixOp "<")
                            , (">", InfixOp ">")
-                           ]
--- TODO: these should be non-associative
+                           ] -- TODO: these should be non-associative
+
+infix3 = infixRight infix4 [ ("&&", InfixOp "&&") ]
+infix2 = infixRight infix3 [ ("||", InfixOp "||") ]
 
 
 -- parse a given operator
@@ -337,7 +350,5 @@ reservedWords
 spaces
     = Parser.chompWhile (\c -> c==' ')
 
-newlines
-    = Parser.chompWhile (\c -> c=='\n' || c=='\r')
-
-
+whitespace
+    = Parser.chompWhile (\c -> c==' ' || c=='\n' || c=='\r')

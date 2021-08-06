@@ -59,7 +59,7 @@ init config  =
     let outputExpr = Result.mapError Pretty.deadEndsToString
                      <| Parser.run Haskell.topExprEnd config.expression
         outputDecls = Result.mapError Pretty.deadEndsToString
-                      <| Parser.run Haskell.declList config.declarations
+                      <| Parser.run Haskell.declListEnd config.declarations
     in case (outputExpr, outputDecls) of
            (Ok expr, Ok decls) ->
                ({ expression = expr
@@ -192,7 +192,7 @@ editUpdate msg model =
         EditDecls string ->
             let
                 output = Result.mapError Pretty.deadEndsToString
-                         <| Parser.run Haskell.declList string
+                         <| Parser.run Haskell.declListEnd string
             in
                 { model | inputDecls = string, outputDecls = output }
         
@@ -261,7 +261,7 @@ renderExpr_ prec functions expr ctx
                   paren (prec>0) <|
                       span []
                       [ renderExpr_ 1 functions e0 ctx0 
-                      , redexSpan functions expr ctx [text op]
+                      , redexSpan functions expr ctx [text (Pretty.formatOperator op)]
                       , renderExpr_ 1 functions e1 ctx1 
                       ]
 

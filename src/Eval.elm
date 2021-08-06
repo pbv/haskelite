@@ -98,7 +98,7 @@ compareOp func args
                else
                    Nothing
 
-
+                       
                        
 -- apply a function specifified by a list of alterantives
 -- to a list of arguments
@@ -106,24 +106,25 @@ compareOp func args
 dispatchAlts : List Alt -> List Expr -> Maybe (Expr, String)
 dispatchAlts alts args
     = case alts of
-          [] -> Just (Fail "pattern match failure", "")
+          [] -> Just (Fail "pattern match failure", "fail")
           ((ps,e,info)::alts1) ->
               let nps = List.length ps
                   nargs = List.length args
               in if nargs < nps
                  then Nothing
                  else
-                     let args1 = List.take nps args
-                         args2 = List.drop nps args
-                     in if forceEvalList ps args1
-                        then
-                            Nothing
-                        else
-                            case matchingList ps args1 Dict.empty of
-                                Nothing -> dispatchAlts alts1 args
-                                Just s ->
-                                    Just (applyArgs (AST.applySubst s e) args2
-                                         , info)
+                     if forceEvalList ps args
+                     then
+                         Nothing
+                     else
+                         let args1 = List.take nps args
+                             args2 = List.drop nps args
+                         in 
+                             case matchingList ps args1 Dict.empty of
+                                 Nothing -> dispatchAlts alts1 args
+                                 Just s ->
+                                     Just (applyArgs (AST.applySubst s e) args2
+                                          , info)
                                         
     
 
@@ -144,8 +145,8 @@ redex functions expr =
                         Just semantics ->
                             semantics args
                         Nothing ->
-                            Just (Fail "invalid function", fun)
-                _ -> Just (Fail "invalid function", "")
+                            Just (Fail "invalid function", "fail")
+                _ -> Just (Fail "invalid function", "fail")
                     
         Cons e1 (ListLit l) ->
             Just (ListLit (e1::l)
@@ -188,13 +189,16 @@ forceEval p e =
         (VarP _, _) ->           False
         (NumberP _, Number _) -> False
         (BooleanP _, Boolean _) -> False
-        (NilP,     ListLit _) -> False
-        (NilP,    Cons _ _)   -> False
+        (ListP ps, ListLit es) ->
+            forceEvalList ps es
+        (ListP [], Cons _ _) -> False
+        (ListP (p1::ps), Cons e1 e2) ->
+            forceEval p1 e1 || forceEval (ListP ps) e2
         (ConsP p1 p2, Cons e1 e2) ->
             forceEval p1 e1 || forceEval p2 e2
         (ConsP p1 p2, ListLit [])  -> False
         (ConsP p1 p2, ListLit (e1::rest))  ->
-            forceEval p1 e1 || forceEval p2 (AST.ListLit rest)
+            forceEval p1 e1 || forceEval p2 (ListLit rest)
         (_, _) -> True
 
 forceEvalList : List Pattern -> List Expr -> Bool
@@ -217,12 +221,20 @@ matching p e s
               case e of
                   Boolean c -> if b==c then Just s else Nothing
                   _         -> Nothing
-                               
-          NilP ->
+          (ListP []) ->
               case e of
                   ListLit [] -> Just s
-                  _          -> Nothing
-                                
+                  _ -> Nothing
+                       
+          (ListP (p1::ps)) ->
+              case e of
+                  ListLit (e1::es) -> matching p1 e1 s
+                                   |> Maybe.andThen (matching (ListP ps) (ListLit es))
+                  Cons e1 e2 -> matching p1 e1 s
+                                |> Maybe.andThen (matching (ListP ps) e2)
+                  _ ->
+                      Nothing
+              
           (ConsP p1 p2) ->
               case e of
                   (Cons e1 e2) -> matching p1 e1 s

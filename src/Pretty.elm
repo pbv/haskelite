@@ -61,7 +61,7 @@ prettyExpr_ prec e =
 
         InfixOp op e1 e2 ->
             paren (prec>0)
-                <| prettyExpr_ 1 e1 ++ op ++ prettyExpr_ 1 e2 
+                <| prettyExpr_ 1 e1 ++ formatOperator op ++ prettyExpr_ 1 e2 
 
         App e0 args ->
             paren (prec>0)
@@ -84,6 +84,14 @@ paren : Bool -> String -> String
 paren b str
     = if b then "("++str++")" else str
 
+
+-- format an infix operator, sometimes with spaces either side
+formatOperator : Name -> String
+formatOperator op = if op=="&&" || op == "||"
+                    then " " ++ op ++ " "
+                    else op
+
+      
                     
 prettyPattern : Pattern -> String
 prettyPattern p =
@@ -94,8 +102,8 @@ prettyPattern p =
             if b then "True" else "False"
         NumberP n ->
             String.fromInt n
-        NilP ->
-            "[]"
+        ListP ps ->
+            "[" ++ String.join "," (List.map prettyPattern ps) ++ "]"
         ConsP p1 p2 ->
             "(" ++ prettyPattern p1 ++ ":" ++
                 prettyPattern p2 ++ ")"
@@ -125,7 +133,8 @@ prettyInfix f p1 p2 expr
 
 operatorChar : Char -> Bool
 operatorChar c =
-    c=='+' || c=='*' || c=='-' || c=='>' || c=='<' || c==':' || c=='=' 
+    c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
+        c==':' || c=='=' || c=='&' || c=='|'
 
 
 isOperator : Name -> Bool

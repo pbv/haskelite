@@ -27,7 +27,7 @@ type Pattern
     = VarP Name
     | BooleanP Bool
     | NumberP Int
-    | NilP
+    | ListP (List Pattern)
     | ConsP Pattern Pattern
 
 -- variable substitutions

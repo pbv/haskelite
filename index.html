@@ -9,10 +9,10 @@
     
     <script src="elm.js"></script>
     <script>
-      var decls = "double x = 2*x\n\nsquare x=x*x\n";
+      var decls = "square x=x*x\n";
       var app = Elm.View.init({
           node: document.getElementById("elm-app"),
-	  flags: { expression:"square (double 5)", declarations: decls }
+	  flags: { expression:"sum (map square [1,2,3])", declarations: decls }
       });
     </script>
   </body>

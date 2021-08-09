@@ -10,7 +10,7 @@ import Prelude
 import Context exposing (Context)
 import Monocle.Optional as Monocle
 import Html exposing (..)
-import Html.Attributes exposing (value, class, placeholder,
+import Html.Attributes exposing (value, class, placeholder, disabled,
                                      size, rows, cols, spellcheck)
 import Html.Events exposing (on, onClick, onInput)
 import Platform.Cmd as Cmd
@@ -36,6 +36,8 @@ type Mode
 
 type Msg
     = Step Context    -- single step evaluation at a context
+    | Previous        -- undo one evaluation step
+    | Next            -- next outermost step
     | Reset           -- reset evaluation
     | EditExpr String   -- edit expression
     | EditDecls String  -- edit declarations
@@ -118,22 +120,31 @@ editingView model =
                  Err msg -> span [class "error"] [text msg]
                  _ -> span [] []
            , br [] []
-           , button [ onClick SaveEdits ] [ text "Save" ]
+           , button [ class "navbar", onClick SaveEdits ] [ text "Save" ]
            ]
 
 reduceView : Model -> Html Msg
 reduceView model =
     div []
-        [ div [class "lines"]
+        [ span [] [ button [ class "navbar"
+                           , onClick Edit
+                           , disabled (not (List.isEmpty model.previous))]
+                        [text "Edit"]
+                  , button [ class "navbar"
+                           , onClick Reset
+                           ]
+                        [text "Reset"]
+                  , button [ class "navbar"
+                           , onClick Previous] [text "< Prev"]
+                  , button [ class "navbar"
+                           , onClick Next] [text "Next >"]
+                  ]
+        , div [class "lines"]
              <| List.map lineView (List.reverse model.previous) ++
                  [ div [class "current"]
                           [ renderExpr
                                 model.functions model.expression Context.hole ]
                  ]
-        , span [] [ case model.previous of
-                        [] -> button [ onClick Edit ] [text "Edit"]
-                        _ -> button [ onClick Reset ] [text "Reset"]
-                  ]
         ]
       
 lineView : (Expr, String) -> Html Msg
@@ -167,6 +178,22 @@ reduceUpdate msg model =
                 Nothing ->
                     model
 
+        Previous ->
+            case model.previous of
+                ((oldExpr, info) :: rest) ->
+                    { model | expression = oldExpr, previous = rest }
+                [] ->
+                    model
+
+        Next ->
+            case reduceNext model.functions model.expression of
+                Just (newExpr, info) ->
+                    { model | expression = newExpr
+                    , previous = (model.expression, info) :: model.previous
+                    }
+                Nothing ->
+                    model
+                        
         Reset ->
             case List.last model.previous of
                 Just (expr,_) ->
@@ -178,6 +205,13 @@ reduceUpdate msg model =
             
         _ ->
             model
+
+
+reduceNext : Functions -> Expr -> Maybe (Expr, String)
+reduceNext functions expr
+    = Eval.outermostRedex functions expr
+        |> Maybe.andThen (\ctx -> Eval.redexCtx functions expr ctx)
+
                 
 editUpdate : Msg -> Model -> Model
 editUpdate msg model =

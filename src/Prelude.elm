@@ -38,6 +38,12 @@ even x = mod x 2 == 0
 odd :: Int -> Bool
 odd x = mod x 2 == 1
 
+min :: Int -> Int -> Int
+min x y = if x<=y then x else y
+
+max :: Int -> Int -> Int
+max x y = if x<=y then y else x
+
 fst :: (a,b) -> a
 fst (x,y) = x
 

@@ -5,6 +5,7 @@ import AST exposing (Expr(..), Pattern(..), Decl(..), Name, Subst)
 import Pretty
 import Dict exposing (Dict)
 import Context exposing (Context)
+import Monocle.Optional as Monocle
 
 -- * semantics
 -- function definitions
@@ -273,3 +274,74 @@ redexCtx functions expr ctx
 
 
                             
+-- locate the outermost-leftmost redex
+outermostRedex : Functions -> Expr -> Maybe Context
+outermostRedex functions expr =
+    case redex functions expr of
+        Just (reduced, info) ->
+            Just Context.hole
+        Nothing ->
+            outermostRedexAux functions expr 
+
+outermostRedexAux : Functions -> Expr -> Maybe Context
+outermostRedexAux functions expr 
+    = case expr of
+          (Cons e0 e1) ->
+              case outermostRedex functions e0 of
+                  Just ctx ->
+                      Just (Monocle.compose Context.cons0 ctx)
+                  Nothing ->
+                      case outermostRedex functions e1 of
+                          Just ctx ->
+                              Just (Monocle.compose Context.cons1 ctx)
+                          Nothing ->
+                              Nothing
+                                  
+          (InfixOp op e0 e1) ->
+              case outermostRedex functions e0 of
+                  Just ctx ->
+                      Just (Monocle.compose Context.infixOp0 ctx)
+                  Nothing ->
+                      case outermostRedex functions e1 of
+                          Just ctx ->
+                              Just (Monocle.compose Context.infixOp1 ctx)
+
+                          Nothing -> Nothing
+
+          (App e0 args) ->
+              case outermostRedex functions e0 of
+                  Just ctx ->
+                      Just (Monocle.compose Context.app0 ctx)
+                  Nothing ->
+                      outermostRedexArgs functions Context.appArg args 0
+
+          (TupleLit items) ->
+              outermostRedexArgs functions Context.tupleItem items 0
+
+          (ListLit items) ->
+              outermostRedexArgs functions Context.listItem items 0
+
+          (IfThenElse e0 e1 e2) ->
+              case outermostRedex functions e0 of
+                  Just ctx ->
+                      Just (Monocle.compose Context.if0 ctx)
+                  Nothing ->
+                      Nothing
+                          
+          _ ->
+              Nothing
+
+
+outermostRedexArgs :
+    Functions -> (Int -> Context) -> List Expr  -> Int -> Maybe Context
+outermostRedexArgs functions proj args i =
+    case args of
+        (arg::rest) ->
+            case outermostRedex functions arg of
+                Just ctx ->
+                    Just (Monocle.compose (proj i) ctx)
+                Nothing ->
+                    outermostRedexArgs functions proj rest (i+1)
+        [] ->
+            Nothing
+    

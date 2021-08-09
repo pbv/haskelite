@@ -14,7 +14,7 @@ Lessons](https://stevekrouse.com/hs.js/).
 
 Integers, variables, arithmetic operations (`+, -, *, div, mod`),
 comparisions between integers (`==`, `<=`, etc.), lists (written
-`[1,2,3]` and `1:[2,3]`), tuples and if-then-else.
+`[1,2,3]` and `1:[2,3]`), tuples, lambda-expressions and if-then-else.
 
 ### Function definitions
 

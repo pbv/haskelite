@@ -84,7 +84,7 @@ appArg i =
     }
     
 
--- contexts for literal lists    
+-- contexts for literal lists and tuples    
 listItem : Int -> Context
 listItem i =
     { getOption = \e -> case e of
@@ -95,6 +95,17 @@ listItem i =
                         _ -> e
     }
 
+tupleItem : Int -> Context
+tupleItem i =
+    { getOption = \e -> case e of
+                            TupleLit items -> .getOption (Monocle.list i) items
+                            _ -> Nothing
+    , set = \n e -> case e of
+                        TupleLit items -> TupleLit (.set (Monocle.list i) n items)
+                        _ -> e
+    }
+
+    
 --- contexts for if expressions
 
 if0 : Context

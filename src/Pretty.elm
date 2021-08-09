@@ -51,9 +51,13 @@ prettyExpr_ prec e =
 
         ListLit l ->
             "[" ++
-            (String.join ", " <| List.map prettyExpr l) ++
+            (String.join "," <| List.map prettyExpr l) ++
             "]"
                 
+        TupleLit l ->
+            "(" ++
+            (String.join "," <| List.map prettyExpr l) ++
+            ")"
 
         Cons e1 e2 ->
             paren (prec>0)
@@ -102,6 +106,8 @@ prettyPattern p =
             if b then "True" else "False"
         NumberP n ->
             String.fromInt n
+        TupleP ps ->
+            "(" ++ String.join "," (List.map prettyPattern ps) ++ ")"
         ListP ps ->
             "[" ++ String.join "," (List.map prettyPattern ps) ++ "]"
         ConsP p1 p2 ->

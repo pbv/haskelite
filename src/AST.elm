@@ -13,8 +13,9 @@ type Expr
     | Var Name
     | Number Int
     | Boolean Bool
-    | Cons Expr Expr              -- (:)
-    | ListLit (List Expr)
+    | Cons Expr Expr              -- (x:xs)
+    | ListLit (List Expr)         -- [1,2,3]
+    | TupleLit (List Expr)        -- (1,2,3)
     | InfixOp Name Expr Expr      --  operators +, * etc
     | IfThenElse Expr Expr Expr
     | Fail String                  -- pattern match failure, type errors, etc
@@ -29,6 +30,7 @@ type Pattern
     | NumberP Int
     | ListP (List Pattern)
     | ConsP Pattern Pattern
+    | TupleP (List Pattern)
 
 -- variable substitutions
 type alias Subst = Dict Name Expr
@@ -65,6 +67,9 @@ applySubst s e
           ListLit l ->
               ListLit (List.map (applySubst s) l)
                   
+          TupleLit l ->
+              TupleLit (List.map (applySubst s) l)
+
           IfThenElse e1 e2 e3 ->
               IfThenElse (applySubst s e1) (applySubst s e2) (applySubst s e3)
 

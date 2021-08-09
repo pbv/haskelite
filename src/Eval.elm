@@ -189,6 +189,8 @@ forceEval p e =
         (VarP _, _) ->           False
         (NumberP _, Number _) -> False
         (BooleanP _, Boolean _) -> False
+        (TupleP ps, TupleLit es) ->
+            forceEvalList ps es
         (ListP ps, ListLit es) ->
             forceEvalList ps es
         (ListP [], Cons _ _) -> False
@@ -234,6 +236,11 @@ matching p e s
                                 |> Maybe.andThen (matching (ListP ps) e2)
                   _ ->
                       Nothing
+
+          (TupleP ps) ->
+              case e of
+                  TupleLit es -> matchingList ps es s
+                  _ -> Nothing
               
           (ConsP p1 p2) ->
               case e of
@@ -249,7 +256,8 @@ matchingList ps es s
     = case (ps, es) of
           (p1::ps1, e1::es1) -> matching p1 e1 s
                                |> Maybe.andThen (\s1 -> matchingList ps1 es1 s1)
-          (_, _) -> Just s
+          ([], []) -> Just s
+          _ -> Nothing
 
 
        

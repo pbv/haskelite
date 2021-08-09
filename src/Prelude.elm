@@ -38,6 +38,12 @@ even x = mod x 2 == 0
 odd :: Int -> Bool
 odd x = mod x 2 == 1
 
+fst :: (a,b) -> a
+fst (x,y) = x
+
+snd :: (a,b) -> b
+snd (x,y) = y
+
 head :: [a] -> a
 head (x:xs) = x
 
@@ -90,9 +96,14 @@ filter :: (a -> Bool) -> [a] -> [a]
 filter f [] = []
 filter f (x:xs)= if f x then x : filter f xs else filter f xs
 
+zip :: [a] -> [b] -> [(a,b)]
+zip [] ys = []
+zip xs [] = []
+zip (x:xs) (y:ys) = (x,y) : zip xs ys
+
 zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
-zipWith f [] ys = ys
-zipWith f xs [] = xs
+zipWith f [] ys = []
+zipWith f xs [] = []
 zipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys
 
 foldr :: (a -> b -> b) -> b -> [a] -> b

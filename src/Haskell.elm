@@ -116,6 +116,16 @@ pattern =
             , item = lazy (\_ -> pattern)
             , trailing = Parser.Forbidden
             }
+    , backtrackable
+          <| succeed makeTupleP
+               |= Parser.sequence
+                  { start = "("
+                  , end = ")"
+                  , separator = ","
+                  , spaces = spaces
+                  , item = lazy (\_ -> pattern)
+                  , trailing = Parser.Forbidden
+                  }
     , Parser.sequence
           { start = "("
           , end = ")"
@@ -130,6 +140,13 @@ pattern =
                                                     (List.reverse ps)))
     ]
 
+
+makeTupleP l =
+    case l of
+        [x] -> x
+        _ -> TupleP l
+
+    
 patternList =
     Parser.sequence
     { start = ""
@@ -149,15 +166,7 @@ topExprEnd
         |= topExpr
         |. Parser.end
 
-topExprOrOperator : Parser Expr
-topExprOrOperator
-    = oneOf
-      [ succeed Var
-            |= backtrackable infixOperator
-      , topExpr
-      ]
-                 
-
+  
 topExpr : Parser Expr
 topExpr = infix2
 
@@ -251,29 +260,49 @@ delimited =
     [ succeed Var
           |= identifier
     , succeed Number
-          |= backtrackable int -- BUG: int should only consume input if it succeeds
+          |= backtrackable int -- BUG: int consumes input even if it fails
     , succeed (Boolean True)
           |. keyword "True"
     , succeed (Boolean False)
           |. keyword "False"
-    , succeed identity
+    , backtrackable <|
+        succeed Var
           |. symbol "("
-          |= lazy (\_ -> topExprOrOperator)
+          |= infixOperator
           |. symbol ")"
-    , Parser.map ListLit literalList
+    , literalTuple
+    , literalList
     ]
 
-literalList : Parser (List Expr)
+literalList : Parser Expr
 literalList
-    =  Parser.sequence
-       { start = "["
-       , end = "]"
-       , separator = ","
-       , spaces = spaces
-       , item = lazy (\_ -> topExpr)
-       , trailing = Parser.Forbidden
-       }
+    = succeed ListLit
+         |= Parser.sequence
+            { start = "["
+            , end = "]"
+            , separator = ","
+            , spaces = spaces
+            , item = lazy (\_ -> topExpr)
+            , trailing = Parser.Forbidden
+            }
 
+literalTuple : Parser Expr
+literalTuple
+    = succeed makeTuple
+         |= Parser.sequence
+            { start = "("
+            , end = ")"
+            , separator = ","
+            , spaces = spaces
+            , item = lazy (\_ -> topExpr)
+            , trailing = Parser.Forbidden
+            }
+
+makeTuple l =
+    case l of
+        [x] -> x
+        _ -> TupleLit l
+           
        
 application : Parser Expr       
 application

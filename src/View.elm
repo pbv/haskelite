@@ -35,12 +35,12 @@ type Mode
     = Reducing | Editing
 
 type Msg
-    = Step Context 
-    | Reset
-    | EditExpr String
-    | EditDecls String
-    | Edit
-    | SaveEdits
+    = Step Context    -- single step evaluation at a context
+    | Reset           -- reset evaluation
+    | EditExpr String   -- edit expression
+    | EditDecls String  -- edit declarations
+    | Edit              -- go into editing mode
+    | SaveEdits         -- go into reduction mode
 
 
 -- the main entry point for the app
@@ -230,13 +230,24 @@ renderExpr_ prec functions expr ctx
 
           Boolean b ->
               text <| if b then "True" else "False"
-          
+
+          TupleLit args ->
+              let
+                  n = List.length args - 1
+                  ctxs = List.map (\i -> Monocle.compose ctx (Context.tupleItem i))
+                          (List.range 0 n)
+                  items = List.intersperse (text ",")
+                          <| List.map2 (renderExpr functions) args ctxs
+              in
+                  span [] <| (text "(" :: items) ++ [text ")"]
+                  
+                              
           ListLit args ->
               let
                   n = List.length args - 1
                   ctxs = List.map (\i -> Monocle.compose ctx (Context.listItem i))
                           (List.range 0 n)
-                  items = List.intersperse (text ", ")
+                  items = List.intersperse (text ",")
                           <| List.map2 (renderExpr functions) args ctxs
               in
                   span [] <| (text "[" :: items) ++ [text "]"]

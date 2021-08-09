@@ -2,23 +2,23 @@
 # Relambda
 
 An interactive interpreter for a small subset of the Haskell language
-with integers, booleans, lists and recursive definitions intended for
-teaching.
+intended for teaching with integers, booleans, lists, tuples and
+recursive definitions.
 
-This is a extended re-implementation in Elm of [Lambda
+This is an extended re-implementation in the Elm language of [Lambda
 Lessons](https://stevekrouse.com/hs.js/).
 
 ## Language features
 
-Expressions
+### Expressions
 
-:  Integers, variables, arithmetic operations (`+, -, *, div, mod`),
+Integers, variables, arithmetic operations (`+, -, *, div, mod`),
 comparisions between integers (`==`, `<=`, etc.), lists (written
-`[1,2,3]` and `1:[2,3]:`), if-then-else
+`[1,2,3]` and `1:[2,3]`), tuples and if-then-else.
 
-Definitions
+### Function definitions
 
-:  Pattern matching over integers and lists; recursive definitions are allowed.
+Pattern matching over integers, lists and tuples; recursive definitions are allowed.
 
 
 ## Standard Prelude
@@ -27,6 +27,8 @@ Definitions for the following prelude functions are provided.
 
 ~~~haskell
 even, odd :: Int -> Bool
+fst :: (a,b) -> a
+snd :: (a,b) -> b
 (&&), (||) :: Bool -> Bool
 (++) :: [a] -> [a] -> [a]
 length :: [a] -> Int
@@ -37,17 +39,17 @@ map :: (a -> b) -> [a] -> [b]
 filter :: (a -> Bool) -> [a] -> [a]
 foldr :: (a -> b -> b) -> b -> [a] -> b
 foldl :: (a -> b -> a) -> a -> [b] -> a
+zip :: [a] -> [b] -> [(a,b)]
 zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
 any, all :: (a -> Bool) -> [a] -> Bool
 ~~~
 
 ## Not implemented
 
-The following Haskell features are not implemented:
+The following Haskell features are *not* implemented:
 
 * type checking 
 * let and case expressions
-* tuples
 * guards
 * list ranges and compreensions
 * caracters and strings

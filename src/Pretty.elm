@@ -81,7 +81,7 @@ prettyExpr_ prec e =
                 <|  "if " ++ prettyExpr e1 ++ " then " ++
                     prettyExpr e2 ++ " else " ++ prettyExpr e3 
 
-        Fail msg -> "!"++msg
+        Fail msg -> msg ++ "!"
 
 
 paren : Bool -> String -> String

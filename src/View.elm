@@ -339,7 +339,7 @@ renderExpr_ prec functions expr ctx
                   , text (Pretty.prettyExpr e3) 
                   ]
                   
-          Fail msg -> span [class "error"] [ text "!", text msg ]
+          Fail msg -> span [class "error"] [ text msg, text "!" ]
 
 -- render a redex with info tooltip
 redexSpan : Functions -> Expr -> Context -> List (Html Msg) -> Html Msg

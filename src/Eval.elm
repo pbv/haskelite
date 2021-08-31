@@ -69,8 +69,8 @@ primitives
       , ("*", arithOp (*))
       , ("div", arithOp (//))
       , ("mod", arithOp (\x y -> modBy y x))
-      , ("==", compareOp (==))
-      , ("/=", compareOp (/=))
+      , ("==", comparePoly equalExpr)
+      , ("/=", comparePoly (\x y -> not (equalExpr x y)))
       , (">=", compareOp (>=))
       , ("<=", compareOp (<=))
       , (">", compareOp (>))
@@ -82,13 +82,17 @@ arithOp func args
     = case args of
           [Number x, Number y] ->
               Just (AST.Number (func x y), "arithmetic")
+          [arg1, arg2] ->
+              if isWeakNormalForm arg1 && isWeakNormalForm arg2 then
+                  Just (Fail "type error", "arithmetic")
+              else
+                  Nothing
           _ -> if List.length args > 2 then
                    Just (Fail "type error", "arithmetic")
                else 
                    Nothing
 
 -- simple comparisons for numbers only
--- TODO: extend these to lists
 compareOp : (Int -> Int -> Bool) -> List Expr -> Maybe (Expr, String)
 compareOp func args
     = case args of
@@ -99,6 +103,56 @@ compareOp func args
                else
                    Nothing
 
+-- polymorphic compararisons
+comparePoly : (Expr -> Expr -> Bool) -> List Expr -> Maybe (Expr, String)
+comparePoly func args
+    = case args of
+          [arg1, arg2] ->
+              if isNormalForm arg1 && isNormalForm arg2 then
+                  Just (Boolean (func arg1 arg2), "comparison")
+              else
+                  Nothing
+          _ -> if List.length args > 2 then
+                   Just (Fail "type error", "comparison")
+               else
+                   Nothing
+                   
+
+-- compare two expressions for equality; this is only nedeed because
+-- Elm doesn't support "deriving Eq" on a data type definition ;-(
+--
+equalExpr : Expr -> Expr -> Bool
+equalExpr expr1 expr2
+    = case (expr1,expr2) of
+          (App e1 args1, App e2 args2) ->
+              equalExpr e1 e2 && equalList args1 args2
+          (Lam xs1 e1, Lam xs2 e2) ->
+              xs1 == xs2 && equalExpr e1 e2
+          (Var x1, Var x2) ->
+              x1 == x2
+          (Number n1, Number n2) ->
+              n1 == n2
+          (Boolean b1, Boolean b2) ->
+              b1 == b2
+          (Cons e1 e2, Cons e3 e4) ->
+              equalExpr e1 e3 && equalExpr e2 e4
+          (ListLit items1, ListLit items2) ->
+              equalList items1 items2
+          (TupleLit items1, TupleLit items2) ->
+              equalList items1 items2
+          (InfixOp op1 e1 e2, InfixOp op2 e3 e4) ->
+              op1 == op2 && equalExpr e1 e3 && equalExpr e2 e4
+          (IfThenElse e1 e2 e3, IfThenElse e4 e5 e6) ->
+              equalExpr e1 e4 && equalExpr e2 e5 && equalExpr e3 e6
+          (Fail msg1, Fail msg2) ->
+              msg1 == msg2
+          _ ->
+              False
+              
+equalList : List Expr -> List Expr -> Bool
+equalList items1 items2 =
+    List.all identity <| List.map2 equalExpr items1 items2
+          
                        
                        
 -- apply a function specifified by a list of alterantives
@@ -345,3 +399,60 @@ outermostRedexArgs functions proj args i =
         [] ->
             Nothing
     
+
+
+-- check if an expression is a weak normal form
+
+isWeakNormalForm : Expr -> Bool
+isWeakNormalForm expr =
+    case expr of
+        App _ _ ->
+            False
+        Lam _ _ ->
+            True
+        Var _ ->
+            False
+        Number _ ->
+            True
+        Boolean _ ->
+            True
+        Cons _ _ ->
+            True
+        ListLit _ ->
+            True
+        TupleLit _ ->
+            True
+        InfixOp _ _ _ ->
+            False
+        IfThenElse _ _ _ ->
+            False
+        Fail _ ->
+            False
+
+
+isNormalForm : Expr -> Bool
+isNormalForm expr =
+    case expr of
+        App _ _ ->
+            False
+        Lam _ _ ->
+            True
+        Var _ ->
+            False
+        Number _ ->
+            True
+        Boolean _ ->
+            True
+        Cons e1 e2 ->
+            isNormalForm e1 && isNormalForm e2
+        ListLit items ->
+            List.all isNormalForm items
+        TupleLit items ->
+            List.all isNormalForm items
+        InfixOp _ _ _ ->
+            False
+        IfThenElse _ _ _ ->
+            False
+        Fail _ ->
+            False
+

@@ -21,7 +21,7 @@ import Dict exposing (Dict)
 import Browser
 
 type alias Model
-    = { expression : Expr              -- current expression
+    = { expression : Expr             -- current expression
       , previous : List (Expr, String) -- list of previous steps
       , functions : Functions
       , inputExpr : String
@@ -32,7 +32,7 @@ type alias Model
       }
 
 type Mode
-    = Reducing | Editing
+    = Editing | Reducing 
 
 type Msg
     = Step Context    -- single step evaluation at a context
@@ -97,7 +97,9 @@ view model =
 
 editingView : Model -> Html Msg
 editingView model =
-    div [] [ input [ placeholder "Enter an expression"
+    div [] [ button [ class "navbar", onClick SaveEdits ] [ text "Save" ]
+           , br [] []
+           , input [ placeholder "Enter an expression"
                    , value model.inputExpr
                    , size 80
                    , spellcheck False
@@ -119,8 +121,6 @@ editingView model =
            , case model.outputDecls of
                  Err msg -> span [class "error"] [text msg]
                  _ -> span [] []
-           , br [] []
-           , button [ class "navbar", onClick SaveEdits ] [ text "Save" ]
            ]
 
 reduceView : Model -> Html Msg
@@ -207,7 +207,7 @@ reduceUpdate msg model =
             model
 
 
-reduceNext : Functions -> Expr -> Maybe (Expr, String)
+reduceNext : Functions -> Expr -> Maybe (Expr,String)
 reduceNext functions expr
     = Eval.outermostRedex functions expr
         |> Maybe.andThen (\ctx -> Eval.redexCtx functions expr ctx)
@@ -339,7 +339,7 @@ renderExpr_ prec functions expr ctx
                   , text (Pretty.prettyExpr e3) 
                   ]
                   
-          Fail msg -> span [class "error"] [ text msg, text "!" ]
+          Fail msg -> span [class "error"] [ text msg ]
 
 -- render a redex with info tooltip
 redexSpan : Functions -> Expr -> Context -> List (Html Msg) -> Html Msg

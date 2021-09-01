@@ -7,18 +7,20 @@ import Dict exposing (Dict)
 import Context exposing (Context)
 import Monocle.Optional as Monocle
 
+
 -- * semantics
 -- function definitions
 type alias Functions
     = Dict AST.Name Function
 
+      
 -- the semantics of a single definition is a function from the stack
 -- of arguments after unwinding to an optional expression; a result of
 -- Nothing means that the function cannot be applied, possibly
 -- requiring more evaluation of the arguments
 -- the result string is an explanation for the reducion 
 type alias Function
-    = List Expr -> Maybe (Expr, String)
+    = List Expr -> Maybe (Expr,String)
 
 -- alternatives equations for a single function
 type alias Alt 
@@ -64,56 +66,57 @@ collectAlts fun decls
 primitives : Functions
 primitives
     = Dict.fromList
-      [ ("+", arithOp (+))
-      , ("-", arithOp (-))
-      , ("*", arithOp (*))
-      , ("div", arithOp (//))
-      , ("mod", arithOp (\x y -> modBy y x))
-      , ("==", comparePoly equalExpr)
-      , ("/=", comparePoly (\x y -> not (equalExpr x y)))
-      , (">=", compareOp (>=))
-      , ("<=", compareOp (<=))
-      , (">", compareOp (>))
-      , ("<", compareOp (<))
+      [ ("+", arithOp "+" (+))
+      , ("-", arithOp "-" (-))
+      , ("*", arithOp "*" (*))
+      , ("div", arithOp "div" (//))
+      , ("mod", arithOp "mod" (\x y -> modBy y x))
+      , ("==", comparePoly "==" equalExpr)
+      , ("/=", comparePoly "/=" (\x y -> not (equalExpr x y)))
+      , (">=", compareOp ">=" (>=))
+      , ("<=", compareOp "<=" (<=))
+      , (">", compareOp ">" (>))
+      , ("<", compareOp "<" (<))
       ]
 
-arithOp : (Int -> Int -> Int) -> List Expr -> Maybe (Expr, String)
-arithOp func args
+arithOp : String -> (Int -> Int -> Int) -> List Expr -> Maybe (Expr,String)
+arithOp op func args
     = case args of
           [Number x, Number y] ->
-              Just (AST.Number (func x y), "arithmetic")
+              Just (Number (func x y), op)
           [arg1, arg2] ->
               if isWeakNormalForm arg1 && isWeakNormalForm arg2 then
-                  Just (Fail "type error", "arithmetic")
+                  Just (Fail "type error", op)
               else
                   Nothing
           _ -> if List.length args > 2 then
-                   Just (Fail "type error", "arithmetic")
+                   Just (Fail "type error", op)
                else 
                    Nothing
 
 -- simple comparisons for numbers only
-compareOp : (Int -> Int -> Bool) -> List Expr -> Maybe (Expr, String)
-compareOp func args
+compareOp : String -> (Int -> Int -> Bool) -> List Expr -> Maybe (Expr,String)
+compareOp op func args
     = case args of
           [Number x, Number y] ->
-              Just (Boolean (func x y), "comparison")
+              Just (Boolean (func x y), op)
           _ -> if List.length args > 2 then
-                   Just (Fail "type error", "comparison")
+                   Just (Fail "type error", op)
                else
                    Nothing
 
--- polymorphic compararisons
-comparePoly : (Expr -> Expr -> Bool) -> List Expr -> Maybe (Expr, String)
-comparePoly func args
+
+-- polymorphic comparisons
+comparePoly : String -> (Expr -> Expr -> Bool) -> List Expr -> Maybe (Expr, String)
+comparePoly op func args
     = case args of
           [arg1, arg2] ->
               if isNormalForm arg1 && isNormalForm arg2 then
-                  Just (Boolean (func arg1 arg2), "comparison")
+                  Just (Boolean (func arg1 arg2), op)
               else
                   Nothing
           _ -> if List.length args > 2 then
-                   Just (Fail "type error", "comparison")
+                   Just (Fail "type error", op)
                else
                    Nothing
                    
@@ -158,10 +161,10 @@ equalList items1 items2 =
 -- apply a function specifified by a list of alterantives
 -- to a list of arguments
 -- result is Nothing if the expression can't be reduced yet
-dispatchAlts : List Alt -> List Expr -> Maybe (Expr, String)
+dispatchAlts : List Alt -> List Expr -> Maybe (Expr,String)
 dispatchAlts alts args
     = case alts of
-          [] -> Just (Fail "pattern match failure", "fail")
+          [] -> Just (Fail "pattern match failure", "error")
           ((ps,e,info)::alts1) ->
               let nps = List.length ps
                   nargs = List.length args
@@ -178,13 +181,15 @@ dispatchAlts alts args
                              case matchingList ps args1 Dict.empty of
                                  Nothing -> dispatchAlts alts1 args
                                  Just s ->
-                                     Just (applyArgs (AST.applySubst s e) args2
-                                          , info)
+                                     let
+                                         ne = applyArgs (AST.applySubst s e) args2
+                                     in
+                                         Just (ne, info)
                                         
     
 
 -- perform a single step reduction    
-redex : Functions -> Expr -> Maybe (Expr, String)
+redex : Functions -> Expr -> Maybe (Expr,String)
 redex functions expr =
     case expr of
         App e1 es ->
@@ -200,12 +205,11 @@ redex functions expr =
                         Just semantics ->
                             semantics args
                         Nothing ->
-                            Just (Fail "invalid function", "fail")
-                _ -> Just (Fail "invalid function", "fail")
+                            Just (Fail "undefined function", fun)
+                _ -> Just (Fail "invalid function", "error")
                     
         Cons e1 (ListLit l) ->
-            Just (ListLit (e1::l)
-                 , "constructor")
+            Just (ListLit (e1::l), "constructor")
                 
         InfixOp op e1 e2 ->
             redex functions (App (Var op) [e1, e2])
@@ -317,14 +321,18 @@ matchingList ps es s
 
        
 -- * perform a single reduction under a context
-redexCtx : Functions -> Expr -> Context -> Maybe (Expr, String)
+redexCtx : Functions -> Expr -> Context -> Maybe (Expr,String)
 redexCtx functions expr ctx
     = ctx.getOption expr
           |> Maybe.andThen
              (\subexpr ->
                   redex functions subexpr
              |> Maybe.andThen
-                  (\(new, info) -> Just (ctx.set new expr, info)))
+                  (\result ->
+                       case result of
+                           (Fail err, info) -> Just (Fail err, info)
+                           (new,info) -> Just (ctx.set new expr, info)))
+                       -- (\(new, info) -> Just (ctx.set new expr, info)))
 
 
                             
@@ -332,7 +340,7 @@ redexCtx functions expr ctx
 outermostRedex : Functions -> Expr -> Maybe Context
 outermostRedex functions expr =
     case redex functions expr of
-        Just (reduced, info) ->
+        Just _ ->
             Just Context.hole
         Nothing ->
             outermostRedexAux functions expr 
@@ -411,7 +419,7 @@ isWeakNormalForm expr =
         Lam _ _ ->
             True
         Var _ ->
-            False
+            True
         Number _ ->
             True
         Boolean _ ->
@@ -438,7 +446,7 @@ isNormalForm expr =
         Lam _ _ ->
             True
         Var _ ->
-            False
+            True
         Number _ ->
             True
         Boolean _ ->

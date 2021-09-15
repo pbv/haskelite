@@ -1,4 +1,7 @@
-
+{-
+  Pretty-printer for Haskelite abstract syntax trees
+  Pedro Vasconcelos 2021
+-}
 module Pretty exposing (..)
 
 import AST exposing (Expr(..), Pattern(..), Decl(..), Name)

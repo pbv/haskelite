@@ -1,8 +1,12 @@
-
-module View exposing (..)
+{-
+  Haskelite, a single-step interpreter for a subset of Haskell.
+  Main module exporting an interactive HTML entity
+  Pedro Vasconcelos, 2021
+-}
+module Haskelite exposing (..)
 
 import AST exposing (Expr(..), Decl, Name)
-import Haskell
+import HsParser
 import Eval exposing (Functions)
 import Parser
 import Pretty
@@ -59,9 +63,9 @@ main =
 init : {expression:String, declarations:String} -> (Model, Cmd msg) 
 init config  =
     let outputExpr = Result.mapError Pretty.deadEndsToString
-                     <| Parser.run Haskell.topExprEnd config.expression
+                     <| Parser.run HsParser.topExprEnd config.expression
         outputDecls = Result.mapError Pretty.deadEndsToString
-                      <| Parser.run Haskell.declListEnd config.declarations
+                      <| Parser.run HsParser.declListEnd config.declarations
     in case (outputExpr, outputDecls) of
            (Ok expr, Ok decls) ->
                ({ expression = expr
@@ -219,14 +223,14 @@ editUpdate msg model =
         EditExpr string ->
             let
                 output = Result.mapError Pretty.deadEndsToString
-                         <| Parser.run Haskell.topExprEnd string
+                         <| Parser.run HsParser.topExprEnd string
             in
                 { model | inputExpr = string, outputExpr = output }
 
         EditDecls string ->
             let
                 output = Result.mapError Pretty.deadEndsToString
-                         <| Parser.run Haskell.declListEnd string
+                         <| Parser.run HsParser.declListEnd string
             in
                 { model | inputDecls = string, outputDecls = output }
         

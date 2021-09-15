@@ -1,4 +1,7 @@
-
+{-
+  Evaluation contexts for Haskelite expressions
+  Pedro Vasconcelos, 2021
+-} 
 module Context exposing (..)
 
 import AST exposing (Expr(..))

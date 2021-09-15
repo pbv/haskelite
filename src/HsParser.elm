@@ -1,7 +1,8 @@
 {-
-  Parser for a small subset of Haskell
+  Parser for Haskelite, a small subset of Haskell
+  Pedro Vasconcelos, 2021
 -}
-module Haskell exposing (..)
+module HsParser exposing (..)
 
 import Parser exposing
     (Parser, (|.), (|=), int, symbol, keyword, variable, 

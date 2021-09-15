@@ -1,4 +1,7 @@
-
+{-
+  Abstract Syntax Trees for Haskelite, a small subset of Haskell
+  Pedro Vasconcelos, 2021
+-}
 module AST exposing (..)
 
 import Dict exposing (Dict)
@@ -7,6 +10,7 @@ import Maybe
 type alias Name
     = String
 
+-- * expressions
 type Expr
     = App Expr (List Expr)    -- non-empty list of arguments
     | Lam (List Name) Expr    -- non-empty list of variables
@@ -18,12 +22,14 @@ type Expr
     | TupleLit (List Expr)        -- (1,2,3)
     | InfixOp Name Expr Expr      --  operators +, * etc
     | IfThenElse Expr Expr Expr
-    | Fail String                  -- pattern match failure, type errors, etc
+    | Fail String                 -- runtime errors
 
+-- * declarations      
 type Decl
     = TypeSig Name String 
     | Equation Name (List Pattern) Expr 
-    
+
+-- * patterns      
 type Pattern
     = VarP Name
     | BooleanP Bool

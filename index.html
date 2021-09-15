@@ -5,13 +5,13 @@
   </head>
 
   <body>
-    <div id="elm-app"></div>
+    <div id="haskelite"></div>
     
-    <script src="elm.js"></script>
+    <script src="haskelite-min.js"></script>
     <script>
       var decls = "square x=x*x\n";
-      var app = Elm.View.init({
-          node: document.getElementById("elm-app"),
+      var app = Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
 	  flags: { expression:"sum (map square [1,2,3])", declarations: decls }
       });
     </script>

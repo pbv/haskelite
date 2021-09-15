@@ -1,15 +1,19 @@
-
+{-
+  Standard definitions for Haskelite
+  This is a subset of the Haskell 98 prelude
+  Pedro Vasconcelos
+-}
 module Prelude exposing (..)
 
 import AST exposing (Decl)
 import Eval exposing (Functions)
-import Haskell
+import HsParser
 import Parser
 
 -- global declarations from the prelude      
 declarations : List Decl
 declarations =
-    case Parser.run Haskell.declList prelude of
+    case Parser.run HsParser.declList prelude of
         Ok l -> l
         Err _ -> []  --  NB: this should never happen
 
@@ -119,4 +123,12 @@ foldr f z (x:xs) = f x (foldr f z xs)
 foldl :: (a -> b -> a) -> a -> [b] -> a
 foldl f z [] = z
 foldl f z (x:xs) = foldl f (f z x) xs
+
+takeWhile :: (a -> Bool) -> [a] -> [a]
+takeWhile p [] = []
+takeWhile p (x:xs) = if p x then x : takeWhile p xs else []
+
+dropWhile :: (a -> Bool) -> [a] -> [a]
+dropWhile p [] = []
+dropWhile p (x:xs) = if p x then dropWhile p xs else x:xs
 """

@@ -1,4 +1,7 @@
-
+{-
+  Single-step evaluation of Haskelite programs
+  Pedro Vasconcelos, 2021
+-} 
 module Eval exposing (..)
 
 import AST exposing (Expr(..), Pattern(..), Decl(..), Name, Subst)
@@ -86,11 +89,11 @@ arithOp op func args
               Just (Number (func x y), op)
           [arg1, arg2] ->
               if isWeakNormalForm arg1 && isWeakNormalForm arg2 then
-                  Just (Fail "type error", op)
+                  Just (Fail "type error: operator requires numbers", op)
               else
                   Nothing
           _ -> if List.length args > 2 then
-                   Just (Fail "type error", op)
+                   Just (Fail "type error: wrong number of arguments", op)
                else 
                    Nothing
 
@@ -101,7 +104,7 @@ compareOp op func args
           [Number x, Number y] ->
               Just (Boolean (func x y), op)
           _ -> if List.length args > 2 then
-                   Just (Fail "type error", op)
+                   Just (Fail "type error: wrong number of arguments", op)
                else
                    Nothing
 
@@ -116,7 +119,7 @@ comparePoly op func args
               else
                   Nothing
           _ -> if List.length args > 2 then
-                   Just (Fail "type error", op)
+                   Just (Fail "type error: wrong number of arguments", op)
                else
                    Nothing
                    
@@ -218,7 +221,9 @@ redex functions expr =
             case e1 of
                 Boolean True -> Just (e2, "if-True")
                 Boolean False -> Just (e3, "if-False")
-                _ -> Nothing
+                _ -> if isWeakNormalForm e1
+                     then Just (Fail "type error: if requires a boolean", "if")
+                     else Nothing
                      
         _ -> Nothing
 

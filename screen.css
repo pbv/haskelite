@@ -18,6 +18,7 @@
 .line {
     position: relative;
     display: block;
+    border-bottom: 1px solid lightyellow;
 }
 
 .current {

@@ -1,11 +1,12 @@
 
-# Relambda
+# Haskelite
 
-An interactive interpreter for a small subset of the Haskell language
+A single-step interpreter for a small subset of the Haskell language
 intended for teaching with integers, booleans, lists, tuples and
-recursive definitions.
+recursive definitions. The principal focus is on simplicity since this
+is intended for teaching fundamentals of functional programming.
 
-This is an extended re-implementation in the Elm language of [Lambda
+This project is an extended re-implementation in Elm of the [Lambda
 Lessons](https://stevekrouse.com/hs.js/).
 
 ## Language features
@@ -13,12 +14,13 @@ Lessons](https://stevekrouse.com/hs.js/).
 ### Expressions
 
 Integers, variables, arithmetic operations (`+, -, *, div, mod`),
-comparisions between integers (`==`, `<=`, etc.), lists (written
-`[1,2,3]` and `1:[2,3]`), tuples, lambda-expressions and if-then-else.
+comparisons between integers (`==`, `<=`, etc.), tuples,
+lambda-expressions and if-then-else.
 
 ### Function definitions
 
-Pattern matching over integers, lists and tuples; recursive definitions are allowed.
+Pattern matching over integers, lists and tuples; recursive
+definitions are allowed.
 
 
 ## Standard Prelude
@@ -27,6 +29,7 @@ Definitions for the following prelude functions are provided.
 
 ~~~haskell
 even, odd :: Int -> Bool
+max, min :: Int -> Int -> Int
 fst :: (a,b) -> a
 snd :: (a,b) -> b
 (&&), (||) :: Bool -> Bool
@@ -41,6 +44,7 @@ foldr :: (a -> b -> b) -> b -> [a] -> b
 foldl :: (a -> b -> a) -> a -> [b] -> a
 zip :: [a] -> [b] -> [(a,b)]
 zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
+takeWhile, dropWhile :: (a -> Bool) -> [a] -> [a]
 any, all :: (a -> Bool) -> [a] -> Bool
 ~~~
 
@@ -48,12 +52,13 @@ any, all :: (a -> Bool) -> [a] -> Bool
 
 The following Haskell features are *not* implemented:
 
-* type checking 
+* static type checking 
+* the numeric tower (Float, Integer, Ratio, Complex, etc.)
 * let and case expressions
 * guards
 * list ranges and compreensions
 * caracters and strings
-* algebraic data types
+* user-defined algebraic data types
 
 ----
 

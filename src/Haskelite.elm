@@ -131,16 +131,16 @@ reduceView : Model -> Html Msg
 reduceView model =
     div []
         [ span [] [ button [ class "navbar"
-                           , onClick Edit
-                           , disabled (not (List.isEmpty model.previous))]
-                        [text "Edit"]
+                           , disabled (not (List.isEmpty model.previous))
+                           , onClick Edit] [text "Edit"]
                   , button [ class "navbar"
                            , onClick Reset
-                           ]
-                        [text "Reset"]
+                           ] [text "Reset"]
                   , button [ class "navbar"
+                           , disabled (List.isEmpty model.previous)
                            , onClick Previous] [text "< Prev"]
                   , button [ class "navbar"
+                           , disabled (isNormalForm model.functions model.expression)
                            , onClick Next] [text "Next >"]
                   ]
         , div [class "lines"]
@@ -216,6 +216,13 @@ reduceNext functions expr
     = Eval.outermostRedex functions expr
         |> Maybe.andThen (\ctx -> Eval.redexCtx functions expr ctx)
 
+           
+isNormalForm : Functions -> Expr -> Bool
+isNormalForm functions expr
+    = case reduceNext functions expr of
+          Just _ -> False
+          Nothing -> True
+           
                 
 editUpdate : Msg -> Model -> Model
 editUpdate msg model =

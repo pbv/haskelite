@@ -2704,7 +2704,7 @@ var _VirtualDom_mapEventTuple = F2(function(func, tuple)
 var _VirtualDom_mapEventRecord = F2(function(func, record)
 {
 	return {
-		C: func(record.C),
+		D: func(record.D),
 		ag: record.ag,
 		ad: record.ad
 	}
@@ -2974,7 +2974,7 @@ function _VirtualDom_makeCallback(eventNode, initialHandler)
 		// 3 = Custom
 
 		var value = result.a;
-		var message = !tag ? value : tag < 3 ? value.a : value.C;
+		var message = !tag ? value : tag < 3 ? value.a : value.D;
 		var stopPropagation = tag == 1 ? value.b : tag == 3 && value.ag;
 		var currentEventNode = (
 			stopPropagation && event.stopPropagation(),
@@ -4931,10 +4931,10 @@ var $elm$core$Array$builderToArray = F2(
 		if (!builder.e) {
 			return A4(
 				$elm$core$Array$Array_elm_builtin,
-				$elm$core$Elm$JsArray$length(builder.g),
+				$elm$core$Elm$JsArray$length(builder.h),
 				$elm$core$Array$shiftStep,
 				$elm$core$Elm$JsArray$empty,
-				builder.g);
+				builder.h);
 		} else {
 			var treeLen = builder.e * $elm$core$Array$branchFactor;
 			var depth = $elm$core$Basics$floor(
@@ -4943,10 +4943,10 @@ var $elm$core$Array$builderToArray = F2(
 			var tree = A2($elm$core$Array$treeFromBuilder, correctNodeList, builder.e);
 			return A4(
 				$elm$core$Array$Array_elm_builtin,
-				$elm$core$Elm$JsArray$length(builder.g) + treeLen,
+				$elm$core$Elm$JsArray$length(builder.h) + treeLen,
 				A2($elm$core$Basics$max, 5, depth * $elm$core$Array$shiftStep),
 				tree,
-				builder.g);
+				builder.h);
 		}
 	});
 var $elm$core$Basics$idiv = _Basics_idiv;
@@ -4959,7 +4959,7 @@ var $elm$core$Array$initializeHelp = F5(
 				return A2(
 					$elm$core$Array$builderToArray,
 					false,
-					{i: nodeList, e: (len / $elm$core$Array$branchFactor) | 0, g: tail});
+					{i: nodeList, e: (len / $elm$core$Array$branchFactor) | 0, h: tail});
 			} else {
 				var leaf = $elm$core$Array$Leaf(
 					A3($elm$core$Elm$JsArray$initialize, $elm$core$Array$branchFactor, fromIndex, fn));
@@ -8683,7 +8683,7 @@ var $author$project$Haskelite$init = function (config) {
 	var outputExpr = A2(
 		$elm$core$Result$mapError,
 		$author$project$Pretty$deadEndsToString,
-		A2($elm$parser$Parser$run, $author$project$HsParser$topExprEnd, config.h));
+		A2($elm$parser$Parser$run, $author$project$HsParser$topExprEnd, config.g));
 	var outputDecls = A2(
 		$elm$core$Result$mapError,
 		$author$project$Pretty$deadEndsToString,
@@ -8694,27 +8694,27 @@ var $author$project$Haskelite$init = function (config) {
 		var decls = _v0.b.a;
 		return _Utils_Tuple2(
 			{
-				h: expr,
-				H: A2($author$project$Eval$collectFunctions, decls, $author$project$Prelude$functions),
+				g: expr,
+				C: A2($author$project$Eval$collectFunctions, decls, $author$project$Prelude$functions),
 				S: config.Z,
-				T: config.h,
+				T: config.g,
 				I: 1,
 				N: outputDecls,
 				O: outputExpr,
-				m: _List_Nil
+				l: _List_Nil
 			},
 			$elm$core$Platform$Cmd$none);
 	} else {
 		return _Utils_Tuple2(
 			{
-				h: $author$project$AST$Fail('syntax'),
-				H: $author$project$Prelude$functions,
+				g: $author$project$AST$Fail('syntax'),
+				C: $author$project$Prelude$functions,
 				S: config.Z,
-				T: config.h,
+				T: config.g,
 				I: 0,
 				N: outputDecls,
 				O: outputExpr,
-				m: _List_Nil
+				l: _List_Nil
 			},
 			$elm$core$Platform$Cmd$none);
 	}
@@ -8754,10 +8754,10 @@ var $author$project$Haskelite$editUpdate = F2(
 					return _Utils_update(
 						model,
 						{
-							h: expr,
-							H: A2($author$project$Eval$collectFunctions, decls, $author$project$Prelude$functions),
+							g: expr,
+							C: A2($author$project$Eval$collectFunctions, decls, $author$project$Prelude$functions),
 							I: 1,
-							m: _List_Nil
+							l: _List_Nil
 						});
 				} else {
 					return model;
@@ -8916,7 +8916,7 @@ var $author$project$Eval$redexCtx = F3(
 							var info = result.b;
 							return $elm$core$Maybe$Just(
 								_Utils_Tuple2(
-									A2(ctx.l, _new, expr),
+									A2(ctx.m, _new, expr),
 									info));
 						}
 					},
@@ -8933,7 +8933,7 @@ var $author$project$Context$app0 = {
 			return $elm$core$Maybe$Nothing;
 		}
 	},
-	l: F2(
+	m: F2(
 		function (e0, e) {
 			if (!e.$) {
 				var args = e.b;
@@ -9030,12 +9030,12 @@ var $elm$core$Array$set = F3(
 var $arturopala$elm_monocle$Monocle$Common$array = function (index) {
 	return {
 		j: $elm$core$Array$get(index),
-		l: $elm$core$Array$set(index)
+		m: $elm$core$Array$set(index)
 	};
 };
 var $arturopala$elm_monocle$Monocle$Optional$Optional = F2(
 	function (getOption, set) {
-		return {j: getOption, l: set};
+		return {j: getOption, m: set};
 	});
 var $elm$core$Basics$composeR = F3(
 	function (f, g, x) {
@@ -9076,8 +9076,8 @@ var $arturopala$elm_monocle$Monocle$Optional$compose = F2(
 						$elm$core$Maybe$map,
 						A2(
 							$elm$core$Basics$composeR,
-							inner.l(c),
-							A2($arturopala$elm_monocle$Monocle$Optional$flip, outer.l, a)),
+							inner.m(c),
+							A2($arturopala$elm_monocle$Monocle$Optional$flip, outer.m, a)),
 						outer.j(a)));
 			});
 		var getOption = function (a) {
@@ -9093,12 +9093,12 @@ var $arturopala$elm_monocle$Monocle$Optional$compose = F2(
 	});
 var $arturopala$elm_monocle$Monocle$Lens$Lens = F2(
 	function (get, set) {
-		return {aa: get, l: set};
+		return {aa: get, m: set};
 	});
 var $arturopala$elm_monocle$Monocle$Lens$fromIso = function (iso) {
 	var set = F2(
 		function (b, _v0) {
-			return iso.E(b);
+			return iso.F(b);
 		});
 	return A2($arturopala$elm_monocle$Monocle$Lens$Lens, iso.aa, set);
 };
@@ -9107,11 +9107,11 @@ var $arturopala$elm_monocle$Monocle$Optional$fromLens = function (lens) {
 		return $elm$core$Maybe$Just(
 			lens.aa(a));
 	};
-	return A2($arturopala$elm_monocle$Monocle$Optional$Optional, getOption, lens.l);
+	return A2($arturopala$elm_monocle$Monocle$Optional$Optional, getOption, lens.m);
 };
 var $arturopala$elm_monocle$Monocle$Iso$Iso = F2(
 	function (get, reverseGet) {
-		return {aa: get, E: reverseGet};
+		return {aa: get, F: reverseGet};
 	});
 var $elm$core$Array$fromListHelp = F3(
 	function (list, nodeList, nodeListSize) {
@@ -9126,7 +9126,7 @@ var $elm$core$Array$fromListHelp = F3(
 				return A2(
 					$elm$core$Array$builderToArray,
 					true,
-					{i: nodeList, e: nodeListSize, g: jsArray});
+					{i: nodeList, e: nodeListSize, h: jsArray});
 			} else {
 				var $temp$list = remainingItems,
 					$temp$nodeList = A2(
@@ -9171,7 +9171,7 @@ var $author$project$Context$appArg = function (i) {
 				return $elm$core$Maybe$Nothing;
 			}
 		},
-		l: F2(
+		m: F2(
 			function (n, e) {
 				if (!e.$) {
 					var e0 = e.a;
@@ -9181,7 +9181,7 @@ var $author$project$Context$appArg = function (i) {
 						e0,
 						A3(
 							function ($) {
-								return $.l;
+								return $.m;
 							},
 							$arturopala$elm_monocle$Monocle$Common$list(i),
 							n,
@@ -9201,7 +9201,7 @@ var $author$project$Context$cons0 = {
 			return $elm$core$Maybe$Nothing;
 		}
 	},
-	l: F2(
+	m: F2(
 		function (e0, e) {
 			if (e.$ === 5) {
 				var e1 = e.b;
@@ -9220,7 +9220,7 @@ var $author$project$Context$cons1 = {
 			return $elm$core$Maybe$Nothing;
 		}
 	},
-	l: F2(
+	m: F2(
 		function (e1, e) {
 			if (e.$ === 5) {
 				var e0 = e.a;
@@ -9234,7 +9234,7 @@ var $author$project$Context$hole = {
 	j: function (expr) {
 		return $elm$core$Maybe$Just(expr);
 	},
-	l: F2(
+	m: F2(
 		function (_new, _v0) {
 			return _new;
 		})
@@ -9250,7 +9250,7 @@ var $author$project$Context$if0 = {
 			return $elm$core$Maybe$Nothing;
 		}
 	},
-	l: F2(
+	m: F2(
 		function (e0, e) {
 			if (e.$ === 9) {
 				var e1 = e.b;
@@ -9270,7 +9270,7 @@ var $author$project$Context$infixOp0 = {
 			return $elm$core$Maybe$Nothing;
 		}
 	},
-	l: F2(
+	m: F2(
 		function (e0, e) {
 			if (e.$ === 8) {
 				var op = e.a;
@@ -9290,7 +9290,7 @@ var $author$project$Context$infixOp1 = {
 			return $elm$core$Maybe$Nothing;
 		}
 	},
-	l: F2(
+	m: F2(
 		function (e1, e) {
 			if (e.$ === 8) {
 				var op = e.a;
@@ -9316,14 +9316,14 @@ var $author$project$Context$listItem = function (i) {
 				return $elm$core$Maybe$Nothing;
 			}
 		},
-		l: F2(
+		m: F2(
 			function (n, e) {
 				if (e.$ === 6) {
 					var items = e.a;
 					return $author$project$AST$ListLit(
 						A3(
 							function ($) {
-								return $.l;
+								return $.m;
 							},
 							$arturopala$elm_monocle$Monocle$Common$list(i),
 							n,
@@ -9349,14 +9349,14 @@ var $author$project$Context$tupleItem = function (i) {
 				return $elm$core$Maybe$Nothing;
 			}
 		},
-		l: F2(
+		m: F2(
 			function (n, e) {
 				if (e.$ === 7) {
 					var items = e.a;
 					return $author$project$AST$TupleLit(
 						A3(
 							function ($) {
-								return $.l;
+								return $.m;
 							},
 							$arturopala$elm_monocle$Monocle$Common$list(i),
 							n,
@@ -9494,7 +9494,7 @@ var $author$project$Haskelite$reduceUpdate = F2(
 		switch (msg.$) {
 			case 0:
 				var ctx = msg.a;
-				var _v1 = A3($author$project$Eval$redexCtx, model.H, model.h, ctx);
+				var _v1 = A3($author$project$Eval$redexCtx, model.C, model.g, ctx);
 				if (!_v1.$) {
 					var _v2 = _v1.a;
 					var newExpr = _v2.a;
@@ -9502,17 +9502,17 @@ var $author$project$Haskelite$reduceUpdate = F2(
 					return _Utils_update(
 						model,
 						{
-							h: newExpr,
-							m: A2(
+							g: newExpr,
+							l: A2(
 								$elm$core$List$cons,
-								_Utils_Tuple2(model.h, info),
-								model.m)
+								_Utils_Tuple2(model.g, info),
+								model.l)
 						});
 				} else {
 					return model;
 				}
 			case 1:
-				var _v3 = model.m;
+				var _v3 = model.l;
 				if (_v3.b) {
 					var _v4 = _v3.a;
 					var oldExpr = _v4.a;
@@ -9520,12 +9520,12 @@ var $author$project$Haskelite$reduceUpdate = F2(
 					var rest = _v3.b;
 					return _Utils_update(
 						model,
-						{h: oldExpr, m: rest});
+						{g: oldExpr, l: rest});
 				} else {
 					return model;
 				}
 			case 2:
-				var _v5 = A2($author$project$Haskelite$reduceNext, model.H, model.h);
+				var _v5 = A2($author$project$Haskelite$reduceNext, model.C, model.g);
 				if (!_v5.$) {
 					var _v6 = _v5.a;
 					var newExpr = _v6.a;
@@ -9533,23 +9533,23 @@ var $author$project$Haskelite$reduceUpdate = F2(
 					return _Utils_update(
 						model,
 						{
-							h: newExpr,
-							m: A2(
+							g: newExpr,
+							l: A2(
 								$elm$core$List$cons,
-								_Utils_Tuple2(model.h, info),
-								model.m)
+								_Utils_Tuple2(model.g, info),
+								model.l)
 						});
 				} else {
 					return model;
 				}
 			case 3:
-				var _v7 = $elm_community$list_extra$List$Extra$last(model.m);
+				var _v7 = $elm_community$list_extra$List$Extra$last(model.l);
 				if (!_v7.$) {
 					var _v8 = _v7.a;
 					var expr = _v8.a;
 					return _Utils_update(
 						model,
-						{h: expr, m: _List_Nil});
+						{g: expr, l: _List_Nil});
 				} else {
 					return model;
 				}
@@ -9769,6 +9769,15 @@ var $elm$core$List$isEmpty = function (xs) {
 		return false;
 	}
 };
+var $author$project$Haskelite$isNormalForm = F2(
+	function (functions, expr) {
+		var _v0 = A2($author$project$Haskelite$reduceNext, functions, expr);
+		if (!_v0.$) {
+			return false;
+		} else {
+			return true;
+		}
+	});
 var $author$project$Haskelite$lineView = function (_v0) {
 	var expr = _v0.a;
 	var info = _v0.b;
@@ -10123,9 +10132,9 @@ var $author$project$Haskelite$reduceView = function (model) {
 						_List_fromArray(
 							[
 								$elm$html$Html$Attributes$class('navbar'),
-								$elm$html$Html$Events$onClick($author$project$Haskelite$Edit),
 								$elm$html$Html$Attributes$disabled(
-								!$elm$core$List$isEmpty(model.m))
+								!$elm$core$List$isEmpty(model.l)),
+								$elm$html$Html$Events$onClick($author$project$Haskelite$Edit)
 							]),
 						_List_fromArray(
 							[
@@ -10147,6 +10156,8 @@ var $author$project$Haskelite$reduceView = function (model) {
 						_List_fromArray(
 							[
 								$elm$html$Html$Attributes$class('navbar'),
+								$elm$html$Html$Attributes$disabled(
+								$elm$core$List$isEmpty(model.l)),
 								$elm$html$Html$Events$onClick($author$project$Haskelite$Previous)
 							]),
 						_List_fromArray(
@@ -10158,6 +10169,8 @@ var $author$project$Haskelite$reduceView = function (model) {
 						_List_fromArray(
 							[
 								$elm$html$Html$Attributes$class('navbar'),
+								$elm$html$Html$Attributes$disabled(
+								A2($author$project$Haskelite$isNormalForm, model.C, model.g)),
 								$elm$html$Html$Events$onClick($author$project$Haskelite$Next)
 							]),
 						_List_fromArray(
@@ -10175,7 +10188,7 @@ var $author$project$Haskelite$reduceView = function (model) {
 					A2(
 						$elm$core$List$map,
 						$author$project$Haskelite$lineView,
-						$elm$core$List$reverse(model.m)),
+						$elm$core$List$reverse(model.l)),
 					_List_fromArray(
 						[
 							A2(
@@ -10186,7 +10199,7 @@ var $author$project$Haskelite$reduceView = function (model) {
 								]),
 							_List_fromArray(
 								[
-									A3($author$project$Haskelite$renderExpr, model.H, model.h, $author$project$Context$hole)
+									A3($author$project$Haskelite$renderExpr, model.C, model.g, $author$project$Context$hole)
 								]))
 						])))
 			]));
@@ -10209,7 +10222,7 @@ _Platform_export({'Haskelite':{'init':$author$project$Haskelite$main(
 				$elm$json$Json$Decode$andThen,
 				function (declarations) {
 					return $elm$json$Json$Decode$succeed(
-						{Z: declarations, h: expression});
+						{Z: declarations, g: expression});
 				},
 				A2($elm$json$Json$Decode$field, 'declarations', $elm$json$Json$Decode$string));
 		},

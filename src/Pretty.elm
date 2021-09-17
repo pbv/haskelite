@@ -6,8 +6,8 @@ module Pretty exposing (..)
 
 import AST exposing (Expr(..), Pattern(..), Decl(..), Name)
 import Parser
-
 import List.Extra as List
+import Set
 
 -- * pretty print parsing errors
 deadEndsToString : List Parser.DeadEnd -> String
@@ -23,6 +23,8 @@ deadEndsToString deadEnds
                         "col " ++ String.fromInt a.col ++ ": " ++
                         "expecting " ++
                         (String.join ", " <|
+                             Set.toList <|
+                             Set.fromList <|
                              List.map (\d -> problemToString d.problem) (a::r))
                    ) groups
       

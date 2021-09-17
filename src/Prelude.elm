@@ -90,6 +90,16 @@ drop 0 xs = xs
 drop n [] = []
 drop n (x:xs) = drop (n-1) xs
 
+concat :: [[a]] -> [a]
+concat [] = []
+concat (xs:xss) = xs ++ concat xss
+
+repeat :: a -> [a]
+repeat x = x:repeat x
+
+cycle :: [a] -> [a]
+cycle xs = xs ++ cycle xs
+
 any :: (a -> Bool) -> [a] -> Bool
 any f [] = False
 any f (x:xs) = f x || any f xs

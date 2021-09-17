@@ -6679,6 +6679,16 @@ var $author$project$Eval$collectFunctions = F2(
 			}
 		}
 	});
+var $elm$core$Set$Set_elm_builtin = $elm$core$Basics$identity;
+var $elm$core$Set$empty = $elm$core$Dict$empty;
+var $elm$core$Set$insert = F2(
+	function (key, _v0) {
+		var dict = _v0;
+		return A3($elm$core$Dict$insert, key, 0, dict);
+	});
+var $elm$core$Set$fromList = function (list) {
+	return A3($elm$core$List$foldl, $elm$core$Set$insert, $elm$core$Set$empty, list);
+};
 var $elm_community$list_extra$List$Extra$groupWhile = F2(
 	function (isSameGroup, items) {
 		return A3(
@@ -6752,12 +6762,14 @@ var $author$project$Pretty$deadEndsToString = function (deadEnds) {
 				return 'line ' + ($elm$core$String$fromInt(a.ae) + (',' + ('col ' + ($elm$core$String$fromInt(a._) + (': ' + ('expecting ' + A2(
 					$elm$core$String$join,
 					', ',
-					A2(
-						$elm$core$List$map,
-						function (d) {
-							return $author$project$Pretty$problemToString(d.a2);
-						},
-						A2($elm$core$List$cons, a, r)))))))));
+					$elm$core$Set$toList(
+						$elm$core$Set$fromList(
+							A2(
+								$elm$core$List$map,
+								function (d) {
+									return $author$project$Pretty$problemToString(d.a2);
+								},
+								A2($elm$core$List$cons, a, r)))))))))));
 			},
 			groups));
 };
@@ -7007,16 +7019,6 @@ var $author$project$AST$NumberP = function (a) {
 };
 var $author$project$AST$VarP = function (a) {
 	return {$: 0, a: a};
-};
-var $elm$core$Set$Set_elm_builtin = $elm$core$Basics$identity;
-var $elm$core$Set$empty = $elm$core$Dict$empty;
-var $elm$core$Set$insert = F2(
-	function (key, _v0) {
-		var dict = _v0;
-		return A3($elm$core$Dict$insert, key, 0, dict);
-	});
-var $elm$core$Set$fromList = function (list) {
-	return A3($elm$core$List$foldl, $elm$core$Set$insert, $elm$core$Set$empty, list);
 };
 var $author$project$HsParser$reservedWords = $elm$core$Set$fromList(
 	_List_fromArray(
@@ -8294,7 +8296,7 @@ var $author$project$HsParser$declListEnd = A2(
 	$elm$parser$Parser$keeper,
 	$elm$parser$Parser$succeed($elm$core$Basics$identity),
 	A2($elm$parser$Parser$ignorer, $author$project$HsParser$declList, $elm$parser$Parser$end));
-var $author$project$Prelude$prelude = '\n(&&) :: Bool -> Bool -> Bool\nFalse && x = False\nTrue  && x = x\n\n(||) :: Bool -> Bool -> Bool\nFalse || x = x\nTrue  || x = True\n\nnot :: Bool -> Bool\nnot True = False\nnot False = True\n\neven :: Int -> Bool\neven x = mod x 2 == 0\n\nodd :: Int -> Bool\nodd x = mod x 2 == 1\n\nmin :: Int -> Int -> Int\nmin x y = if x<=y then x else y\n\nmax :: Int -> Int -> Int\nmax x y = if x<=y then y else x\n\nfst :: (a,b) -> a\nfst (x,y) = x\n\nsnd :: (a,b) -> b\nsnd (x,y) = y\n\nhead :: [a] -> a\nhead (x:xs) = x\n\ntail :: [a] -> [a]\ntail (x:xs) = xs\n\nlength :: [a] -> Int\nlength [] = 0\nlength (x:xs) = 1 + length xs\n\n(++) :: [a] -> [a] -> [a]\n[] ++ ys = ys\n(x:xs) ++ ys = x:(xs++ys)\n\nreverse :: [a] -> [a]\nreverse [] = []\nreverse (x:xs) = reverse xs ++ [x]\n\nsum :: [Int] -> Int\nsum [] = 0\nsum (x:xs) = x + sum xs\n\nproduct :: [Int] -> Int\nproduct [] = 1\nproduct (x:xs) = x * product xs\n\ntake :: Int -> [a] -> [a]\ntake 0 xs = []\ntake n [] = []\ntake n (x:xs) = x : take (n-1) xs\n\ndrop :: Int -> [a] -> [a]\ndrop 0 xs = xs\ndrop n [] = []\ndrop n (x:xs) = drop (n-1) xs\n\nany :: (a -> Bool) -> [a] -> Bool\nany f [] = False\nany f (x:xs) = f x || any f xs\n\nall :: (a -> Bool) -> [a] -> Bool\nall f [] = True\nall f (x:xs) = f x && all f xs\n\nmap :: (a->b) -> [a] -> [b]\nmap f [] = []\nmap f (x:xs) = f x : map f xs\n\nfilter :: (a -> Bool) -> [a] -> [a]\nfilter f [] = []\nfilter f (x:xs)= if f x then x : filter f xs else filter f xs\n\nzip :: [a] -> [b] -> [(a,b)]\nzip [] ys = []\nzip xs [] = []\nzip (x:xs) (y:ys) = (x,y) : zip xs ys\n\nzipWith :: (a -> b -> c) -> [a] -> [b] -> [c]\nzipWith f [] ys = []\nzipWith f xs [] = []\nzipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys\n\nfoldr :: (a -> b -> b) -> b -> [a] -> b\nfoldr f z [] = z\nfoldr f z (x:xs) = f x (foldr f z xs)\n\nfoldl :: (a -> b -> a) -> a -> [b] -> a\nfoldl f z [] = z\nfoldl f z (x:xs) = foldl f (f z x) xs\n\ntakeWhile :: (a -> Bool) -> [a] -> [a]\ntakeWhile p [] = []\ntakeWhile p (x:xs) = if p x then x : takeWhile p xs else []\n\ndropWhile :: (a -> Bool) -> [a] -> [a]\ndropWhile p [] = []\ndropWhile p (x:xs) = if p x then dropWhile p xs else x:xs\n';
+var $author$project$Prelude$prelude = '\n(&&) :: Bool -> Bool -> Bool\nFalse && x = False\nTrue  && x = x\n\n(||) :: Bool -> Bool -> Bool\nFalse || x = x\nTrue  || x = True\n\nnot :: Bool -> Bool\nnot True = False\nnot False = True\n\neven :: Int -> Bool\neven x = mod x 2 == 0\n\nodd :: Int -> Bool\nodd x = mod x 2 == 1\n\nmin :: Int -> Int -> Int\nmin x y = if x<=y then x else y\n\nmax :: Int -> Int -> Int\nmax x y = if x<=y then y else x\n\nfst :: (a,b) -> a\nfst (x,y) = x\n\nsnd :: (a,b) -> b\nsnd (x,y) = y\n\nhead :: [a] -> a\nhead (x:xs) = x\n\ntail :: [a] -> [a]\ntail (x:xs) = xs\n\nlength :: [a] -> Int\nlength [] = 0\nlength (x:xs) = 1 + length xs\n\n(++) :: [a] -> [a] -> [a]\n[] ++ ys = ys\n(x:xs) ++ ys = x:(xs++ys)\n\nreverse :: [a] -> [a]\nreverse [] = []\nreverse (x:xs) = reverse xs ++ [x]\n\nsum :: [Int] -> Int\nsum [] = 0\nsum (x:xs) = x + sum xs\n\nproduct :: [Int] -> Int\nproduct [] = 1\nproduct (x:xs) = x * product xs\n\ntake :: Int -> [a] -> [a]\ntake 0 xs = []\ntake n [] = []\ntake n (x:xs) = x : take (n-1) xs\n\ndrop :: Int -> [a] -> [a]\ndrop 0 xs = xs\ndrop n [] = []\ndrop n (x:xs) = drop (n-1) xs\n\nconcat :: [[a]] -> [a]\nconcat [] = []\nconcat (xs:xss) = xs ++ concat xss\n\nrepeat :: a -> [a]\nrepeat x = x:repeat x\n\ncycle :: [a] -> [a]\ncycle xs = xs ++ cycle xs\n\nany :: (a -> Bool) -> [a] -> Bool\nany f [] = False\nany f (x:xs) = f x || any f xs\n\nall :: (a -> Bool) -> [a] -> Bool\nall f [] = True\nall f (x:xs) = f x && all f xs\n\nmap :: (a->b) -> [a] -> [b]\nmap f [] = []\nmap f (x:xs) = f x : map f xs\n\nfilter :: (a -> Bool) -> [a] -> [a]\nfilter f [] = []\nfilter f (x:xs)= if f x then x : filter f xs else filter f xs\n\nzip :: [a] -> [b] -> [(a,b)]\nzip [] ys = []\nzip xs [] = []\nzip (x:xs) (y:ys) = (x,y) : zip xs ys\n\nzipWith :: (a -> b -> c) -> [a] -> [b] -> [c]\nzipWith f [] ys = []\nzipWith f xs [] = []\nzipWith f (x:xs) (y:ys) = f x y : zipWith f xs ys\n\nfoldr :: (a -> b -> b) -> b -> [a] -> b\nfoldr f z [] = z\nfoldr f z (x:xs) = f x (foldr f z xs)\n\nfoldl :: (a -> b -> a) -> a -> [b] -> a\nfoldl f z [] = z\nfoldl f z (x:xs) = foldl f (f z x) xs\n\ntakeWhile :: (a -> Bool) -> [a] -> [a]\ntakeWhile p [] = []\ntakeWhile p (x:xs) = if p x then x : takeWhile p xs else []\n\ndropWhile :: (a -> Bool) -> [a] -> [a]\ndropWhile p [] = []\ndropWhile p (x:xs) = if p x then dropWhile p xs else x:xs\n';
 var $elm$parser$Parser$DeadEnd = F3(
 	function (row, col, problem) {
 		return {_: col, a2: problem, ae: row};

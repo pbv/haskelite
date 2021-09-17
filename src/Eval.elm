@@ -195,6 +195,9 @@ dispatchAlts alts args
 redex : Functions -> Expr -> Maybe (Expr,String)
 redex functions expr =
     case expr of
+        Var x ->
+            redex functions (App (Var x) []) 
+        
         App e1 es ->
             case unwindArgs e1 es of
                 (Lam xs e0, args) ->
@@ -208,8 +211,9 @@ redex functions expr =
                         Just semantics ->
                             semantics args
                         Nothing ->
-                            Just (Fail "undefined function", fun)
-                _ -> Just (Fail "invalid function", "error")
+                            Just (Fail "undefined name", fun)
+                _ ->
+                    Just (Fail "invalid function", "error")
                     
         Cons e1 (ListLit l) ->
             Just (ListLit (e1::l), "constructor")
@@ -224,7 +228,27 @@ redex functions expr =
                 _ -> if isWeakNormalForm e1
                      then Just (Fail "type error: if requires a boolean", "if")
                      else Nothing
-                     
+
+        EnumFrom (Number a) ->
+            Just ( Cons (Number a) (EnumFrom (Number (a+1)))
+                 , "enumeration" )
+
+        EnumFromThen (Number a1) (Number a2) ->
+            let
+                a3 = 2*a2 - a1
+            in 
+                Just ( Cons (Number a1) (EnumFromThen (Number a2) (Number a3))
+                     , "enumeration" )
+
+        EnumFromTo (Number a) (Number b) ->
+            Just ( ListLit (List.map Number <| ranged a b 1)
+                 , "enumeration" )
+
+        EnumFromThenTo (Number a1) (Number a2) (Number b) ->
+            Just (ListLit (List.map Number <| ranged a1 b (a2-a1))
+                 , "enumeration")
+            
+                         
         _ -> Nothing
 
              
@@ -399,16 +423,49 @@ outermostRedexAux functions expr
               Nothing
 
 
+
+-- first try to reduce arguments that aren't in WHNF
 outermostRedexArgs :
     Functions -> (Int -> Context) -> List Expr  -> Int -> Maybe Context
-outermostRedexArgs functions proj args i =
+outermostRedexArgs = outermostRedexArgs1
+                 
+{-
+                 outermostRedexArgs functions proj args i
+    = case outermostRedexArgs1 functions proj args i of
+          Just ctx ->
+              Just ctx
+          Nothing ->
+              outermostRedexArgs2 functions proj args i
+-}
+
+ -- * try to reduce arguments that aren't Whnfs                 
+outermostRedexArgs1 :
+    Functions -> (Int -> Context) -> List Expr  -> Int -> Maybe Context
+outermostRedexArgs1 functions proj args i =
+    case args of
+        (arg::rest) ->
+            if isWeakNormalForm arg then
+                outermostRedexArgs1 functions proj rest (i+1)
+            else
+                case outermostRedex functions arg of
+                    Just ctx ->
+                        Just (Monocle.compose (proj i) ctx)
+                    Nothing ->
+                        outermostRedexArgs1 functions proj rest (i+1)
+        [] ->
+            Nothing
+
+-- * try to reduce any argument by left to right order
+outermostRedexArgs2 :
+    Functions -> (Int -> Context) -> List Expr  -> Int -> Maybe Context
+outermostRedexArgs2 functions proj args i =
     case args of
         (arg::rest) ->
             case outermostRedex functions arg of
                 Just ctx ->
                     Just (Monocle.compose (proj i) ctx)
                 Nothing ->
-                    outermostRedexArgs functions proj rest (i+1)
+                    outermostRedexArgs2 functions proj rest (i+1)
         [] ->
             Nothing
     
@@ -424,7 +481,7 @@ isWeakNormalForm expr =
         Lam _ _ ->
             True
         Var _ ->
-            True
+            False
         Number _ ->
             True
         Boolean _ ->
@@ -435,11 +492,7 @@ isWeakNormalForm expr =
             True
         TupleLit _ ->
             True
-        InfixOp _ _ _ ->
-            False
-        IfThenElse _ _ _ ->
-            False
-        Fail _ ->
+        _ ->
             False
 
 
@@ -451,7 +504,7 @@ isNormalForm expr =
         Lam _ _ ->
             True
         Var _ ->
-            True
+            False
         Number _ ->
             True
         Boolean _ ->
@@ -462,10 +515,19 @@ isNormalForm expr =
             List.all isNormalForm items
         TupleLit items ->
             List.all isNormalForm items
-        InfixOp _ _ _ ->
-            False
-        IfThenElse _ _ _ ->
-            False
-        Fail _ ->
+        _ ->
             False
 
+
+-- like List.range but with a variable step (delta)
+ranged : Int -> Int -> Int -> List Int
+ranged a b delta =
+    if delta>0 then
+        rangedUp a b delta
+    else if delta<0 then
+             rangedDown a b delta
+         else []
+             
+rangedUp a b delta = if a <= b then a :: rangedUp (a+delta) b delta else []
+
+rangedDown a b delta = if a >= b then a :: rangedDown (a+delta) b delta else []

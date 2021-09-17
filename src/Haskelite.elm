@@ -268,7 +268,9 @@ renderExpr_ : Int -> Functions -> Expr -> Context -> Html Msg
 renderExpr_ prec functions expr ctx 
     = case expr of
           Var x ->
-              text <| if Pretty.isOperator x then "("++x++")" else x
+              redexSpan functions expr ctx 
+                   [ text <| if Pretty.isOperator x then "("++x++")" else x ]
+                  
                   
           Number n ->
               text (String.fromInt n)
@@ -297,6 +299,60 @@ renderExpr_ prec functions expr ctx
               in
                   span [] <| (text "[" :: items) ++ [text "]"]
 
+          EnumFrom e0 ->
+              let
+                  ctx0 = Monocle.compose ctx Context.enumFrom0
+              in
+                  span []
+                      [ text "["
+                      , renderExpr_ 1 functions e0 ctx0
+                      , redexSpan functions expr ctx [text ".."]
+                      , text "]"
+                      ]
+
+          EnumFromThen e0 e1 ->
+              let
+                  ctx0 = Monocle.compose ctx Context.enumFromThen0
+                  ctx1 = Monocle.compose ctx Context.enumFromThen1
+              in
+                  span []
+                      [ text "["
+                      , renderExpr_ 1 functions e0 ctx0
+                      , text ","
+                      , renderExpr_ 1 functions e1 ctx1
+                      , redexSpan functions expr ctx [text ".."]
+                      , text "]"
+                      ]
+                      
+          EnumFromTo e0 e1 ->
+              let
+                  ctx0 = Monocle.compose ctx Context.enumFromTo0
+                  ctx1 = Monocle.compose ctx Context.enumFromTo1
+              in
+                  span []
+                      [ text "["
+                      , renderExpr_ 1 functions e0 ctx0
+                      , redexSpan functions expr ctx [text ".."]
+                      , renderExpr_ 1 functions e1 ctx1
+                      , text "]"
+                      ]
+
+          EnumFromThenTo e0 e1 e2 ->
+              let
+                  ctx0 = Monocle.compose ctx Context.enumFromThenTo0
+                  ctx1 = Monocle.compose ctx Context.enumFromThenTo1
+                  ctx2 = Monocle.compose ctx Context.enumFromThenTo2
+              in
+                  span []
+                      [ text "["
+                      , renderExpr_ 1 functions e0 ctx0
+                      , text ","
+                      , renderExpr_ 1 functions e1 ctx1
+                      , redexSpan functions expr ctx [text ".."]
+                      , renderExpr_ 1 functions e2 ctx2
+                      , text "]"
+                      ]
+                      
           Cons e0 e1 ->
               let
                   ctx0 = Monocle.compose ctx Context.cons0

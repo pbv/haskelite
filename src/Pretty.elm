@@ -64,7 +64,20 @@ prettyExpr_ prec e =
 
         Cons e1 e2 ->
             paren (prec>0)
-                <| prettyExpr_ 1 e1 ++ ":" ++ prettyExpr_ 1 e2 
+                <| prettyExpr_ 1 e1 ++ ":" ++ prettyExpr_ 1 e2
+
+        EnumFrom e1 ->
+            "[" ++ prettyExpr_ 1 e1 ++ "..]"
+
+        EnumFromThen e1 e2 ->
+            "[" ++ prettyExpr_ 1 e1 ++ "," ++ prettyExpr_ 1 e2 ++ "..]"
+                
+        EnumFromTo e1 e2 ->
+            "[" ++ prettyExpr_ 1 e1 ++ ".." ++ prettyExpr_ 1 e2 ++ "]"
+
+        EnumFromThenTo e1 e2 e3 ->
+            "[" ++ prettyExpr_ 1 e1 ++ "," ++ prettyExpr_ 1 e2 ++ ".."
+                ++ prettyExpr_ 1 e3 ++ "]"
 
         InfixOp op e1 e2 ->
             paren (prec>0)
@@ -143,7 +156,7 @@ prettyInfix f p1 p2 expr
 operatorChar : Char -> Bool
 operatorChar c =
     c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
-        c==':' || c=='=' || c=='&' || c=='|'
+        c==':' || c=='=' || c=='&' || c=='|' || c=='.'
 
 
 isOperator : Name -> Bool

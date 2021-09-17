@@ -22,7 +22,6 @@ hole = { getOption = \expr -> Just expr
        }
 
 -- contexts for list construtor
-    
 cons0 : Context
 cons0 =
     { getOption= \e -> case e of
@@ -42,7 +41,89 @@ cons1 =
                         Cons e0 _ -> Cons e0 e1
                         _ -> e
     }
-            
+
+
+enumFrom0 : Context
+enumFrom0 =
+    { getOption= \e -> case e of
+                           EnumFrom e0 -> Just e0
+                           _ -> Nothing
+    , set= \e0 e -> case e of
+                        EnumFrom _ -> EnumFrom e0
+                        _ -> e
+    }
+
+enumFromThen0 : Context
+enumFromThen0 =
+    { getOption= \e -> case e of
+                           EnumFromThen e0 _ -> Just e0
+                           _ -> Nothing
+    , set= \e0 e -> case e of
+                        EnumFromThen _ e1 -> EnumFromThen e0 e1
+                        _ -> e
+    }
+
+enumFromThen1 : Context
+enumFromThen1 =
+    { getOption= \e -> case e of
+                           EnumFromThen _ e1 -> Just e1
+                           _ -> Nothing
+    , set= \e1 e -> case e of
+                        EnumFromThen e0 _ -> EnumFromThen e0 e1
+                        _ -> e
+    }
+    
+enumFromTo0 : Context
+enumFromTo0 =
+    { getOption= \e -> case e of
+                           EnumFromTo e0 _ -> Just e0
+                           _ -> Nothing
+    , set= \e0 e -> case e of
+                        EnumFromTo _ e1 -> EnumFromTo e0 e1
+                        _ -> e
+    }
+    
+enumFromTo1 : Context
+enumFromTo1 =
+    { getOption= \e -> case e of
+                           EnumFromTo _ e1 -> Just e1
+                           _ -> Nothing
+    , set= \e1 e -> case e of
+                        EnumFromTo e0 _ -> EnumFromTo e0 e1
+                        _ -> e
+    }
+
+enumFromThenTo0 : Context
+enumFromThenTo0 =
+    { getOption= \e -> case e of
+                           EnumFromThenTo e0 _ _ -> Just e0
+                           _ -> Nothing
+    , set= \e0 e -> case e of
+                        EnumFromThenTo _ e1 e2 -> EnumFromThenTo e0 e1 e2
+                        _ -> e
+    }
+    
+enumFromThenTo1 : Context
+enumFromThenTo1 =
+    { getOption= \e -> case e of
+                           EnumFromThenTo _ e1 _ -> Just e1
+                           _ -> Nothing
+    , set= \e1 e -> case e of
+                        EnumFromThenTo e0 _ e2 -> EnumFromThenTo e0 e1 e2
+                        _ -> e
+    }
+    
+enumFromThenTo2 : Context
+enumFromThenTo2 =
+    { getOption= \e -> case e of
+                           EnumFromThenTo _ _ e2 -> Just e2
+                           _ -> Nothing
+    , set= \e2 e -> case e of
+                        EnumFromThenTo e0 e1 _ -> EnumFromThenTo e0 e1 e2
+                        _ -> e
+    }
+
+    
 -- contexts for looking into infix operators
 infixOp0 : Context
 infixOp0 =

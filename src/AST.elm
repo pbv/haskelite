@@ -17,10 +17,14 @@ type Expr
     | Var Name
     | Number Int
     | Boolean Bool
-    | Cons Expr Expr              -- (x:xs)
-    | ListLit (List Expr)         -- [1,2,3]
-    | TupleLit (List Expr)        -- (1,2,3)
-    | InfixOp Name Expr Expr      --  operators +, * etc
+    | Cons Expr Expr                -- (x:xs)
+    | ListLit (List Expr)           -- [1,2,3]
+    | TupleLit (List Expr)          -- (1,2,3)
+    | EnumFrom Expr                 -- [1..]
+    | EnumFromThen Expr Expr        -- [1,3..]
+    | EnumFromTo Expr Expr          -- [1..10]
+    | EnumFromThenTo Expr Expr Expr -- [1,3..10]
+    | InfixOp Name Expr Expr        --  operators +, * etc
     | IfThenElse Expr Expr Expr
     | Fail String                 -- runtime errors
 
@@ -75,6 +79,19 @@ applySubst s e
                   
           TupleLit l ->
               TupleLit (List.map (applySubst s) l)
+
+          EnumFrom e1  ->
+              EnumFrom (applySubst s e1)
+                  
+          EnumFromThen e1 e2 ->
+              EnumFromThen (applySubst s e1) (applySubst s e2)
+
+          EnumFromTo e1 e2 ->
+              EnumFromTo (applySubst s e1) (applySubst s e2)
+
+          EnumFromThenTo e1 e2 e3 ->
+              EnumFromThenTo (applySubst s e1) (applySubst s e2) (applySubst s e3)
+                  
 
           IfThenElse e1 e2 e3 ->
               IfThenElse (applySubst s e1) (applySubst s e2) (applySubst s e3)

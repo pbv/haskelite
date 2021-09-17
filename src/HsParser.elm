@@ -5,7 +5,7 @@
 module HsParser exposing (..)
 
 import Parser exposing
-    (Parser, (|.), (|=), int, symbol, keyword, variable, 
+    (Parser, (|.), (|=), symbol, keyword, variable, 
      succeed, problem, oneOf, andThen, backtrackable, lazy)
 import AST exposing (Expr(..), Pattern(..), Decl(..), Name)
 import Pretty
@@ -95,6 +95,12 @@ infixOperator
                       then problem "operator"
                       else succeed s)
 
+integer : Parser Int
+integer = Parser.chompWhile Char.isDigit
+          |> Parser.getChompedString
+          |> andThen (\s -> case String.toInt s of
+                                Nothing -> problem "integer"
+                                Just n -> succeed n)
 
         
 -- patterns
@@ -107,7 +113,7 @@ pattern =
     , succeed (BooleanP False)
            |. keyword "False"
     , succeed NumberP
-           |= backtrackable int
+           |= integer -- backtrackable int
     , succeed ListP
          |= Parser.sequence
             { start = "["
@@ -261,7 +267,7 @@ delimited =
     [ succeed Var
           |= identifier
     , succeed Number
-          |= backtrackable int -- BUG: int consumes input even if it fails
+          |= integer
     , succeed (Boolean True)
           |. keyword "True"
     , succeed (Boolean False)
@@ -271,6 +277,43 @@ delimited =
           |. symbol "("
           |= infixOperator
           |. symbol ")"
+    , backtrackable <|
+        succeed EnumFrom
+            |. symbol "["
+            |= lazy (\_ -> topExpr)
+            |. symbol ".."
+            |. spaces
+            |. symbol "]"
+    , backtrackable <|
+        succeed EnumFromThen
+            |. symbol "["
+            |= lazy (\_ -> topExpr)
+            |. symbol ","
+            |. spaces
+            |= lazy (\_ -> topExpr)
+            |. symbol ".."
+            |. spaces
+            |. symbol "]"
+    , backtrackable <|
+        succeed EnumFromTo
+            |. symbol "["
+            |= lazy (\_ -> topExpr)
+            |. symbol ".."
+            |. spaces
+            |= lazy (\_ -> topExpr)
+            |. symbol "]"
+    , backtrackable <|
+        succeed EnumFromThenTo
+            |. symbol "["
+            |= lazy (\_ -> topExpr)
+            |. symbol ","
+            |. spaces
+            |= lazy (\_ -> topExpr)
+            |. symbol ".."
+            |. spaces
+            |= lazy (\_ -> topExpr)
+            |. symbol "]"
+
     , literalTuple
     , literalList
     ]
@@ -303,13 +346,15 @@ makeTuple l =
     case l of
         [x] -> x
         _ -> TupleLit l
-           
+
+makeApp e0 args =
+    case args of
+        [] -> e0
+        _ -> App e0 args
        
 application : Parser Expr       
 application
-    = succeed (\e0 args -> case args of
-                               [] -> e0
-                               _ -> App e0 args)
+    = succeed makeApp
          |= delimited
          |. spaces
          |= delimitedList

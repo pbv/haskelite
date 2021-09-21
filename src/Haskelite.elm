@@ -7,7 +7,7 @@ module Haskelite exposing (..)
 
 import AST exposing (Expr(..), Decl, Name)
 import HsParser
-import Eval exposing (Functions)
+import Eval exposing (Globals)
 import Parser
 import Pretty
 import Prelude
@@ -27,7 +27,7 @@ import Browser
 type alias Model
     = { expression : Expr             -- current expression
       , previous : List (Expr, String) -- list of previous steps
-      , functions : Functions
+      , functions : Globals
       , inputExpr : String
       , outputExpr : Result String Expr
       , inputDecls : String
@@ -211,13 +211,13 @@ reduceUpdate msg model =
             model
 
 
-reduceNext : Functions -> Expr -> Maybe (Expr,String)
-reduceNext functions expr
-    = Eval.outermostRedex functions expr
-        |> Maybe.andThen (\ctx -> Eval.redexCtx functions expr ctx)
+reduceNext : Globals -> Expr -> Maybe (Expr,String)
+reduceNext globals expr
+    = Eval.outermostRedex globals expr
+        |> Maybe.andThen (\ctx -> Eval.redexCtx globals expr ctx)
 
            
-isNormalForm : Functions -> Expr -> Bool
+isNormalForm : Globals -> Expr -> Bool
 isNormalForm functions expr
     = case reduceNext functions expr of
           Just _ -> False
@@ -259,12 +259,12 @@ subscriptions _ = Sub.none
 
                  
 -- render an interactive expression; toplevel function
-renderExpr : Functions -> Expr -> Context -> Html Msg
+renderExpr : Globals -> Expr -> Context -> Html Msg
 renderExpr functions expr ctx =
     renderExpr_ 0 functions expr ctx
 
 -- worker function 
-renderExpr_ : Int -> Functions -> Expr -> Context -> Html Msg
+renderExpr_ : Int -> Globals -> Expr -> Context -> Html Msg
 renderExpr_ prec functions expr ctx 
     = case expr of
           Var x ->
@@ -400,16 +400,16 @@ renderExpr_ prec functions expr ctx
               span []
                   [ redexSpan functions expr ctx [ text "if " ]
                   , renderExpr functions e1 (Monocle.compose ctx Context.if0)
-                  , redexSpan functions expr ctx [text " then "]
+                  , text " then " -- redexSpan functions expr ctx [text " then "]
                   , text (Pretty.prettyExpr e2)
-                  , redexSpan functions expr ctx [text " else "]
+                  , text " else " -- redexSpan functions expr ctx [text " else "]
                   , text (Pretty.prettyExpr e3) 
                   ]
                   
           Fail msg -> span [class "error"] [ text msg ]
 
 -- render a redex with info tooltip
-redexSpan : Functions -> Expr -> Context -> List (Html Msg) -> Html Msg
+redexSpan : Globals -> Expr -> Context -> List (Html Msg) -> Html Msg
 redexSpan functions expr ctx elements =
     case Eval.redex functions expr of
         Just (_, info) ->

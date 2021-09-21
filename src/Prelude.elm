@@ -6,7 +6,7 @@
 module Prelude exposing (..)
 
 import AST exposing (Decl)
-import Eval exposing (Functions)
+import Eval exposing (Globals)
 import HsParser
 import Parser
 
@@ -17,7 +17,7 @@ declarations =
         Ok l -> l
         Err _ -> []  --  NB: this should never happen
 
-functions : Functions                 
+functions : Globals         
 functions = Eval.collectFunctions declarations Eval.primitives
 
 

@@ -32,8 +32,8 @@
     color: white;
     padding: 5px 5px;
     border-radius: 6px;
-    position: absolute;
-    right: 0px;
+    position: absolute; 
+    right: 0px; 
     z-index: 1;
 }
 
@@ -56,8 +56,12 @@
     border-bottom: 1px dotted black; 
 }
 
+.redex {
+    border-bottom: 1px solid black;
+ }
+
 .redex:hover   {
-    text-decoration: underline;
+/*    text-decoration: underline;*/
     cursor: pointer;
 }
 

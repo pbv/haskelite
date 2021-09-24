@@ -328,9 +328,9 @@ renderExpr_ prec functions expr ctx
               in
                   span [] <| (text "[" :: items) ++ [text "]"]
 
-          EnumFrom e0 ->
+          App (Var "enumFrom") [e0] ->
               let
-                  ctx0 = Monocle.compose ctx Context.enumFrom0
+                  ctx0 = Monocle.compose ctx (Context.appArg 0)
               in
                   span []
                       [ text "["
@@ -339,10 +339,10 @@ renderExpr_ prec functions expr ctx
                       , text "]"
                       ]
 
-          EnumFromThen e0 e1 ->
+          App (Var "enumFromThen") [e0, e1] ->
               let
-                  ctx0 = Monocle.compose ctx Context.enumFromThen0
-                  ctx1 = Monocle.compose ctx Context.enumFromThen1
+                  ctx0 = Monocle.compose ctx (Context.appArg 0)
+                  ctx1 = Monocle.compose ctx (Context.appArg 1)
               in
                   span []
                       [ text "["
@@ -353,10 +353,10 @@ renderExpr_ prec functions expr ctx
                       , text "]"
                       ]
                       
-          EnumFromTo e0 e1 ->
+          App (Var "enumFromTo") [e0, e1] ->
               let
-                  ctx0 = Monocle.compose ctx Context.enumFromTo0
-                  ctx1 = Monocle.compose ctx Context.enumFromTo1
+                  ctx0 = Monocle.compose ctx (Context.appArg 0)
+                  ctx1 = Monocle.compose ctx (Context.appArg 1)
               in
                   span []
                       [ text "["
@@ -366,11 +366,11 @@ renderExpr_ prec functions expr ctx
                       , text "]"
                       ]
 
-          EnumFromThenTo e0 e1 e2 ->
+          App (Var "enumFromThenTo") [e0, e1, e2] ->
               let
-                  ctx0 = Monocle.compose ctx Context.enumFromThenTo0
-                  ctx1 = Monocle.compose ctx Context.enumFromThenTo1
-                  ctx2 = Monocle.compose ctx Context.enumFromThenTo2
+                  ctx0 = Monocle.compose ctx (Context.appArg 0)
+                  ctx1 = Monocle.compose ctx (Context.appArg 1)
+                  ctx2 = Monocle.compose ctx (Context.appArg 2)
               in
                   span []
                       [ text "["

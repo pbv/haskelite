@@ -279,14 +279,14 @@ delimited =
           |= infixOperator
           |. symbol ")"
     , backtrackable <|
-        succeed EnumFrom
+        succeed (\e1 -> App (Var "enumFrom") [e1])
             |. symbol "["
             |= lazy (\_ -> topExpr)
             |. symbol ".."
             |. spaces
             |. symbol "]"
     , backtrackable <|
-        succeed EnumFromThen
+        succeed (\e1 e2 -> App (Var "enumFromThen") [e1,e2])
             |. symbol "["
             |= lazy (\_ -> topExpr)
             |. symbol ","
@@ -296,7 +296,7 @@ delimited =
             |. spaces
             |. symbol "]"
     , backtrackable <|
-        succeed EnumFromTo
+        succeed (\e1 e2 -> App (Var "enumFromTo") [e1,e2])
             |. symbol "["
             |= lazy (\_ -> topExpr)
             |. symbol ".."
@@ -304,7 +304,7 @@ delimited =
             |= lazy (\_ -> topExpr)
             |. symbol "]"
     , backtrackable <|
-        succeed EnumFromThenTo
+        succeed (\e1 e2 e3 -> App (Var "enumFromThenTo") [e1,e2,e3])
             |. symbol "["
             |= lazy (\_ -> topExpr)
             |. symbol ","

@@ -68,16 +68,16 @@ prettyExpr_ prec e =
             paren (prec>0)
                 <| prettyExpr_ 1 e1 ++ ":" ++ prettyExpr_ 1 e2
 
-        EnumFrom e1 ->
+        App (Var "enumFrom") [e1] ->
             "[" ++ prettyExpr_ 1 e1 ++ "..]"
 
-        EnumFromThen e1 e2 ->
+        App (Var "enumFromThen") [e1, e2] ->
             "[" ++ prettyExpr_ 1 e1 ++ "," ++ prettyExpr_ 1 e2 ++ "..]"
                 
-        EnumFromTo e1 e2 ->
+        App (Var "enumFromTo") [e1, e2] ->
             "[" ++ prettyExpr_ 1 e1 ++ ".." ++ prettyExpr_ 1 e2 ++ "]"
 
-        EnumFromThenTo e1 e2 e3 ->
+        App (Var "enumFromThenTo") [e1, e2, e3] ->
             "[" ++ prettyExpr_ 1 e1 ++ "," ++ prettyExpr_ 1 e2 ++ ".."
                 ++ prettyExpr_ 1 e3 ++ "]"
 
@@ -100,9 +100,6 @@ prettyExpr_ prec e =
                     prettyExpr e2 ++ " else " ++ prettyExpr e3 
 
         Fail msg -> msg
-
---        Hole e1 ->
---            "{" ++prettyExpr e1 ++ "}"
 
 
 paren : Bool -> String -> String

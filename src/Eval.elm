@@ -81,6 +81,10 @@ primitives
       , ("<=", compareOp "<=" (<=))
       , (">", compareOp ">" (>))
       , ("<", compareOp "<" (<))
+      , ("enumFrom", enumFrom)
+      , ("enumFromThen", enumFromThen)
+      , ("enumFromTo", enumFromTo)
+      , ("enumFromThenTo", enumFromThenTo)
       ]
 
 arithOp : Name
@@ -139,8 +143,80 @@ compareOp op func globals args
                else
                    Nothing
 
+enumFrom : Globals -> List Expr -> Maybe (Expr, String)
+enumFrom globals args
+    = case args of
+          [Number a] ->
+              Just ( Cons (Number a) (App (Var "enumFrom") [Number (a+1)])
+                   , "enumeration" )
+          [e1] ->
+              redex globals e1
+                  |> Maybe.andThen (\(ne1,info) ->
+                                        Just (App (Var "enumFrom") [ne1]
+                                             , info))
+          _ -> Nothing
+               
+enumFromThen : Globals -> List Expr -> Maybe (Expr, String)
+enumFromThen globals args
+    = case args of
+          [Number a1, Number a2] ->
+              let
+                  a3 = 2*a2 - a1
+              in
+                  Just ( Cons (Number a1)
+                             (App (Var "enumFromThen") [Number a2, Number a3])
+                       , "enumeration" )
+          [e1, e2] ->
+              case redex globals e1 of
+                  Just (ne1,info) -> Just (App (Var "enumFromThen") [ne1,e2]
+                                          , info)
+                  Nothing ->
+                      redex globals e2
+                          |> Maybe.andThen (\(ne2,info) ->
+                                                Just (App (Var "enumFromThen") [e1,ne2]
+                                                     , info))
+          _ -> Nothing
+           
+enumFromTo : Globals -> List Expr -> Maybe (Expr, String)
+enumFromTo globals args
+    = case args of
+          [Number a, Number b] ->
+              Just ( ListLit <| List.map Number <| ranged a b 1
+                   , "enumeration" )
+          [e1, e2] ->
+              case redex globals e1 of
+                  Just (ne1,info) -> Just (App (Var "enumFromTo") [ne1,e2]
+                                          , info)
+                  Nothing ->
+                      redex globals e2
+                          |> Maybe.andThen (\(ne2,info) ->
+                                                Just (App (Var "enumFromTo") [e1,ne2]
+                                                     , info))
+          _ -> Nothing
                        
+
+enumFromThenTo : Globals -> List Expr -> Maybe (Expr, String)
+enumFromThenTo globals args
+    = case args of
+          [Number a1, Number a2, Number b] ->
+              Just ( ListLit <| List.map Number <| ranged a1 b (a2-a1)
+                   , "enumeration" )
+          [e1, e2, e3] ->
+              case redex globals e1 of
+                  Just (ne1,info) -> Just (App (Var "enumFromThenTo") [ne1,e2,e3]
+                                          , info)
+                  Nothing ->
+                      case redex globals e2 of
+                          Just (ne2,info) ->
+                              Just (App (Var "enumFromThenTo") [e1,ne2,e3], info)
+                          Nothing ->
+                              redex globals e3
+                                  |> Maybe.andThen (\(ne3,info) ->
+                                                        Just (App (Var "enumFromThenTo") [e1,e2,ne3], info))
+          _ -> Nothing
                        
+
+               
 -- apply a function specifified by a list of alterantives
 -- to a list of arguments
 -- result is Nothing if the expression can't be reduced yet
@@ -231,29 +307,14 @@ redex globals expr =
                 Boolean True -> Just (e2, "if-True")
                 Boolean False -> Just (e3, "if-False")
                 _ -> if isWeakNormalForm e1
-                     then Just (Fail "type error: if requires a boolean", "if")
-                     else Nothing
+                     then
+                         Just (Fail "type error: if requires a boolean", "if")
+                     else
+                         redex globals e1
+                             |> Maybe.andThen (\(ne1,info) ->
+                                                   Just (IfThenElse ne1 e2 e3,info))
 
-        EnumFrom (Number a) ->
-            Just ( Cons (Number a) (EnumFrom (Number (a+1)))
-                 , "enumeration" )
-
-        EnumFromThen (Number a1) (Number a2) ->
-            let
-                a3 = 2*a2 - a1
-            in 
-                Just ( Cons (Number a1) (EnumFromThen (Number a2) (Number a3))
-                     , "enumeration" )
-
-        EnumFromTo (Number a) (Number b) ->
-            Just ( ListLit (List.map Number <| ranged a b 1)
-                 , "enumeration" )
-
-        EnumFromThenTo (Number a1) (Number a2) (Number b) ->
-            Just (ListLit (List.map Number <| ranged a1 b (a2-a1))
-                 , "enumeration")
-            
-                         
+                        
         _ -> Nothing
 
              

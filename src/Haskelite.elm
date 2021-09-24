@@ -143,20 +143,49 @@ reduceView model =
                            , disabled (isNormalForm model.functions model.expression)
                            , onClick Next] [text "Next >"]
                   ]
-        , div [class "lines"]
+        {- , div [class "lines"]
              <| List.map lineView (List.reverse model.previous) ++
                  [ div [class "current"]
                           [ renderExpr
                                 model.functions model.expression Context.hole ]
-                 ]
+                 ] -}
+        , div [class "lines"]
+            (previousView model ++ [lastLineView model])
         ]
-      
+
+
+        
 lineView : (Expr, String) -> Html Msg
 lineView (expr, info) =
     div [class "line"]
         [ text (Pretty.prettyExpr expr)
-        , span [class "info"] [ text info ]
+        , div [class "info"] [ text ("{ " ++ info  ++  " }") ]
         ]
+
+
+previousView : Model -> List (Html Msg)
+previousView model
+    = case model.previous of
+          [] ->  []
+          (_::rest) -> List.map lineView (List.reverse rest)
+        
+lastLineView : Model -> Html Msg
+lastLineView model 
+    = case model.previous of
+          [] ->
+              div [class "line"] 
+              [div [class "current"]
+                     [ renderExpr model.functions model.expression Context.hole ]
+              ]
+          ((last,info)::rest) ->
+              div [class "line"]
+                  [ text (Pretty.prettyExpr last)
+                  , div [class "info"] [ text ("{ " ++ info  ++  " }") ]
+                  , div [class "current"]
+                      [ renderExpr model.functions model.expression Context.hole ]
+                  ]
+
+
         
 
 
@@ -414,7 +443,7 @@ redexSpan functions expr ctx elements =
     case Eval.redex functions expr of
         Just (_, info) ->
             span [class "redex", onClick (Step ctx)]
-                <| span [class "info"] [text info] :: elements
+                <| span [class "tooltip"] [text info] :: elements
         Nothing ->
             span [] elements
         

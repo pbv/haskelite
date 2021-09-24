@@ -99,7 +99,10 @@ prettyExpr_ prec e =
                 <|  "if " ++ prettyExpr e1 ++ " then " ++
                     prettyExpr e2 ++ " else " ++ prettyExpr e3 
 
-        Fail msg -> msg 
+        Fail msg -> msg
+
+--        Hole e1 ->
+--            "{" ++prettyExpr e1 ++ "}"
 
 
 paren : Bool -> String -> String
@@ -109,9 +112,10 @@ paren b str
 
 -- format an infix operator, sometimes with spaces either side
 formatOperator : Name -> String
-formatOperator op = if op=="&&" || op == "||"
-                    then " " ++ op ++ " "
-                    else op
+formatOperator op
+    = if op=="&&" || op == "||"
+      then " " ++ op ++ " "
+      else if isOperator op then op else "`" ++ op ++ "`"
 
       
                     

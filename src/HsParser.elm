@@ -256,7 +256,8 @@ infixRightCont operand table x
 
 
 applicativeExpr : Parser Expr
-applicativeExpr = oneOf [ if_then_else, lambda, application ]
+applicativeExpr
+    = oneOf [ if_then_else, lambda, backtrackable infixApp, application ]
 
 
 -- self-delimited expressions
@@ -351,7 +352,19 @@ makeApp e0 args =
     case args of
         [] -> e0
         _ -> App e0 args
-       
+
+
+infixApp : Parser Expr
+infixApp
+    = succeed (\e1 f e2 -> InfixOp f e1 e2)
+         |= delimited
+         |. spaces   
+         |. symbol "`"
+         |= identifier
+         |. symbol "`"
+         |. spaces   
+         |= delimited   
+             
 application : Parser Expr       
 application
     = succeed makeApp

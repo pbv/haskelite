@@ -9,6 +9,7 @@ import AST exposing (Decl)
 import Eval exposing (Globals)
 import HsParser
 import Parser
+import Dict
 
 -- global declarations from the prelude      
 declarations : List Decl
@@ -18,7 +19,7 @@ declarations =
         Err _ -> []  --  NB: this should never happen
 
 functions : Globals         
-functions = Eval.collectFunctions declarations Eval.primitives
+functions = Eval.collectFunctions declarations Dict.empty
 
 
 prelude : String

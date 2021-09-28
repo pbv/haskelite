@@ -48,7 +48,7 @@ prettyExpr e = prettyExpr_ 0 e
 prettyExpr_ : Int ->  Expr -> String
 prettyExpr_ prec e =
     case e of
-        Number n -> String.fromInt n
+        Number n -> paren (prec>0 && n<0) <| String.fromInt n
 
         Boolean b -> if b then "True" else "False"
 

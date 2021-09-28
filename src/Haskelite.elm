@@ -302,7 +302,7 @@ renderExpr_ prec functions expr ctx
                   
                   
           Number n ->
-              text (String.fromInt n)
+              paren (prec>0 && n<0) <| text (String.fromInt n)
 
           Boolean b ->
               text <| if b then "True" else "False"

@@ -6714,6 +6714,7 @@ function $author$project$HsParser$cyclic$applicativeExpr() {
 			[
 				$author$project$HsParser$cyclic$if_then_else(),
 				$author$project$HsParser$cyclic$lambda(),
+				$author$project$HsParser$cyclic$prefixNeg(),
 				$elm$parser$Parser$backtrackable(
 				$author$project$HsParser$cyclic$infixApp()),
 				$author$project$HsParser$cyclic$application()
@@ -6730,6 +6731,22 @@ function $author$project$HsParser$cyclic$application() {
 				$author$project$HsParser$cyclic$delimited(),
 				$author$project$HsParser$spaces)),
 		$author$project$HsParser$cyclic$delimitedList());
+}
+function $author$project$HsParser$cyclic$prefixNeg() {
+	return A2(
+		$elm$parser$Parser$keeper,
+		A2(
+			$elm$parser$Parser$ignorer,
+			$elm$parser$Parser$succeed(
+				function (e) {
+					return A2(
+						$author$project$AST$App,
+						$author$project$AST$Var('negate'),
+						_List_fromArray(
+							[e]));
+				}),
+			$elm$parser$Parser$symbol('-')),
+		$author$project$HsParser$cyclic$delimited());
 }
 function $author$project$HsParser$cyclic$infixApp() {
 	return A2(
@@ -7092,6 +7109,10 @@ $author$project$HsParser$cyclic$applicativeExpr = function () {
 var $author$project$HsParser$application = $author$project$HsParser$cyclic$application();
 $author$project$HsParser$cyclic$application = function () {
 	return $author$project$HsParser$application;
+};
+var $author$project$HsParser$prefixNeg = $author$project$HsParser$cyclic$prefixNeg();
+$author$project$HsParser$cyclic$prefixNeg = function () {
+	return $author$project$HsParser$prefixNeg;
 };
 var $author$project$HsParser$infixApp = $author$project$HsParser$cyclic$infixApp();
 $author$project$HsParser$cyclic$infixApp = function () {
@@ -8098,6 +8119,24 @@ var $author$project$Eval$isWeakNormalForm = function (expr) {
 			return false;
 	}
 };
+var $author$project$Pretty$isOperator = $elm$core$String$all($author$project$Pretty$operatorChar);
+var $author$project$Eval$makeApp = F2(
+	function (fun, args) {
+		if ((args.b && args.b.b) && (!args.b.b.b)) {
+			var arg1 = args.a;
+			var _v1 = args.b;
+			var arg2 = _v1.a;
+			return $author$project$Pretty$isOperator(fun) ? A3($author$project$AST$InfixOp, fun, arg1, arg2) : A2(
+				$author$project$AST$App,
+				$author$project$AST$Var(fun),
+				args);
+		} else {
+			return A2(
+				$author$project$AST$App,
+				$author$project$AST$Var(fun),
+				args);
+		}
+	});
 var $author$project$Eval$matching = F3(
 	function (p, e, s) {
 		switch (p.$) {
@@ -8243,7 +8282,6 @@ var $author$project$Eval$matchingList = F3(
 	});
 var $elm$core$Basics$modBy = _Basics_modBy;
 var $elm$core$Basics$neq = _Utils_notEqual;
-var $author$project$Pretty$isOperator = $elm$core$String$all($author$project$Pretty$operatorChar);
 var $author$project$Pretty$formatOperator = function (op) {
 	return ((op === '&&') || (op === '||')) ? (' ' + (op + ' ')) : ($author$project$Pretty$isOperator(op) ? op : ('`' + (op + '`')));
 };
@@ -8261,7 +8299,10 @@ var $author$project$Pretty$prettyExpr_ = F2(
 			switch (e.$) {
 				case 3:
 					var n = e.a;
-					return $elm$core$String$fromInt(n);
+					return A2(
+						$author$project$Pretty$paren,
+						(prec > 0) && (n < 0),
+						$elm$core$String$fromInt(n));
 				case 4:
 					var b = e.a;
 					return b ? 'True' : 'False';
@@ -8474,6 +8515,43 @@ var $author$project$Eval$unwindArgs = F2(
 			}
 		}
 	});
+var $author$project$Eval$arithNeg = F2(
+	function (globals, args) {
+		if (args.b && (!args.b.b)) {
+			if (args.a.$ === 3) {
+				var x = args.a.a;
+				return $elm$core$Maybe$Just(
+					_Utils_Tuple2(
+						$author$project$AST$Number(-x),
+						'negate'));
+			} else {
+				var arg1 = args.a;
+				return $author$project$Eval$isWeakNormalForm(arg1) ? $elm$core$Maybe$Just(
+					_Utils_Tuple2(
+						$author$project$AST$Fail('type error: operator requires numbers'),
+						'negate')) : A2(
+					$elm$core$Maybe$andThen,
+					function (_v72) {
+						var narg1 = _v72.a;
+						var info = _v72.b;
+						return $elm$core$Maybe$Just(
+							_Utils_Tuple2(
+								A2(
+									$author$project$AST$App,
+									$author$project$AST$Var('negate'),
+									_List_fromArray(
+										[narg1])),
+								info));
+					},
+					A2($author$project$Eval$redex, globals, arg1));
+			}
+		} else {
+			return ($elm$core$List$length(args) > 2) ? $elm$core$Maybe$Just(
+				_Utils_Tuple2(
+					$author$project$AST$Fail('type error: wrong number of arguments'),
+					'negate')) : $elm$core$Maybe$Nothing;
+		}
+	});
 var $author$project$Eval$arithOp = F4(
 	function (op, func, globals, args) {
 		if ((args.b && args.b.b) && (!args.b.b.b)) {
@@ -8525,7 +8603,7 @@ var $author$project$Eval$arithOp = F4(
 			return ($elm$core$List$length(args) > 2) ? $elm$core$Maybe$Just(
 				_Utils_Tuple2(
 					$author$project$AST$Fail('type error: wrong number of arguments'),
-					'arithmetic ' + op)) : $elm$core$Maybe$Nothing;
+					op)) : $elm$core$Maybe$Nothing;
 		}
 	});
 var $author$project$Eval$compareOp = F4(
@@ -8539,7 +8617,7 @@ var $author$project$Eval$compareOp = F4(
 					_Utils_Tuple2(
 						$author$project$AST$Boolean(
 							A2(func, x, y)),
-						op));
+						'comparison ' + op));
 			} else {
 				var arg1 = args.a;
 				var _v59 = args.b;
@@ -8610,10 +8688,7 @@ var $author$project$Eval$dispatchAlts = F4(
 						var info = _v55.b;
 						var ne = A2(
 							$author$project$Eval$applyArgs,
-							A2(
-								$author$project$AST$App,
-								$author$project$AST$Var(fun),
-								nargs1),
+							A2($author$project$Eval$makeApp, fun, nargs1),
 							args2);
 						return $elm$core$Maybe$Just(
 							_Utils_Tuple2(ne, info));
@@ -9224,7 +9299,8 @@ function $author$project$Eval$cyclic$primitives() {
 				_Utils_Tuple2('enumFrom', $author$project$Eval$enumFrom),
 				_Utils_Tuple2('enumFromThen', $author$project$Eval$enumFromThen),
 				_Utils_Tuple2('enumFromTo', $author$project$Eval$enumFromTo),
-				_Utils_Tuple2('enumFromThenTo', $author$project$Eval$enumFromThenTo)
+				_Utils_Tuple2('enumFromThenTo', $author$project$Eval$enumFromThenTo),
+				_Utils_Tuple2('negate', $author$project$Eval$arithNeg)
 			]));
 }
 var $author$project$Eval$primitives = $author$project$Eval$cyclic$primitives();
@@ -10170,8 +10246,11 @@ var $author$project$Haskelite$renderExpr_ = F4(
 							]));
 				case 3:
 					var n = expr.a;
-					return $elm$html$Html$text(
-						$elm$core$String$fromInt(n));
+					return A2(
+						$author$project$Haskelite$paren,
+						(prec > 0) && (n < 0),
+						$elm$html$Html$text(
+							$elm$core$String$fromInt(n)));
 				case 4:
 					var b = expr.a;
 					return $elm$html$Html$text(

@@ -85,8 +85,29 @@ primitives
       , ("enumFromThen", enumFromThen)
       , ("enumFromTo", enumFromTo)
       , ("enumFromThenTo", enumFromThenTo)
+      , ("negate", arithNeg)
       ]
 
+
+arithNeg : Globals -> List Expr -> Maybe (Expr, String)
+arithNeg globals args
+    = case args of
+          [Number x] ->
+              Just (Number (-x), "negate")
+          [arg1] ->
+              if isWeakNormalForm arg1 then
+                  Just (Fail "type error: operator requires numbers", "negate")
+              else
+                  redex globals arg1
+                      |> Maybe.andThen (\(narg1,info) ->
+                                            Just (App (Var "negate") [narg1]
+                                                 , info))
+          _ -> if List.length args > 2 then
+                   Just (Fail "type error: wrong number of arguments", "negate")
+               else 
+                   Nothing
+                  
+    
 arithOp : Name
         -> (Int -> Int -> Int)
         -> Globals
@@ -110,8 +131,7 @@ arithOp op func globals args
                               Nothing ->
                                   Nothing
           _ -> if List.length args > 2 then
-                   Just (Fail "type error: wrong number of arguments"
-                        , "arithmetic "++ op)
+                   Just (Fail "type error: wrong number of arguments", op)
                else 
                    Nothing
 
@@ -124,7 +144,7 @@ compareOp : Name
 compareOp op func globals args
     = case args of
           [Number x, Number y] ->
-              Just ( (Boolean (func x y)), op)
+              Just ( (Boolean (func x y)), "comparison " ++ op)
           [arg1, arg2] ->
               if isWeakNormalForm arg1 && isWeakNormalForm arg2 then
                   Just (Fail "type error: operator requires numbers", op)
@@ -236,7 +256,7 @@ dispatchAlts globals fun alts args
                          case patternEvalList globals ps args1 [] of
                              Just (nargs1,info)  ->
                                  let
-                                     ne = applyArgs (App (Var fun) nargs1) args2
+                                     ne = applyArgs (makeApp fun nargs1) args2
                                  in
                                      Just (ne, info)
                              Nothing ->
@@ -268,7 +288,14 @@ dispatchBeta vars body args =
             in
                 Just(ne, info)
                 
-                
+makeApp : Name -> List Expr -> Expr
+makeApp fun args
+    = case args of
+          [arg1, arg2] -> if Pretty.isOperator fun then
+                              InfixOp fun arg1 arg2
+                          else
+                              App (Var fun) args
+          _ -> App (Var fun) args
 
 -- perform the next single step reduction
 -- to evaluate an expression to weak head normal form

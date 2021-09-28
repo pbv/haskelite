@@ -257,8 +257,10 @@ infixRightCont operand table x
 
 applicativeExpr : Parser Expr
 applicativeExpr
-    = oneOf [ if_then_else, lambda, backtrackable infixApp, application ]
+    = oneOf [ if_then_else, lambda, prefixNeg, backtrackable infixApp, application ]
 
+
+      
 
 -- self-delimited expressions
 --
@@ -354,6 +356,13 @@ makeApp e0 args =
         _ -> App e0 args
 
 
+prefixNeg : Parser Expr
+prefixNeg
+    = succeed (\e -> App (Var "negate") [e])
+         |. symbol "-"
+         |= delimited
+            
+             
 infixApp : Parser Expr
 infixApp
     = succeed (\e1 f e2 -> InfixOp f e1 e2)

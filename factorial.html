@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="screen.css">
+  </head>
+
+  <body>
+    <h1>Recursive factorial</h1>
+    <p>Computing the factorial of 5 recursively.</p>
+    <div id="haskelite"></div>
+    <script src="haskelite-min.js"></script>
+    <script>
+      var decls = "factorial 0 = 1\nfactorial n = n*factorial (n-1)";
+      var app = Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression:"factorial 5", declarations: decls }
+      });
+    </script>
+    <hr>
+    Pedro Vasconcelos, 2022.
+  </body>
+</html>

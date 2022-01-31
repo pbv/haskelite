@@ -4,7 +4,7 @@
 -} 
 module Eval exposing (..)
 
-import AST exposing (Expr(..), Pattern(..), Decl(..), Name, Subst)
+import AST exposing (Expr(..), Pattern(..), Decl(..), Info(..), Name, Subst)
 import Pretty
 import Dict exposing (Dict)
 import Context exposing (Context)
@@ -13,7 +13,7 @@ import Monocle.Optional as Monocle
 
 -- * semantics
 -- global function definitions
-type alias Globals
+type alias Defs
     = Dict AST.Name (List Alt)
 
 -- alternatives equations for a single function
@@ -29,12 +29,11 @@ type alias Alt
 -- This needs globals because primitives may force the evaluation
 -- of arguments.
 type alias Prim
-    = Globals -> List Expr -> Maybe (Expr, String)
-
+    = Defs -> List Expr -> Maybe (Expr, Info)
 
 
 -- transform a list of declarations into a dictionary for functions
-collectFunctions : List Decl -> Globals -> Globals
+collectFunctions : List Decl -> Defs -> Defs
 collectFunctions decls accum
     = case decls of
           [] ->
@@ -89,37 +88,37 @@ primitives
       ]
 
 
-arithNeg : Globals -> List Expr -> Maybe (Expr, String)
+arithNeg : Defs -> List Expr -> Maybe (Expr, Info)
 arithNeg globals args
     = case args of
           [Number x] ->
-              Just (Number (-x), "negate")
+              Just (Number (-x), Prim "negate")
           [arg1] ->
               if isWeakNormalForm arg1 then
-                  Just (Fail "type error: operator requires numbers", "negate")
+                  Just (Fail "type error: operator requires numbers"
+                       , Prim "negate")
               else
                   redex globals arg1
                       |> Maybe.andThen (\(narg1,info) ->
                                             Just (App (Var "negate") [narg1]
                                                  , info))
           _ -> if List.length args > 2 then
-                   Just (Fail "type error: wrong number of arguments", "negate")
+                   Just (Fail "type error: wrong number of arguments"
+                        ,Prim "negate")
                else 
                    Nothing
                   
     
-arithOp : Name
-        -> (Int -> Int -> Int)
-        -> Globals
-        -> List Expr
-        -> Maybe (Expr, String)
+arithOp : Name -> (Int -> Int -> Int)
+        -> Defs -> List Expr -> Maybe (Expr, Info)
 arithOp op func globals args
     = case args of
           [Number x, Number y] ->
-              Just ((Number (func x y)), "arithmetic " ++ op)
+              Just ((Number (func x y)), Prim op)
           [arg1, arg2] ->
               if isWeakNormalForm arg1 && isWeakNormalForm arg2 then
-                  Just (Fail "type error: operator requires numbers", op)
+                  Just (Fail "type error: operator requires numbers"
+                       , Prim op)
               else
                   case redex globals arg1 of
                       Just (narg1, info) ->
@@ -131,23 +130,20 @@ arithOp op func globals args
                               Nothing ->
                                   Nothing
           _ -> if List.length args > 2 then
-                   Just (Fail "type error: wrong number of arguments", op)
+                   Just (Fail "type error: wrong number of arguments", Prim op)
                else 
                    Nothing
 
 -- simple comparisons for numbers only
-compareOp : Name
-          -> (Int -> Int -> Bool)
-          -> Globals
-          -> List Expr
-          -> Maybe (Expr,String)
+compareOp : Name -> (Int -> Int -> Bool)
+          -> Defs -> List Expr -> Maybe (Expr,Info)
 compareOp op func globals args
     = case args of
           [Number x, Number y] ->
-              Just ( (Boolean (func x y)), "comparison " ++ op)
+              Just ( (Boolean (func x y)), Prim op)
           [arg1, arg2] ->
               if isWeakNormalForm arg1 && isWeakNormalForm arg2 then
-                  Just (Fail "type error: operator requires numbers", op)
+                  Just (Fail "type error: operator requires numbers", Prim op)
               else
                   case redex globals arg1 of
                       Just (narg1, info) ->
@@ -159,16 +155,16 @@ compareOp op func globals args
                               Nothing ->
                                   Nothing
           _ -> if List.length args > 2 then
-                   Just (Fail "type error: wrong number of arguments", op)
+                   Just (Fail "type error: wrong number of arguments", Prim op)
                else
                    Nothing
 
-enumFrom : Globals -> List Expr -> Maybe (Expr, String)
+enumFrom : Defs -> List Expr -> Maybe (Expr, Info)
 enumFrom globals args
     = case args of
           [Number a] ->
               Just ( Cons (Number a) (App (Var "enumFrom") [Number (a+1)])
-                   , "enumeration" )
+                   , Prim "enumeration" )
           [e1] ->
               redex globals e1
                   |> Maybe.andThen (\(ne1,info) ->
@@ -176,7 +172,7 @@ enumFrom globals args
                                              , info))
           _ -> Nothing
                
-enumFromThen : Globals -> List Expr -> Maybe (Expr, String)
+enumFromThen : Defs -> List Expr -> Maybe (Expr, Info)
 enumFromThen globals args
     = case args of
           [Number a1, Number a2] ->
@@ -185,7 +181,7 @@ enumFromThen globals args
               in
                   Just ( Cons (Number a1)
                              (App (Var "enumFromThen") [Number a2, Number a3])
-                       , "enumeration" )
+                       , Prim "enumeration" )
           [e1, e2] ->
               case redex globals e1 of
                   Just (ne1,info) -> Just (App (Var "enumFromThen") [ne1,e2]
@@ -197,12 +193,12 @@ enumFromThen globals args
                                                      , info))
           _ -> Nothing
            
-enumFromTo : Globals -> List Expr -> Maybe (Expr, String)
+enumFromTo : Defs -> List Expr -> Maybe (Expr, Info)
 enumFromTo globals args
     = case args of
           [Number a, Number b] ->
               Just ( ListLit <| List.map Number <| ranged a b 1
-                   , "enumeration" )
+                   , Prim "enumeration" )
           [e1, e2] ->
               case redex globals e1 of
                   Just (ne1,info) -> Just (App (Var "enumFromTo") [ne1,e2]
@@ -215,12 +211,12 @@ enumFromTo globals args
           _ -> Nothing
                        
 
-enumFromThenTo : Globals -> List Expr -> Maybe (Expr, String)
+enumFromThenTo : Defs -> List Expr -> Maybe (Expr, Info)
 enumFromThenTo globals args
     = case args of
           [Number a1, Number a2, Number b] ->
               Just ( ListLit <| List.map Number <| ranged a1 b (a2-a1)
-                   , "enumeration" )
+                   , Prim "enumeration" )
           [e1, e2, e3] ->
               case redex globals e1 of
                   Just (ne1,info) -> Just (App (Var "enumFromThenTo") [ne1,e2,e3]
@@ -240,10 +236,10 @@ enumFromThenTo globals args
 -- apply a function specifified by a list of alterantives
 -- to a list of arguments
 -- result is Nothing if the expression can't be reduced yet
-dispatchAlts : Globals -> Name -> List Alt -> List Expr -> Maybe (Expr, String)
+dispatchAlts : Defs -> Name -> List Alt -> List Expr -> Maybe (Expr, Info)
 dispatchAlts globals fun alts args
     = case alts of
-          [] -> Just (Fail "pattern match failure", "error")
+          [] -> Just (Fail "pattern match failure", Prim "error")
           ((ps,e)::alts1) ->
               let nps = List.length ps
                   nargs = List.length args
@@ -266,12 +262,12 @@ dispatchAlts globals fun alts args
                                      Just s ->
                                          let
                                              ne = applyArgs (AST.applySubst s e) args2
-                                             info = Pretty.prettyDecl (Equation fun ps e)
+                                             info = Rewrite (Equation fun ps e)
                                          in
                                              Just (ne, info)
 
 
-dispatchBeta : List Name -> Expr -> List Expr -> Maybe (Expr, String)
+dispatchBeta : List Name -> Expr -> List Expr -> Maybe (Expr, Info)
 dispatchBeta vars body args =
     let
         nvars = List.length vars
@@ -284,9 +280,9 @@ dispatchBeta vars body args =
                 args2 = List.drop nvars args
                 s = Dict.fromList (List.map2 Tuple.pair vars args1)
                 ne = applyArgs (AST.applySubst s body) args2
-                info = "beta reduction"
+                info = Prim "beta reduction"
             in
-                Just(ne, info)
+                Just (ne, info)
                 
 makeApp : Name -> List Expr -> Expr
 makeApp fun args
@@ -299,7 +295,7 @@ makeApp fun args
 
 -- perform the next single step reduction
 -- to evaluate an expression to weak head normal form
-redex : Globals -> Expr -> Maybe (Expr,String)
+redex : Defs -> Expr -> Maybe (Expr,Info)
 redex globals expr =
     case expr of
         Var x ->
@@ -313,35 +309,35 @@ redex globals expr =
                 (Var fun, args) ->
                     case Dict.get fun globals of
                         Just alts ->
-                            dispatchAlts globals fun alts args 
+                            dispatchAlts globals fun alts args
                         Nothing ->
                             case Dict.get fun primitives of
                                 Just prim ->
                                     prim globals args
                                 Nothing ->
-                                    Just (Fail "undefined name", fun)
+                                    Just (Fail "undefined name"
+                                         , Prim "application")
                 _ ->
-                    Just (Fail "invalid function", "error")
+                    Just (Fail "invalid function", Prim "application")
                     
         Cons e1 (ListLit l) ->
-            Just ((ListLit (e1::l)), "constructor")
+            Just ((ListLit (e1::l)), Prim "constructor")
                 
         InfixOp op e1 e2 ->
             redex globals (App (Var op) [e1, e2])
 
         IfThenElse e1 e2 e3 ->
             case e1 of
-                Boolean True -> Just (e2, "if-True")
-                Boolean False -> Just (e3, "if-False")
+                Boolean True -> Just (e2, Prim "if-True")
+                Boolean False -> Just (e3, Prim "if-False")
                 _ -> if isWeakNormalForm e1
                      then
-                         Just (Fail "type error: if requires a boolean", "if")
+                         Just (Fail "type error: if requires a boolean", Prim "if")
                      else
                          redex globals e1
                              |> Maybe.andThen (\(ne1,info) ->
                                                    Just (IfThenElse ne1 e2 e3,info))
 
-                        
         _ -> Nothing
 
              
@@ -361,32 +357,6 @@ applyArgs e0 args
           _ -> App e0 args
 
               
-{-
--- check if a pattern forces evaluation of a sub-expression
--- 
-forceEval : Pattern -> Expr -> Bool
-forceEval p e =
-    case (p, e) of
-        (VarP _, _) ->           False
-        (NumberP _, Number _) -> False
-        (BooleanP _, Boolean _) -> False
-        (TupleP ps, TupleLit es) ->
-            forceEvalList ps es
-        (ListP ps, ListLit es) ->
-            forceEvalList ps es
-        (ListP [], Cons _ _) -> False
-        (ListP (p1::ps), Cons e1 e2) ->
-            forceEval p1 e1 || forceEval (ListP ps) e2
-        (ConsP p1 p2, Cons e1 e2) ->
-            forceEval p1 e1 || forceEval p2 e2
-        (ConsP p1 p2, ListLit [])  -> False
-        (ConsP p1 p2, ListLit (e1::rest))  ->
-            forceEval p1 e1 || forceEval p2 (ListLit rest)
-        (_, _) -> True
-
-forceEvalList : List Pattern -> List Expr -> Bool
-forceEvalList ps es = List.any identity <| List.map2 forceEval ps es
--}                  
 
 -- perform pattern matching
 matching : Pattern -> Expr -> Subst -> Maybe Subst
@@ -452,7 +422,7 @@ matchingList ps es s
 -- returns Just (newexpr, info) if it forces the evaluation
 -- or Nothing otherwise
 --
-patternEval : Globals -> Pattern -> Expr -> Maybe (Expr, String)
+patternEval : Defs -> Pattern -> Expr -> Maybe (Expr, Info)
 patternEval globals p e =
     case (p, e) of
         (VarP _, _) -> Nothing
@@ -491,7 +461,7 @@ patternEval globals p e =
 
                   
 patternEvalList :
-    Globals -> List Pattern -> List Expr -> List Expr -> Maybe (List Expr,String)
+    Defs -> List Pattern -> List Expr -> List Expr -> Maybe (List Expr,Info)
 patternEvalList globals patts exprs accum =
     case (patts, exprs) of
         (p1::ps, e1::es) ->
@@ -507,7 +477,7 @@ patternEvalList globals patts exprs accum =
 
                
 -- * perform a single reduction under a context
-redexCtx : Globals -> Expr -> Context -> Maybe (Expr,String)
+redexCtx : Defs -> Expr -> Context -> Maybe (Expr,Info)
 redexCtx functions expr ctx
     = ctx.getOption expr
           |> Maybe.andThen
@@ -524,7 +494,7 @@ redexCtx functions expr ctx
 -- locate the next outermost-leftmost redex
 -- to evaluate an expression to head normal form;
 -- does not evaluate under lambdas or if branches
-outermostRedex : Globals -> Expr -> Maybe Context
+outermostRedex : Defs -> Expr -> Maybe Context
 outermostRedex globals expr =
     case redex globals expr of
         Just _ ->
@@ -532,7 +502,7 @@ outermostRedex globals expr =
         Nothing ->
             outermostRedexAux globals expr 
 
-outermostRedexAux : Globals -> Expr -> Maybe Context
+outermostRedexAux : Defs -> Expr -> Maybe Context
 outermostRedexAux globals expr 
     = case expr of
           (Cons e0 e1) ->
@@ -545,25 +515,6 @@ outermostRedexAux globals expr
                               Just (Monocle.compose Context.cons1 ctx)
                           Nothing ->
                               Nothing
-                                  {-
-          (InfixOp op e0 e1) ->
-              case outermostRedex globals e0 of
-                  Just ctx ->
-                      Just (Monocle.compose Context.infixOp0 ctx)
-                  Nothing ->
-                      case outermostRedex globals e1 of
-                          Just ctx ->
-                              Just (Monocle.compose Context.infixOp1 ctx)
-
-                          Nothing -> Nothing
-
-          (App e0 args) ->
-              case outermostRedex globals e0 of
-                  Just ctx ->
-                      Just (Monocle.compose Context.app0 ctx)
-                  Nothing ->
-                      outermostRedexArgs globals Context.appArg args 0
-                                   -}
                                      
           (TupleLit items) ->
               outermostRedexArgs globals Context.tupleItem items 0
@@ -585,7 +536,7 @@ outermostRedexAux globals expr
 -- * try to reduce some argument by left to right order
              
 outermostRedexArgs :
-    Globals -> (Int -> Context) -> List Expr  -> Int -> Maybe Context
+    Defs -> (Int -> Context) -> List Expr  -> Int -> Maybe Context
 outermostRedexArgs functions proj args i =
     case args of
         (arg::rest) ->
@@ -599,7 +550,32 @@ outermostRedexArgs functions proj args i =
     
 
 
+reduceNext : Defs -> Expr -> Maybe (Expr,Info)
+reduceNext globals expr
+    = outermostRedex globals expr
+        |> Maybe.andThen (\ctx -> redexCtx globals expr ctx)
 
+           
+isNormalForm : Defs -> Expr -> Bool
+isNormalForm functions expr
+    = case reduceNext functions expr of
+          Just _ -> False
+          Nothing -> True
+
+reduceFull : Defs -> Expr -> Maybe (Expr, Info)
+reduceFull globals expr
+    = reduceNext globals expr
+      |> Maybe.andThen (\(expr1,_) -> Just (reduceFullAux globals expr1, Prim "..."))
+                     
+reduceFullAux : Defs -> Expr -> Expr
+reduceFullAux globals expr
+    = case reduceNext globals expr of
+          Just (expr1,_) ->
+              reduceFullAux globals expr1
+          Nothing ->
+              expr
+
+                     
 -- check if an expression is a weak normal form
 
 isWeakNormalForm : Expr -> Bool

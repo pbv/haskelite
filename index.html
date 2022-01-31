@@ -1,19 +1,36 @@
 <!doctype html>
 <html>
   <head>
+    <title>Haskelite</title>
     <link rel="stylesheet" href="screen.css">
   </head>
 
   <body>
+    <h1>Welcome to Haskelite</h1>
+    <p>Haskelite is a step-by-step interpreter for
+      a <a href="language.html">subset of Haskell</a> inspired
+      by <a href="https://pythontutor.com/">Pythontutor</a>
+      and <a href="https://stevekrouse.com/hs.js/">Lambda
+      lessons</a>.</p>
+    <p>Go ahead and type an expression below and hit Evaluate to run
+    it step-by step. Or you may start by choosing an
+    example: <a href="factorial.html">recursive
+    factorial</a>; <a href="sum.html">list
+        sum</a>.
+      <p>Haskelite is open-source software; please visit the <a href="https://github.com/pbv/haskelite">Github page</a>. </p>
     <div id="haskelite"></div>
-    
-    <script src="haskelite.js"></script>
+    <script src="haskelite-min.js"></script>
     <script>
-      var decls = "square x=x*x\n";
+      var decls = "";
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
-	  flags: { expression:"sum (map square [1..3])", declarations: decls }
+	  flags: { expression:"", declarations: decls }
       });
     </script>
+
+    <hr>
+    Pedro Vasconcelos, 2022. 
+
+    
   </body>
 </html>

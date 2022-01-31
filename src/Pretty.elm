@@ -4,7 +4,7 @@
 -}
 module Pretty exposing (..)
 
-import AST exposing (Expr(..), Pattern(..), Decl(..), Name)
+import AST exposing (Expr(..), Pattern(..), Decl(..), Info(..), Name)
 import Parser
 import List.Extra as List
 import Set
@@ -97,7 +97,7 @@ prettyExpr_ prec e =
         IfThenElse e1 e2 e3 ->
             paren (prec>0)
                 <|  "if " ++ prettyExpr e1 ++ " then " ++
-                    prettyExpr e2 ++ " else " ++ prettyExpr e3 
+                    prettyExpr e2 ++ " else " ++ prettyExpr e3
 
         Fail msg -> msg
 
@@ -156,10 +156,17 @@ prettyInfix f p1 p2 expr
       prettyPattern p2 ++ " = " ++ prettyExpr expr
 
 
+prettyInfo : Info -> String
+prettyInfo info =
+    case info of
+        Prim str -> str
+        Rewrite decl -> prettyDecl decl
+    
+          
 operatorChar : Char -> Bool
 operatorChar c =
     c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
-        c==':' || c=='=' || c=='&' || c=='|' || c=='.'
+        c==':' || c=='=' || c=='&' || c=='|' || c=='.' 
 
 
 isOperator : Name -> Bool

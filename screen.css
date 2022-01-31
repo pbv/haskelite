@@ -18,6 +18,7 @@
 .line {
     position: relative;
     display: block;
+    border-bottom: 2px solid lightyellow;
 }
 
 .current {
@@ -26,9 +27,14 @@
 }
 
 .line .info   {
-    visibility: hidden;  
-    color: black;
+    visibility: hidden;
+    background-color: black;
+    color: white;
+    padding: 5px 5px;
+    border-radius: 6px;    
     position: absolute;
+    right: 0px; 
+    z-index: 1;
 }
 
 .current .tooltip   {
@@ -45,13 +51,11 @@
 
 .line:hover .info {
     visibility: visible;
-    position: relative;
-    padding: 5px 5px;
-    border-top: 2px dotted black; 
-    font-style: oblique;
-    color: darkblue;
 }
 
+.line:hover {
+    border-bottom: 2px dotted black; 
+}
 
 
 .redex {

@@ -5,9 +5,9 @@
 -}
 module Haskelite exposing (..)
 
-import AST exposing (Expr(..), Decl, Name)
+import AST exposing (Expr(..), Decl, Info, Name)
 import HsParser
-import Eval exposing (Globals)
+import Eval exposing (Defs)
 import Parser
 import Pretty
 import Prelude
@@ -25,9 +25,9 @@ import Dict exposing (Dict)
 import Browser
 
 type alias Model
-    = { expression : Expr             -- current expression
-      , previous : List (Expr, String) -- list of previous steps
-      , functions : Globals
+    = { expression : Expr                 -- current expression
+      , previous : List (Expr, Info) -- list of previous steps
+      , functions : Defs
       , inputExpr : String
       , outputExpr : Result String Expr
       , inputDecls : String
@@ -75,7 +75,7 @@ init config  =
                 , outputExpr = outputExpr
                 , inputDecls = config.declarations
                 , outputDecls = outputDecls
-                , mode = Reducing
+                , mode = Editing
                 }
                , Cmd.none)
            _ ->
@@ -101,21 +101,25 @@ view model =
 
 editingView : Model -> Html Msg
 editingView model =
-    div [] [ button [ class "navbar", onClick SaveEdits ] [ text "Save" ]
-           , br [] []
-           , input [ placeholder "Enter an expression"
-                   , value model.inputExpr
-                   , size 80
-                   , spellcheck False
-                   , class "editline"
-                   , onInput EditExpr
-                   ]  []
+    div [] [ span [] [
+                  input [ placeholder "Enter an expression"
+                        , value model.inputExpr
+                        , size 65
+                        , spellcheck False
+                        , class "editline"
+                        , onInput EditExpr
+                        ]  []
+                 , button [ class "navbar", onClick SaveEdits ] [ text "Evaluate" ]
+               ]
            , br [] []
            , case model.outputExpr of
-                 Err msg -> span [class "error"] [text msg]
+                 Err msg -> if model.inputExpr /= "" then
+                                span [class "error"] [text msg]
+                            else span [] []
                  _ -> span [] []
            , br [] []
-           , textarea [ value model.inputDecls
+           , textarea [ placeholder "Enter function definitions"
+                      , value model.inputDecls
                       , rows 24
                       , cols 80
                       , spellcheck False
@@ -123,7 +127,10 @@ editingView model =
                       ] []
            , br [] []
            , case model.outputDecls of
-                 Err msg -> span [class "error"] [text msg]
+                 Err msg -> if model.inputDecls /= "" then
+                                span [class "error"] [text msg]
+                            else
+                                span [] []
                  _ -> span [] []
            ]
 
@@ -140,53 +147,27 @@ reduceView model =
                            , disabled (List.isEmpty model.previous)
                            , onClick Previous] [text "< Prev"]
                   , button [ class "navbar"
-                           , disabled (isNormalForm model.functions model.expression)
+                           , disabled (Eval.isNormalForm model.functions model.expression)
                            , onClick Next] [text "Next >"]
                   ]
-        {- , div [class "lines"]
+        , div [class "lines"]
              <| List.map lineView (List.reverse model.previous) ++
                  [ div [class "current"]
                           [ renderExpr
                                 model.functions model.expression Context.hole ]
-                 ] -}
-        , div [class "lines"]
-            (previousView model ++ [lastLineView model])
+                 ]
         ]
 
 
         
-lineView : (Expr, String) -> Html Msg
+lineView : (Expr, Info) -> Html Msg
 lineView (expr, info) =
     div [class "line"]
         [ text (Pretty.prettyExpr expr)
-        , div [class "info"] [ text ("{ " ++ info  ++  " }") ]
+        , div [class "info"] [ text (Pretty.prettyInfo info) ]
         ]
 
 
-previousView : Model -> List (Html Msg)
-previousView model
-    = case model.previous of
-          [] ->  []
-          (_::rest) -> List.map lineView (List.reverse rest)
-        
-lastLineView : Model -> Html Msg
-lastLineView model 
-    = case model.previous of
-          [] ->
-              div [class "line"] 
-              [div [class "current"]
-                     [ renderExpr model.functions model.expression Context.hole ]
-              ]
-          ((last,info)::rest) ->
-              div [class "line"]
-                  [ text (Pretty.prettyExpr last)
-                  , div [class "info"] [ text ("{ " ++ info  ++  " }") ]
-                  , div [class "current"]
-                      [ renderExpr model.functions model.expression Context.hole ]
-                  ]
-
-
-        
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -219,7 +200,7 @@ reduceUpdate msg model =
                     model
 
         Next ->
-            case reduceNext model.functions model.expression of
+            case Eval.reduceNext model.functions model.expression of
                 Just (newExpr, info) ->
                     { model | expression = newExpr
                     , previous = (model.expression, info) :: model.previous
@@ -238,19 +219,8 @@ reduceUpdate msg model =
             
         _ ->
             model
+                 
 
-
-reduceNext : Globals -> Expr -> Maybe (Expr,String)
-reduceNext globals expr
-    = Eval.outermostRedex globals expr
-        |> Maybe.andThen (\ctx -> Eval.redexCtx globals expr ctx)
-
-           
-isNormalForm : Globals -> Expr -> Bool
-isNormalForm functions expr
-    = case reduceNext functions expr of
-          Just _ -> False
-          Nothing -> True
            
                 
 editUpdate : Msg -> Model -> Model
@@ -288,12 +258,12 @@ subscriptions _ = Sub.none
 
                  
 -- render an interactive expression; toplevel function
-renderExpr : Globals -> Expr -> Context -> Html Msg
+renderExpr : Defs -> Expr -> Context -> Html Msg
 renderExpr functions expr ctx =
     renderExpr_ 0 functions expr ctx
 
 -- worker function 
-renderExpr_ : Int -> Globals -> Expr -> Context -> Html Msg
+renderExpr_ : Int -> Defs -> Expr -> Context -> Html Msg
 renderExpr_ prec functions expr ctx 
     = case expr of
           Var x ->
@@ -434,16 +404,16 @@ renderExpr_ prec functions expr ctx
                   , text " else " -- redexSpan functions expr ctx [text " else "]
                   , text (Pretty.prettyExpr e3) 
                   ]
-                  
+                
           Fail msg -> span [class "error"] [ text msg ]
 
 -- render a redex with info tooltip
-redexSpan : Globals -> Expr -> Context -> List (Html Msg) -> Html Msg
+redexSpan : Defs -> Expr -> Context -> List (Html Msg) -> Html Msg
 redexSpan functions expr ctx elements =
     case Eval.redex functions expr of
         Just (_, info) ->
             span [class "redex", onClick (Step ctx)]
-                <| span [class "tooltip"] [text info] :: elements
+                <| span [class "tooltip"] [text (Pretty.prettyInfo info)] :: elements
         Nothing ->
             span [] elements
         

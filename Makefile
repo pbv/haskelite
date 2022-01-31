@@ -7,6 +7,7 @@ JS = haskelite.js
 MINJS = haskelite-min.js
 
 $(JS) : $(SRC)
+	# elm make src/Haskelite.elm  --output $(JS)
 	elm make src/Haskelite.elm --optimize --output $(JS)
 
 $(MINJS) : $(JS)

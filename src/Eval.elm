@@ -12,8 +12,8 @@ import Monocle.Optional as Monocle
 
 
 -- * semantics
--- global function definitions
-type alias Defs
+-- global function bindings
+type alias Binds
     = Dict AST.Name (List Alt)
 
 -- alternatives equations for a single function
@@ -29,23 +29,23 @@ type alias Alt
 -- This needs globals because primitives may force the evaluation
 -- of arguments.
 type alias Prim
-    = Defs -> List Expr -> Maybe (Expr, Info)
+    = Binds -> List Expr -> Maybe (Expr, Info)
 
 
 -- transform a list of declarations into a dictionary for functions
-collectFunctions : List Decl -> Defs -> Defs
-collectFunctions decls accum
+collectBindings : List Decl -> Binds -> Binds
+collectBindings decls accum
     = case decls of
           [] ->
               accum
           (TypeSig _ _ :: rest) ->
-              collectFunctions rest accum
+              collectBindings rest accum
           (Equation fun ps e :: rest) ->
               let
                   -- info = Pretty.prettyDecl (Equation fun ps e)
                   (alts1,rest1) = collectAlts fun rest
                   accum1 = Dict.insert fun ((ps,e)::alts1) accum
-              in collectFunctions rest1 accum1
+              in collectBindings rest1 accum1
                   
                   
 
@@ -88,7 +88,7 @@ primitives
       ]
 
 
-arithNeg : Defs -> List Expr -> Maybe (Expr, Info)
+arithNeg : Binds -> List Expr -> Maybe (Expr, Info)
 arithNeg globals args
     = case args of
           [Number x] ->
@@ -110,7 +110,7 @@ arithNeg globals args
                   
     
 arithOp : Name -> (Int -> Int -> Int)
-        -> Defs -> List Expr -> Maybe (Expr, Info)
+        -> Binds -> List Expr -> Maybe (Expr, Info)
 arithOp op func globals args
     = case args of
           [Number x, Number y] ->
@@ -136,7 +136,7 @@ arithOp op func globals args
 
 -- simple comparisons for numbers only
 compareOp : Name -> (Int -> Int -> Bool)
-          -> Defs -> List Expr -> Maybe (Expr,Info)
+          -> Binds -> List Expr -> Maybe (Expr,Info)
 compareOp op func globals args
     = case args of
           [Number x, Number y] ->
@@ -159,7 +159,7 @@ compareOp op func globals args
                else
                    Nothing
 
-enumFrom : Defs -> List Expr -> Maybe (Expr, Info)
+enumFrom : Binds -> List Expr -> Maybe (Expr, Info)
 enumFrom globals args
     = case args of
           [Number a] ->
@@ -172,7 +172,7 @@ enumFrom globals args
                                              , info))
           _ -> Nothing
                
-enumFromThen : Defs -> List Expr -> Maybe (Expr, Info)
+enumFromThen : Binds -> List Expr -> Maybe (Expr, Info)
 enumFromThen globals args
     = case args of
           [Number a1, Number a2] ->
@@ -193,7 +193,7 @@ enumFromThen globals args
                                                      , info))
           _ -> Nothing
            
-enumFromTo : Defs -> List Expr -> Maybe (Expr, Info)
+enumFromTo : Binds -> List Expr -> Maybe (Expr, Info)
 enumFromTo globals args
     = case args of
           [Number a, Number b] ->
@@ -211,7 +211,7 @@ enumFromTo globals args
           _ -> Nothing
                        
 
-enumFromThenTo : Defs -> List Expr -> Maybe (Expr, Info)
+enumFromThenTo : Binds -> List Expr -> Maybe (Expr, Info)
 enumFromThenTo globals args
     = case args of
           [Number a1, Number a2, Number b] ->
@@ -236,7 +236,7 @@ enumFromThenTo globals args
 -- apply a function specifified by a list of alterantives
 -- to a list of arguments
 -- result is Nothing if the expression can't be reduced yet
-dispatchAlts : Defs -> Name -> List Alt -> List Expr -> Maybe (Expr, Info)
+dispatchAlts : Binds -> Name -> List Alt -> List Expr -> Maybe (Expr, Info)
 dispatchAlts globals fun alts args
     = case alts of
           [] -> Just (Fail "pattern match failure", Prim "error")
@@ -295,7 +295,7 @@ makeApp fun args
 
 -- perform the next single step reduction
 -- to evaluate an expression to weak head normal form
-redex : Defs -> Expr -> Maybe (Expr,Info)
+redex : Binds -> Expr -> Maybe (Expr,Info)
 redex globals expr =
     case expr of
         Var x ->
@@ -422,7 +422,7 @@ matchingList ps es s
 -- returns Just (newexpr, info) if it forces the evaluation
 -- or Nothing otherwise
 --
-patternEval : Defs -> Pattern -> Expr -> Maybe (Expr, Info)
+patternEval : Binds -> Pattern -> Expr -> Maybe (Expr, Info)
 patternEval globals p e =
     case (p, e) of
         (VarP _, _) -> Nothing
@@ -461,7 +461,7 @@ patternEval globals p e =
 
                   
 patternEvalList :
-    Defs -> List Pattern -> List Expr -> List Expr -> Maybe (List Expr,Info)
+    Binds -> List Pattern -> List Expr -> List Expr -> Maybe (List Expr,Info)
 patternEvalList globals patts exprs accum =
     case (patts, exprs) of
         (p1::ps, e1::es) ->
@@ -477,7 +477,7 @@ patternEvalList globals patts exprs accum =
 
                
 -- * perform a single reduction under a context
-redexCtx : Defs -> Expr -> Context -> Maybe (Expr,Info)
+redexCtx : Binds -> Expr -> Context -> Maybe (Expr,Info)
 redexCtx functions expr ctx
     = ctx.getOption expr
           |> Maybe.andThen
@@ -494,7 +494,7 @@ redexCtx functions expr ctx
 -- locate the next outermost-leftmost redex
 -- to evaluate an expression to head normal form;
 -- does not evaluate under lambdas or if branches
-outermostRedex : Defs -> Expr -> Maybe Context
+outermostRedex : Binds -> Expr -> Maybe Context
 outermostRedex globals expr =
     case redex globals expr of
         Just _ ->
@@ -502,7 +502,7 @@ outermostRedex globals expr =
         Nothing ->
             outermostRedexAux globals expr 
 
-outermostRedexAux : Defs -> Expr -> Maybe Context
+outermostRedexAux : Binds -> Expr -> Maybe Context
 outermostRedexAux globals expr 
     = case expr of
           (Cons e0 e1) ->
@@ -536,7 +536,7 @@ outermostRedexAux globals expr
 -- * try to reduce some argument by left to right order
              
 outermostRedexArgs :
-    Defs -> (Int -> Context) -> List Expr  -> Int -> Maybe Context
+    Binds -> (Int -> Context) -> List Expr  -> Int -> Maybe Context
 outermostRedexArgs functions proj args i =
     case args of
         (arg::rest) ->
@@ -550,24 +550,24 @@ outermostRedexArgs functions proj args i =
     
 
 
-reduceNext : Defs -> Expr -> Maybe (Expr,Info)
+reduceNext : Binds -> Expr -> Maybe (Expr,Info)
 reduceNext globals expr
     = outermostRedex globals expr
         |> Maybe.andThen (\ctx -> redexCtx globals expr ctx)
 
            
-isNormalForm : Defs -> Expr -> Bool
+isNormalForm : Binds -> Expr -> Bool
 isNormalForm functions expr
     = case reduceNext functions expr of
           Just _ -> False
           Nothing -> True
 
-reduceFull : Defs -> Expr -> Maybe (Expr, Info)
+reduceFull : Binds -> Expr -> Maybe (Expr, Info)
 reduceFull globals expr
     = reduceNext globals expr
       |> Maybe.andThen (\(expr1,_) -> Just (reduceFullAux globals expr1, Prim "..."))
                      
-reduceFullAux : Defs -> Expr -> Expr
+reduceFullAux : Binds -> Expr -> Expr
 reduceFullAux globals expr
     = case reduceNext globals expr of
           Just (expr1,_) ->

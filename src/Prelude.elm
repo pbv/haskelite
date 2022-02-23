@@ -6,7 +6,7 @@
 module Prelude exposing (..)
 
 import AST exposing (Decl)
-import Eval exposing (Defs)
+import Eval exposing (Binds)
 import HsParser
 import Parser
 import Dict
@@ -18,8 +18,8 @@ declarations =
         Ok l -> l
         Err _ -> []  --  NB: this should never happen
 
-functions : Defs  
-functions = Eval.collectFunctions declarations Dict.empty
+functions : Binds
+functions = Eval.collectBindings declarations Dict.empty
 
 
 prelude : String

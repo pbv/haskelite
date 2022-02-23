@@ -7,7 +7,7 @@ module Haskelite exposing (..)
 
 import AST exposing (Expr(..), Decl, Info, Name)
 import HsParser
-import Eval exposing (Defs)
+import Eval exposing (Binds)
 import Parser
 import Pretty
 import Prelude
@@ -27,7 +27,7 @@ import Browser
 type alias Model
     = { expression : Expr                 -- current expression
       , previous : List (Expr, Info) -- list of previous steps
-      , functions : Defs
+      , bindings : Binds
       , inputExpr : String
       , outputExpr : Result String Expr
       , inputDecls : String
@@ -70,7 +70,7 @@ init config  =
            (Ok expr, Ok decls) ->
                ({ expression = expr
                 , previous = []
-                , functions = Eval.collectFunctions decls Prelude.functions
+                , bindings = Eval.collectBindings decls Prelude.functions
                 , inputExpr = config.expression
                 , outputExpr = outputExpr
                 , inputDecls = config.declarations
@@ -81,7 +81,7 @@ init config  =
            _ ->
                ({ expression = Fail "syntax"
                 , previous = []
-                , functions = Prelude.functions
+                , bindings = Prelude.functions
                 , inputExpr = config.expression
                 , outputExpr = outputExpr
                 , inputDecls = config.declarations
@@ -147,14 +147,14 @@ reduceView model =
                            , disabled (List.isEmpty model.previous)
                            , onClick Previous] [text "< Prev"]
                   , button [ class "navbar"
-                           , disabled (Eval.isNormalForm model.functions model.expression)
+                           , disabled (Eval.isNormalForm model.bindings model.expression)
                            , onClick Next] [text "Next >"]
                   ]
         , div [class "lines"]
              <| List.map lineView (List.reverse model.previous) ++
                  [ div [class "current"]
                           [ renderExpr
-                                model.functions model.expression Context.hole ]
+                                model.bindings model.expression Context.hole ]
                  ]
         ]
 
@@ -183,7 +183,7 @@ reduceUpdate : Msg -> Model -> Model
 reduceUpdate msg model =
     case msg of
         Step ctx ->
-            case Eval.redexCtx model.functions model.expression ctx of
+            case Eval.redexCtx model.bindings model.expression ctx of
                 Just (newExpr, info) ->
                     { model | expression = newExpr
                     , previous = (model.expression, info) :: model.previous
@@ -200,7 +200,7 @@ reduceUpdate msg model =
                     model
 
         Next ->
-            case Eval.reduceNext model.functions model.expression of
+            case Eval.reduceNext model.bindings model.expression of
                 Just (newExpr, info) ->
                     { model | expression = newExpr
                     , previous = (model.expression, info) :: model.previous
@@ -245,7 +245,7 @@ editUpdate msg model =
                 (Ok expr, Ok decls) ->
                     { model | expression = expr
                     , previous = []
-                    , functions = Eval.collectFunctions decls Prelude.functions
+                    , bindings = Eval.collectBindings decls Prelude.functions
                     , mode = Reducing
                     }
                 _ ->
@@ -258,16 +258,17 @@ subscriptions _ = Sub.none
 
                  
 -- render an interactive expression; toplevel function
-renderExpr : Defs -> Expr -> Context -> Html Msg
-renderExpr functions expr ctx =
-    renderExpr_ 0 functions expr ctx
+renderExpr : Binds -> Expr -> Context -> Html Msg
+renderExpr bindings expr ctx =
+    renderExpr_ 0 bindings expr ctx
+    -- text (Pretty.prettyExpr expr)
 
 -- worker function 
-renderExpr_ : Int -> Defs -> Expr -> Context -> Html Msg
-renderExpr_ prec functions expr ctx 
+renderExpr_ : Int -> Binds -> Expr -> Context -> Html Msg
+renderExpr_ prec bindings expr ctx 
     = case expr of
           Var x ->
-              redexSpan functions expr ctx 
+              redexSpan bindings expr ctx 
                    [ text <| if Pretty.isOperator x then "("++x++")" else x ]
                   
                   
@@ -283,7 +284,7 @@ renderExpr_ prec functions expr ctx
                   ctxs = List.map (\i -> Monocle.compose ctx (Context.tupleItem i))
                           (List.range 0 n)
                   items = List.intersperse (text ",")
-                          <| List.map2 (renderExpr functions) args ctxs
+                          <| List.map2 (renderExpr bindings) args ctxs
               in
                   span [] <| (text "(" :: items) ++ [text ")"]
                   
@@ -294,7 +295,7 @@ renderExpr_ prec functions expr ctx
                   ctxs = List.map (\i -> Monocle.compose ctx (Context.listItem i))
                           (List.range 0 n)
                   items = List.intersperse (text ",")
-                          <| List.map2 (renderExpr functions) args ctxs
+                          <| List.map2 (renderExpr bindings) args ctxs
               in
                   span [] <| (text "[" :: items) ++ [text "]"]
 
@@ -304,8 +305,8 @@ renderExpr_ prec functions expr ctx
               in
                   span []
                       [ text "["
-                      , renderExpr_ 1 functions e0 ctx0
-                      , redexSpan functions expr ctx [text ".."]
+                      , renderExpr_ 1 bindings e0 ctx0
+                      , redexSpan bindings expr ctx [text ".."]
                       , text "]"
                       ]
 
@@ -316,10 +317,10 @@ renderExpr_ prec functions expr ctx
               in
                   span []
                       [ text "["
-                      , renderExpr_ 1 functions e0 ctx0
+                      , renderExpr_ 1 bindings e0 ctx0
                       , text ","
-                      , renderExpr_ 1 functions e1 ctx1
-                      , redexSpan functions expr ctx [text ".."]
+                      , renderExpr_ 1 bindings e1 ctx1
+                      , redexSpan bindings expr ctx [text ".."]
                       , text "]"
                       ]
                       
@@ -330,9 +331,9 @@ renderExpr_ prec functions expr ctx
               in
                   span []
                       [ text "["
-                      , renderExpr_ 1 functions e0 ctx0
-                      , redexSpan functions expr ctx [text ".."]
-                      , renderExpr_ 1 functions e1 ctx1
+                      , renderExpr_ 1 bindings e0 ctx0
+                      , redexSpan bindings expr ctx [text ".."]
+                      , renderExpr_ 1 bindings e1 ctx1
                       , text "]"
                       ]
 
@@ -344,11 +345,11 @@ renderExpr_ prec functions expr ctx
               in
                   span []
                       [ text "["
-                      , renderExpr_ 1 functions e0 ctx0
+                      , renderExpr_ 1 bindings e0 ctx0
                       , text ","
-                      , renderExpr_ 1 functions e1 ctx1
-                      , redexSpan functions expr ctx [text ".."]
-                      , renderExpr_ 1 functions e2 ctx2
+                      , renderExpr_ 1 bindings e1 ctx1
+                      , redexSpan bindings expr ctx [text ".."]
+                      , renderExpr_ 1 bindings e2 ctx2
                       , text "]"
                       ]
                       
@@ -359,9 +360,9 @@ renderExpr_ prec functions expr ctx
               in
                   paren (prec>0) <|
                       span []
-                      [ renderExpr_ 1 functions e0 ctx0 
-                      , redexSpan functions expr ctx [text ":"]
-                      , renderExpr_ 1 functions e1 ctx1 
+                      [ renderExpr_ 1 bindings e0 ctx0 
+                      , redexSpan bindings expr ctx [text ":"]
+                      , renderExpr_ 1 bindings e1 ctx1 
                       ]
 
           InfixOp op e0 e1 ->
@@ -371,9 +372,9 @@ renderExpr_ prec functions expr ctx
               in
                   paren (prec>0) <|
                       span []
-                      [ renderExpr_ 1 functions e0 ctx0 
-                      , redexSpan functions expr ctx [text (Pretty.formatOperator op)]
-                      , renderExpr_ 1 functions e1 ctx1 
+                      [ renderExpr_ 1 bindings e0 ctx0 
+                      , redexSpan bindings expr ctx [text (Pretty.formatOperator op)]
+                      , renderExpr_ 1 bindings e1 ctx1 
                       ]
 
           App e0 args ->
@@ -383,12 +384,12 @@ renderExpr_ prec functions expr ctx
                   ctxs = List.map (\i -> Monocle.compose ctx (Context.appArg i))
                          (List.range 0 n)
                   items = List.intersperse (text " ")
-                          <| List.map2 (\ei ctxi -> renderExpr_ 1 functions ei ctxi) args ctxs
+                          <| List.map2 (\ei ctxi -> renderExpr_ 1 bindings ei ctxi) args ctxs
                               
               in
                   paren (prec>0) <|
                       span []
-                      <| redexSpan functions expr ctx [renderExpr_ 1 functions e0 ctx0] ::
+                      <| redexSpan bindings expr ctx [renderExpr_ 1 bindings e0 ctx0] ::
                           text " " ::  items
                   
           Lam xs e1 ->
@@ -397,20 +398,20 @@ renderExpr_ prec functions expr ctx
           IfThenElse e1 e2 e3 ->
               paren (prec>0) <|
               span []
-                  [ redexSpan functions expr ctx [ text "if " ]
-                  , renderExpr functions e1 (Monocle.compose ctx Context.if0)
-                  , text " then " -- redexSpan functions expr ctx [text " then "]
+                  [ redexSpan bindings expr ctx [ text "if " ]
+                  , renderExpr bindings e1 (Monocle.compose ctx Context.if0)
+                  , text " then " -- redexSpan bindings expr ctx [text " then "]
                   , text (Pretty.prettyExpr e2)
-                  , text " else " -- redexSpan functions expr ctx [text " else "]
+                  , text " else " -- redexSpan bindings expr ctx [text " else "]
                   , text (Pretty.prettyExpr e3) 
                   ]
                 
           Fail msg -> span [class "error"] [ text msg ]
 
 -- render a redex with info tooltip
-redexSpan : Defs -> Expr -> Context -> List (Html Msg) -> Html Msg
-redexSpan functions expr ctx elements =
-    case Eval.redex functions expr of
+redexSpan : Binds -> Expr -> Context -> List (Html Msg) -> Html Msg
+redexSpan bindings expr ctx elements =
+    case Eval.redex bindings expr of
         Just (_, info) ->
             span [class "redex", onClick (Step ctx)]
                 <| span [class "tooltip"] [text (Pretty.prettyInfo info)] :: elements

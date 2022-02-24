@@ -322,7 +322,20 @@ redex globals expr =
                     
         Cons e1 (ListLit l) ->
             Just ((ListLit (e1::l)), Prim "constructor")
-                
+
+        Cons e1 (TupleLit _) ->
+            Just (Fail "type error", Prim "constructor")
+
+        Cons e1 (Boolean _) ->
+            Just (Fail "type error", Prim "constructor")
+
+        Cons e1 (Number _) ->
+            Just (Fail "type error", Prim "construtor")
+
+        Cons e1 (Lam _ _) ->
+            Just (Fail "type error", Prim "construtor")
+
+
         InfixOp op e1 e2 ->
             redex globals (App (Var op) [e1, e2])
 
@@ -332,7 +345,7 @@ redex globals expr =
                 Boolean False -> Just (e3, Prim "if-False")
                 _ -> if isWeakNormalForm e1
                      then
-                         Just (Fail "type error: if requires a boolean", Prim "if")
+                         Just (Fail "type error", Prim "if")
                      else
                          redex globals e1
                              |> Maybe.andThen (\(ne1,info) ->

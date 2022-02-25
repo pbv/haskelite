@@ -38,14 +38,14 @@ collectBindings decls accum
     = case decls of
           [] ->
               accum
-          (TypeSig _ _ :: rest) ->
-              collectBindings rest accum
           (Equation fun ps e :: rest) ->
               let
                   -- info = Pretty.prettyDecl (Equation fun ps e)
                   (alts1,rest1) = collectAlts fun rest
                   accum1 = Dict.insert fun ((ps,e)::alts1) accum
               in collectBindings rest1 accum1
+          (_ :: rest) ->
+              collectBindings rest accum
                   
                   
 
@@ -56,6 +56,8 @@ collectAlts fun decls
           [] -> ([], [])
           (TypeSig _ _ :: rest) ->
               ([], rest)
+          (Comment _ :: rest) ->
+              collectAlts fun rest
           (Equation f ps e :: rest) ->
               if f==fun then
                   let
@@ -92,7 +94,7 @@ arithNeg : Binds -> List Expr -> Maybe (Expr, Info)
 arithNeg globals args
     = case args of
           [Number x] ->
-              Just (Number (-x), Prim "negate")
+              Just (Eval (Number (-x)), Prim "negate")
           [arg1] ->
               if isWeakNormalForm arg1 then
                   Just (Fail "type error: operator requires numbers"
@@ -114,7 +116,7 @@ arithOp : Name -> (Int -> Int -> Int)
 arithOp op func globals args
     = case args of
           [Number x, Number y] ->
-              Just ((Number (func x y)), Prim op)
+              Just (Eval (Number (func x y)), Prim op)
           [arg1, arg2] ->
               if isWeakNormalForm arg1 && isWeakNormalForm arg2 then
                   Just (Fail "type error: operator requires numbers"
@@ -140,7 +142,7 @@ compareOp : Name -> (Int -> Int -> Bool)
 compareOp op func globals args
     = case args of
           [Number x, Number y] ->
-              Just ( (Boolean (func x y)), Prim op)
+              Just (Eval (Boolean (func x y)), Prim op)
           [arg1, arg2] ->
               if isWeakNormalForm arg1 && isWeakNormalForm arg2 then
                   Just (Fail "type error: operator requires numbers", Prim op)
@@ -163,7 +165,7 @@ enumFrom : Binds -> List Expr -> Maybe (Expr, Info)
 enumFrom globals args
     = case args of
           [Number a] ->
-              Just ( Cons (Number a) (App (Var "enumFrom") [Number (a+1)])
+              Just (Eval (Cons (Number a) (App (Var "enumFrom") [Number (a+1)]))
                    , Prim "enumeration" )
           [e1] ->
               redex globals e1
@@ -179,8 +181,8 @@ enumFromThen globals args
               let
                   a3 = 2*a2 - a1
               in
-                  Just ( Cons (Number a1)
-                             (App (Var "enumFromThen") [Number a2, Number a3])
+                  Just (Eval (Cons (Number a1)
+                             (App (Var "enumFromThen") [Number a2, Number a3]))
                        , Prim "enumeration" )
           [e1, e2] ->
               case redex globals e1 of
@@ -197,7 +199,7 @@ enumFromTo : Binds -> List Expr -> Maybe (Expr, Info)
 enumFromTo globals args
     = case args of
           [Number a, Number b] ->
-              Just ( ListLit <| List.map Number <| ranged a b 1
+              Just (Eval (ListLit <| List.map Number <| ranged a b 1)
                    , Prim "enumeration" )
           [e1, e2] ->
               case redex globals e1 of
@@ -215,7 +217,7 @@ enumFromThenTo : Binds -> List Expr -> Maybe (Expr, Info)
 enumFromThenTo globals args
     = case args of
           [Number a1, Number a2, Number b] ->
-              Just ( ListLit <| List.map Number <| ranged a1 b (a2-a1)
+              Just (Eval (ListLit <| List.map Number <| ranged a1 b (a2-a1))
                    , Prim "enumeration" )
           [e1, e2, e3] ->
               case redex globals e1 of
@@ -261,7 +263,7 @@ dispatchAlts globals fun alts args
                                          dispatchAlts globals fun alts1 args
                                      Just s ->
                                          let
-                                             ne = applyArgs (AST.applySubst s e) args2
+                                             ne = applyArgs (Eval (AST.applySubst s e)) args2
                                              info = Rewrite (Equation fun ps e)
                                          in
                                              Just (ne, info)
@@ -279,7 +281,7 @@ dispatchBeta vars body args =
             let args1 = List.take nvars args
                 args2 = List.drop nvars args
                 s = Dict.fromList (List.map2 Tuple.pair vars args1)
-                ne = applyArgs (AST.applySubst s body) args2
+                ne = applyArgs (Eval (AST.applySubst s body)) args2
                 info = Prim "beta reduction"
             in
                 Just (ne, info)
@@ -321,7 +323,7 @@ redex globals expr =
                     Just (Fail "invalid function", Prim "application")
                     
         Cons e1 (ListLit l) ->
-            Just ((ListLit (e1::l)), Prim "constructor")
+            Just (Eval (ListLit (e1::l)), Prim "constructor")
 
         Cons e1 (TupleLit _) ->
             Just (Fail "type error", Prim "constructor")
@@ -341,8 +343,8 @@ redex globals expr =
 
         IfThenElse e1 e2 e3 ->
             case e1 of
-                Boolean True -> Just (e2, Prim "if-True")
-                Boolean False -> Just (e3, Prim "if-False")
+                Boolean True -> Just (Eval e2, Prim "if-True")
+                Boolean False -> Just (Eval e3, Prim "if-False")
                 _ -> if isWeakNormalForm e1
                      then
                          Just (Fail "type error", Prim "if")
@@ -351,7 +353,11 @@ redex globals expr =
                              |> Maybe.andThen (\(ne1,info) ->
                                                    Just (IfThenElse ne1 e2 e3,info))
 
-        _ -> Nothing
+        Eval e1 ->
+            redex globals e1
+                                
+        _ ->
+            Nothing
 
              
 
@@ -377,6 +383,9 @@ matching p e s
     = case p of
           (VarP x) ->
               Just (Dict.insert x e s)
+
+          (BangP x) ->
+              Just (Dict.insert x e s)              
                   
           (NumberP n) ->
               case e of
@@ -565,8 +574,9 @@ outermostRedexArgs functions proj args i =
 
 reduceNext : Binds -> Expr -> Maybe (Expr,Info)
 reduceNext globals expr
-    = outermostRedex globals expr
-        |> Maybe.andThen (\ctx -> redexCtx globals expr ctx)
+    = let expr1 = AST.uneval expr
+      in outermostRedex globals expr1
+              |> Maybe.andThen (\ctx -> redexCtx globals expr1 ctx)
 
            
 isNormalForm : Binds -> Expr -> Bool

@@ -101,6 +101,9 @@ prettyExpr_ prec e =
 
         Fail msg -> msg
 
+        Eval e1 ->
+            prettyExpr_ prec e1
+
 
 paren : Bool -> String -> String
 paren b str
@@ -121,6 +124,8 @@ prettyPattern p =
     case p of
         VarP x ->
             x
+        BangP x ->
+            "!"++x
         BooleanP b ->
             if b then "True" else "False"
         NumberP n ->
@@ -136,6 +141,9 @@ prettyPattern p =
 prettyDecl : Decl -> String
 prettyDecl decl =
     case decl of
+        Comment str ->
+            "--" ++ str
+                
         TypeSig f str ->
             f ++ " :: " ++ str
                 
@@ -165,7 +173,7 @@ prettyInfo info =
           
 operatorChar : Char -> Bool
 operatorChar c =
-    c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
+    c=='!' || c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
         c==':' || c=='=' || c=='&' || c=='|' || c=='.' 
 
 

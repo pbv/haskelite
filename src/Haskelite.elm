@@ -26,11 +26,12 @@ import Browser
 
 type alias Model
     = { expression : Expr                 -- current expression
+      , next : Maybe (Expr, Info)        -- next reduction
       , previous : List (Expr, Info) -- list of previous steps
       , bindings : Binds
       , inputExpr : String
-      , outputExpr : Result String Expr
       , inputDecls : String
+      , outputExpr : Result String Expr
       , outputDecls : Result String (List Decl)
       , mode : Mode
       }
@@ -39,14 +40,13 @@ type Mode
     = Editing | Reducing 
 
 type Msg
-    = Step Context    -- single step evaluation at a context
-    | Previous        -- undo one evaluation step
+    = Previous        -- undo one evaluation step
     | Next            -- next outermost step
     | Reset           -- reset evaluation
-    | EditExpr String   -- edit expression
-    | EditDecls String  -- edit declarations
+    | ParseExpr String   -- parse expression
+    | ParseDecls String  -- parse declarations
     | Edit              -- go into editing mode
-    | SaveEdits         -- go into reduction mode
+    | Evaluate         -- go into reduction mode
 
 
 -- the main entry point for the app
@@ -68,9 +68,12 @@ init config  =
                       <| Parser.run HsParser.declListEnd config.declarations
     in case (outputExpr, outputDecls) of
            (Ok expr, Ok decls) ->
+               let bindings = Eval.collectBindings decls Prelude.functions
+               in 
                ({ expression = expr
+                , next = Nothing
                 , previous = []
-                , bindings = Eval.collectBindings decls Prelude.functions
+                , bindings = bindings
                 , inputExpr = config.expression
                 , outputExpr = outputExpr
                 , inputDecls = config.declarations
@@ -80,6 +83,7 @@ init config  =
                , Cmd.none)
            _ ->
                ({ expression = Fail "syntax"
+                , next = Nothing
                 , previous = []
                 , bindings = Prelude.functions
                 , inputExpr = config.expression
@@ -107,9 +111,9 @@ editingView model =
                         , size 65
                         , spellcheck False
                         , class "editline"
-                        , onInput EditExpr
+                        , onInput ParseExpr
                         ]  []
-                 , button [ class "navbar", onClick SaveEdits ] [ text "Evaluate" ]
+                 , button [ class "navbar", onClick Evaluate ] [ text "Evaluate" ]
                ]
            , br [] []
            , case model.outputExpr of
@@ -123,7 +127,7 @@ editingView model =
                       , rows 24
                       , cols 80
                       , spellcheck False
-                      , onInput EditDecls
+                      , onInput ParseDecls
                       ] []
            , br [] []
            , case model.outputDecls of
@@ -147,27 +151,23 @@ reduceView model =
                            , disabled (List.isEmpty model.previous)
                            , onClick Previous] [text "< Prev"]
                   , button [ class "navbar"
-                           , disabled (Eval.isNormalForm model.bindings model.expression)
+                           , disabled (model.next == Nothing)
                            , onClick Next] [text "Next >"]
                   ]
         , div [class "lines"]
              <| List.map lineView (List.reverse model.previous) ++
                  [ div [class "current"]
-                          [ renderExpr
-                                model.bindings model.expression Context.hole ]
+                          [ renderExpr model.expression ]
                  ]
         ]
 
-
-        
+         
 lineView : (Expr, Info) -> Html Msg
 lineView (expr, info) =
     div [class "line"]
-        [ text (Pretty.prettyExpr expr)
+        [ renderExpr expr
         , div [class "info"] [ text (Pretty.prettyInfo info) ]
         ]
-
-
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -182,28 +182,24 @@ update msg model =
 reduceUpdate : Msg -> Model -> Model
 reduceUpdate msg model =
     case msg of
-        Step ctx ->
-            case Eval.redexCtx model.bindings model.expression ctx of
-                Just (newExpr, info) ->
-                    { model | expression = newExpr
-                    , previous = (model.expression, info) :: model.previous
-                    }
-                
-                Nothing ->
-                    model
-
         Previous ->
             case model.previous of
                 ((oldExpr, info) :: rest) ->
-                    { model | expression = oldExpr, previous = rest }
+                    { model
+                        | expression = oldExpr
+                        , next = Eval.reduceNext model.bindings oldExpr
+                        , previous = rest
+                    }
                 [] ->
                     model
 
         Next ->
-            case Eval.reduceNext model.bindings model.expression of
+            case model.next of
                 Just (newExpr, info) ->
-                    { model | expression = newExpr
-                    , previous = (model.expression, info) :: model.previous
+                    { model
+                        | expression = newExpr
+                        , next = Eval.reduceNext model.bindings newExpr
+                        , previous = (model.expression, info) :: model.previous
                     }
                 Nothing ->
                     model
@@ -211,7 +207,10 @@ reduceUpdate msg model =
         Reset ->
             case List.last model.previous of
                 Just (expr,_) ->
-                    { model | expression = expr, previous = [] }
+                    { model
+                        | expression = expr
+                        , next = Eval.reduceNext model.bindings expr 
+                        , previous = [] }
                 Nothing ->
                     model
         Edit ->
@@ -226,26 +225,29 @@ reduceUpdate msg model =
 editUpdate : Msg -> Model -> Model
 editUpdate msg model =
     case msg of
-        EditExpr string ->
+        ParseExpr string ->
             let
                 output = Result.mapError Pretty.deadEndsToString
                          <| Parser.run HsParser.topExprEnd string
             in
                 { model | inputExpr = string, outputExpr = output }
 
-        EditDecls string ->
+        ParseDecls string ->
             let
                 output = Result.mapError Pretty.deadEndsToString
                          <| Parser.run HsParser.declListEnd string
             in
                 { model | inputDecls = string, outputDecls = output }
         
-        SaveEdits ->
+        Evaluate ->
             case (model.outputExpr, model.outputDecls) of
                 (Ok expr, Ok decls) ->
+                    let bindings = Eval.collectBindings decls Prelude.functions
+                    in 
                     { model | expression = expr
+                    , next = Eval.reduceNext bindings expr
                     , previous = []
-                    , bindings = Eval.collectBindings decls Prelude.functions
+                    , bindings = bindings 
                     , mode = Reducing
                     }
                 _ ->
@@ -257,20 +259,18 @@ subscriptions : Model -> Sub msg
 subscriptions _ = Sub.none
 
                  
--- render an interactive expression; toplevel function
-renderExpr : Binds -> Expr -> Context -> Html Msg
-renderExpr bindings expr ctx =
-    renderExpr_ 0 bindings expr ctx
-    -- text (Pretty.prettyExpr expr)
+-- render an expression; toplevel function
+renderExpr : Expr -> Html msg
+renderExpr expr =
+    renderExpr_ 0 expr 
+
 
 -- worker function 
-renderExpr_ : Int -> Binds -> Expr -> Context -> Html Msg
-renderExpr_ prec bindings expr ctx 
+renderExpr_ : Int ->  Expr -> Html msg
+renderExpr_ prec expr 
     = case expr of
           Var x ->
-              redexSpan bindings expr ctx 
-                   [ text <| if Pretty.isOperator x then "("++x++")" else x ]
-                  
+              text <| if Pretty.isOperator x then "("++x++")" else x 
                   
           Number n ->
               paren (prec>0 && n<0) <| text (String.fromInt n)
@@ -280,117 +280,77 @@ renderExpr_ prec bindings expr ctx
 
           TupleLit args ->
               let
-                  n = List.length args - 1
-                  ctxs = List.map (\i -> Monocle.compose ctx (Context.tupleItem i))
-                          (List.range 0 n)
                   items = List.intersperse (text ",")
-                          <| List.map2 (renderExpr bindings) args ctxs
+                          <| List.map renderExpr args 
               in
                   span [] <| (text "(" :: items) ++ [text ")"]
                   
                               
           ListLit args ->
               let
-                  n = List.length args - 1
-                  ctxs = List.map (\i -> Monocle.compose ctx (Context.listItem i))
-                          (List.range 0 n)
                   items = List.intersperse (text ",")
-                          <| List.map2 (renderExpr bindings) args ctxs
+                          <| List.map renderExpr args 
               in
                   span [] <| (text "[" :: items) ++ [text "]"]
 
           App (Var "enumFrom") [e0] ->
-              let
-                  ctx0 = Monocle.compose ctx (Context.appArg 0)
-              in
-                  span []
-                      [ text "["
-                      , renderExpr_ 1 bindings e0 ctx0
-                      , redexSpan bindings expr ctx [text ".."]
-                      , text "]"
-                      ]
+              span []
+                  [ text "[", renderExpr_ 1 e0, text "..]" ]
 
           App (Var "enumFromThen") [e0, e1] ->
-              let
-                  ctx0 = Monocle.compose ctx (Context.appArg 0)
-                  ctx1 = Monocle.compose ctx (Context.appArg 1)
-              in
-                  span []
-                      [ text "["
-                      , renderExpr_ 1 bindings e0 ctx0
-                      , text ","
-                      , renderExpr_ 1 bindings e1 ctx1
-                      , redexSpan bindings expr ctx [text ".."]
-                      , text "]"
-                      ]
+              span []
+                  [ text "["
+                  , renderExpr_ 1 e0 
+                  , text ","
+                  , renderExpr_ 1 e1 
+                  , text "..]"
+                  ]
                       
           App (Var "enumFromTo") [e0, e1] ->
-              let
-                  ctx0 = Monocle.compose ctx (Context.appArg 0)
-                  ctx1 = Monocle.compose ctx (Context.appArg 1)
-              in
-                  span []
-                      [ text "["
-                      , renderExpr_ 1 bindings e0 ctx0
-                      , redexSpan bindings expr ctx [text ".."]
-                      , renderExpr_ 1 bindings e1 ctx1
-                      , text "]"
-                      ]
-
+              span []
+                  [ text "["
+                  , renderExpr_ 1 e0 
+                  , text ".."
+                  , renderExpr_ 1 e1 
+                  , text "]"
+                  ]
+              
           App (Var "enumFromThenTo") [e0, e1, e2] ->
-              let
-                  ctx0 = Monocle.compose ctx (Context.appArg 0)
-                  ctx1 = Monocle.compose ctx (Context.appArg 1)
-                  ctx2 = Monocle.compose ctx (Context.appArg 2)
-              in
-                  span []
-                      [ text "["
-                      , renderExpr_ 1 bindings e0 ctx0
-                      , text ","
-                      , renderExpr_ 1 bindings e1 ctx1
-                      , redexSpan bindings expr ctx [text ".."]
-                      , renderExpr_ 1 bindings e2 ctx2
-                      , text "]"
-                      ]
+              span []
+                  [ text "["
+                  , renderExpr_ 1 e0 
+                  , text ","
+                  , renderExpr_ 1 e1 
+                  , text ".."
+                  , renderExpr_ 1  e2 
+                  , text "]"
+                  ]
                       
           Cons e0 e1 ->
-              let
-                  ctx0 = Monocle.compose ctx Context.cons0
-                  ctx1 = Monocle.compose ctx Context.cons1
-              in
-                  paren (prec>0) <|
-                      span []
-                      [ renderExpr_ 1 bindings e0 ctx0 
-                      , redexSpan bindings expr ctx [text ":"]
-                      , renderExpr_ 1 bindings e1 ctx1 
+              paren (prec>0) <|
+                  span []
+                      [ renderExpr_ 1  e0 
+                      , text ":"
+                      , renderExpr_ 1  e1 
                       ]
 
           InfixOp op e0 e1 ->
-              let
-                  ctx0 = Monocle.compose ctx Context.infixOp0
-                  ctx1 = Monocle.compose ctx Context.infixOp1
-              in
-                  paren (prec>0) <|
-                      span []
-                      [ renderExpr_ 1 bindings e0 ctx0 
-                      , redexSpan bindings expr ctx [text (Pretty.formatOperator op)]
-                      , renderExpr_ 1 bindings e1 ctx1 
+              paren (prec>0) <|
+                  span []
+                      [ renderExpr_ 1 e0 
+                      , text (Pretty.formatOperator op)
+                      , renderExpr_ 1 e1  
                       ]
 
           App e0 args ->
               let
-                  n = List.length args - 1
-                  ctx0 = Monocle.compose ctx Context.app0
-                  ctxs = List.map (\i -> Monocle.compose ctx (Context.appArg i))
-                         (List.range 0 n)
                   items = List.intersperse (text " ")
-                          <| List.map2 (\ei ctxi -> renderExpr_ 1 bindings ei ctxi) args ctxs
+                          <| List.map (renderExpr_ 1) args 
                               
               in
                   paren (prec>0) <|
                       span []
-                      <| redexSpan bindings expr ctx [renderExpr_ 1 bindings e0 ctx0] ::
-                          text " " ::  items
+                      <| renderExpr_ 1 e0 :: text " " ::  items
                   
           Lam xs e1 ->
               text (Pretty.prettyExpr_ prec expr)
@@ -398,16 +358,22 @@ renderExpr_ prec bindings expr ctx
           IfThenElse e1 e2 e3 ->
               paren (prec>0) <|
               span []
-                  [ redexSpan bindings expr ctx [ text "if " ]
-                  , renderExpr bindings e1 (Monocle.compose ctx Context.if0)
-                  , text " then " -- redexSpan bindings expr ctx [text " then "]
+                  [ text "if " 
+                  , renderExpr e1 
+                  , text " then " 
                   , text (Pretty.prettyExpr e2)
-                  , text " else " -- redexSpan bindings expr ctx [text " else "]
+                  , text " else " 
                   , text (Pretty.prettyExpr e3) 
                   ]
                 
           Fail msg -> span [class "error"] [ text msg ]
 
+          Eval e1 ->
+              span [class "eval"] [ renderExpr_ prec e1 ]                      
+
+
+                      
+{-
 -- render a redex with info tooltip
 redexSpan : Binds -> Expr -> Context -> List (Html Msg) -> Html Msg
 redexSpan bindings expr ctx elements =
@@ -417,7 +383,7 @@ redexSpan bindings expr ctx elements =
                 <| span [class "tooltip"] [text (Pretty.prettyInfo info)] :: elements
         Nothing ->
             span [] elements
-        
+-}        
                       
 paren : Bool -> Html msg -> Html msg
 paren b html

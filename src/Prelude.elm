@@ -55,6 +55,10 @@ fst (x,y) = x
 snd :: (a,b) -> b
 snd (x,y) = y
 
+null :: [a] -> Bool
+null [] = True
+null (x:xs) = False
+
 head :: [a] -> a
 head (x:xs) = x
 

@@ -23,15 +23,18 @@ type Expr
     | InfixOp Name Expr Expr        --  operators +, * etc
     | IfThenElse Expr Expr Expr
     | Fail String                 -- runtime errors
+    | Eval Expr                   -- evaluation context
 
 -- * declarations      
 type Decl
-    = TypeSig Name String 
+    = Comment String
+    | TypeSig Name String 
     | Equation Name (List Pattern) Expr 
 
 -- * patterns      
 type Pattern
     = VarP Name
+    | BangP Name             -- bang pattern (for strict evaluation)
     | BooleanP Bool
     | NumberP Int
     | ListP (List Pattern)
@@ -85,5 +88,40 @@ applySubst s e
 
           Fail _ -> e
 
+          Eval e1 ->
+              Eval (applySubst s e1)
 
+
+-- remove evaluation context marker
+uneval : Expr -> Expr
+uneval expr =
+    case expr of
+        App e1 args ->
+            App (uneval e1) (List.map uneval args)
+
+        Lam x e1 ->
+            Lam x (uneval e1)
+
+        Cons e1 e2 ->
+            Cons (uneval e1) (uneval e2)
+                
+        ListLit es ->
+            ListLit (List.map uneval es)
+
+        TupleLit es ->
+            TupleLit (List.map uneval es)
+
+        InfixOp op e1 e2 ->
+            InfixOp op (uneval e1) (uneval e2)
+
+        IfThenElse e1 e2 e3 ->
+            IfThenElse (uneval e1) (uneval e2) (uneval e3)
+                
+        Eval e ->
+            e
+
+        _ ->
+            expr
+
+        
 

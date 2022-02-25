@@ -39,6 +39,7 @@ declaration
       [ backtrackable typeSignature
       , backtrackable infixEquation
       , prefixEquation
+      , lineComment
       ]
 
 prefixEquation : Parser Decl
@@ -76,7 +77,14 @@ typeSignature
          |= (Parser.chompUntilEndOr "\n"
             |> Parser.getChompedString)
 
+-- comment until end of a line
+lineComment : Parser Decl
+lineComment = succeed Comment
+                |. operator "--"
+                |= (Parser.chompUntilEndOr "\n"
+                        |> Parser.getChompedString)
 
+           
 identifierOrOperator : Parser Name
 identifierOrOperator
     = oneOf [ identifier
@@ -108,6 +116,9 @@ pattern =
     oneOf
     [ succeed VarP
            |= identifier
+    , succeed BangP
+           |. operator "!"
+           |= identifier   
     , succeed (BooleanP True)
            |. keyword "True"
     , succeed (BooleanP False)

@@ -57,20 +57,12 @@
     border-bottom: 2px dotted black; 
 }
 
-
-.redex {
-    border-bottom: 2px dotted black;
- }
-
-.redex:hover   {
-    cursor: pointer;
-}
-
-.redex:hover .tooltip {
-    visibility: visible;
-}
       
 .navbar {
     padding: 0px 5px;
     margin: 5px 5px;
+}
+
+.eval {
+    background-color: yellow; 
 }

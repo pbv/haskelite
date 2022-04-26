@@ -17,7 +17,6 @@ type Expr
     | Var Name
     | Number Int
     | Boolean Bool
-    | Cons Expr Expr                -- (x:xs)
     | ListLit (List Expr)           -- [1,2,3]
     | TupleLit (List Expr)          -- (1,2,3)
     | InfixOp Name Expr Expr        --  operators +, * etc
@@ -71,9 +70,6 @@ applySubst s e
           App e1 args ->
               App (applySubst s e1) <| List.map (applySubst s) args
                   
-          Cons e1 e2 ->
-              Cons (applySubst s e1) (applySubst s e2)
-                  
           InfixOp op e1 e2 ->
               InfixOp op (applySubst s e1) (applySubst s e2)
                   
@@ -102,9 +98,6 @@ uneval expr =
         Lam x e1 ->
             Lam x (uneval e1)
 
-        Cons e1 e2 ->
-            Cons (uneval e1) (uneval e2)
-                
         ListLit es ->
             ListLit (List.map uneval es)
 

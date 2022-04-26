@@ -139,6 +139,10 @@ foldl :: (a -> b -> a) -> a -> [b] -> a
 foldl f z [] = z
 foldl f z (x:xs) = foldl f (f z x) xs
 
+foldl' :: (a -> b -> a) -> a -> [b] -> a
+foldl' f !z [] = z
+foldl' f !z (x:xs) = foldl' f (f z x) xs
+
 takeWhile :: (a -> Bool) -> [a] -> [a]
 takeWhile p [] = []
 takeWhile p (x:xs) = if p x then x : takeWhile p xs else []

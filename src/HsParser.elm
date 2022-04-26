@@ -93,7 +93,8 @@ identifierOrOperator
                 |= infixOperator
                 |. symbol ")"
             ]
-    
+
+      
             
 infixOperator : Parser String
 infixOperator
@@ -191,7 +192,7 @@ topExpr = infix2
 infix7 = infixLeft  applicativeExpr [ ("*", InfixOp "*") ]
 infix6 = infixLeft  infix7  [ ("+", InfixOp "+")
                             , ("-", InfixOp "-") ]
-infix5 = infixRight infix6 [ (":", Cons)
+infix5 = infixRight infix6 [ (":", \e1 e2 -> App (Var ":") [e1,e2])
                            , ("++", InfixOp "++")
                            ]
 infix4 = infixLeft  infix5 [ ("==", InfixOp "==")

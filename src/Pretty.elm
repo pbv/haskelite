@@ -64,7 +64,7 @@ prettyExpr_ prec e =
             (String.join "," <| List.map prettyExpr l) ++
             ")"
 
-        Cons e1 e2 ->
+        App (Var ":") [e1, e2] ->
             paren (prec>0)
                 <| prettyExpr_ 1 e1 ++ ":" ++ prettyExpr_ 1 e2
 

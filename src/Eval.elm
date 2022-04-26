@@ -71,7 +71,8 @@ collectAlts fun decls
 primitives : Dict AST.Name Prim
 primitives
     = Dict.fromList
-      [ ("+", arithOp "+" (+))
+      [ (":", consPrim)
+      , ("+", arithOp "+" (+))
       , ("-", arithOp "-" (-))
       , ("*", arithOp "*" (*))
       , ("div", arithOp "div" (//))
@@ -89,6 +90,30 @@ primitives
       , ("negate", arithNeg)
       ]
 
+
+mkCons : Expr -> Expr -> Expr
+mkCons e1 e2 = App (Var ":") [e1,e2]
+
+    
+consPrim : Binds -> List Expr -> Maybe (Expr, Info)
+consPrim global args
+    = case args of
+          [e1, ListLit l] ->
+              Just (Eval (ListLit (e1::l)), Prim "constructor")
+          [e1, TupleLit _] ->
+              Just (Fail "type error", Prim "constructor")
+          [e1, Boolean _] ->
+            Just (Fail "type error", Prim "constructor")
+
+          [e1, Number _] ->
+            Just (Fail "type error", Prim "construtor")
+
+          [e1, Lam _ _] ->
+            Just (Fail "type error", Prim "construtor")
+
+          _ -> Nothing
+                  
+                    
 
 arithNeg : Binds -> List Expr -> Maybe (Expr, Info)
 arithNeg globals args
@@ -165,7 +190,7 @@ enumFrom : Binds -> List Expr -> Maybe (Expr, Info)
 enumFrom globals args
     = case args of
           [Number a] ->
-              Just (Eval (Cons (Number a) (App (Var "enumFrom") [Number (a+1)]))
+              Just (Eval (mkCons (Number a) (App (Var "enumFrom") [Number (a+1)]))
                    , Prim "enumeration" )
           [e1] ->
               redex globals e1
@@ -181,7 +206,7 @@ enumFromThen globals args
               let
                   a3 = 2*a2 - a1
               in
-                  Just (Eval (Cons (Number a1)
+                  Just (Eval (mkCons (Number a1)
                              (App (Var "enumFromThen") [Number a2, Number a3]))
                        , Prim "enumeration" )
           [e1, e2] ->
@@ -322,22 +347,6 @@ redex globals expr =
                 _ ->
                     Just (Fail "invalid function", Prim "application")
                     
-        Cons e1 (ListLit l) ->
-            Just (Eval (ListLit (e1::l)), Prim "constructor")
-
-        Cons e1 (TupleLit _) ->
-            Just (Fail "type error", Prim "constructor")
-
-        Cons e1 (Boolean _) ->
-            Just (Fail "type error", Prim "constructor")
-
-        Cons e1 (Number _) ->
-            Just (Fail "type error", Prim "construtor")
-
-        Cons e1 (Lam _ _) ->
-            Just (Fail "type error", Prim "construtor")
-
-
         InfixOp op e1 e2 ->
             redex globals (App (Var op) [e1, e2])
 
@@ -405,7 +414,7 @@ matching p e s
               case e of
                   ListLit (e1::es) -> matching p1 e1 s
                                    |> Maybe.andThen (matching (ListP ps) (ListLit es))
-                  Cons e1 e2 -> matching p1 e1 s
+                  App (Var ":") [e1, e2] -> matching p1 e1 s
                                 |> Maybe.andThen (matching (ListP ps) e2)
                   _ ->
                       Nothing
@@ -417,7 +426,7 @@ matching p e s
               
           (ConsP p1 p2) ->
               case e of
-                  (Cons e1 e2) -> matching p1 e1 s
+                  (App (Var ":") [e1, e2]) -> matching p1 e1 s
                                    |> Maybe.andThen (matching p2 e2)
                   (ListLit (e1::e2)) -> matching p1 e1 s
                                    |> Maybe.andThen (matching p2 (ListLit e2))
@@ -456,15 +465,15 @@ patternEval globals p e =
         (ListP ps, ListLit es) ->
             patternEvalList globals ps es []
                 |> Maybe.andThen (\(nes,info) -> Just (ListLit nes, info))
-        (ListP [], Cons _ _) -> Nothing
-        (ListP (p1::ps), Cons e1 e2) ->
+        (ListP [], App (Var ":") _) -> Nothing
+        (ListP (p1::ps), App (Var ":") [e1, e2]) ->
             case patternEval globals p1 e1 of
                 Just (ne1,info) ->
-                    Just (Cons ne1 e2, info)
+                    Just (App (Var ":") [ne1, e2], info)
                 Nothing ->
                     patternEval globals (ListP ps) e2
                         |> Maybe.andThen (\(ne2,info) ->
-                                              Just (Cons e1 ne2,info))
+                                              Just (App (Var ":") [e1, ne2],info))
         (ConsP p1 p2, ListLit []) -> Nothing
         (ConsP p1 p2, ListLit (e1::rest)) ->
             case patternEval globals p1 e1 of
@@ -527,7 +536,7 @@ outermostRedex globals expr =
 outermostRedexAux : Binds -> Expr -> Maybe Context
 outermostRedexAux globals expr 
     = case expr of
-          (Cons e0 e1) ->
+          (App (Var ":") [e0, e1]) ->
               case outermostRedex globals e0 of
                   Just ctx ->
                       Just (Monocle.compose Context.cons0 ctx)
@@ -604,6 +613,8 @@ reduceFullAux globals expr
 isWeakNormalForm : Expr -> Bool
 isWeakNormalForm expr =
     case expr of
+        App (Var ":") _ ->
+            True
         App _ _ ->
             False
         Lam _ _ ->
@@ -613,8 +624,6 @@ isWeakNormalForm expr =
         Number _ ->
             True
         Boolean _ ->
-            True
-        Cons _ _ ->
             True
         ListLit _ ->
             True

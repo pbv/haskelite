@@ -326,7 +326,7 @@ renderExpr_ prec expr
                   , text "]"
                   ]
                       
-          Cons e0 e1 ->
+          App (Var ":") [e0, e1] ->
               paren (prec>0) <|
                   span []
                       [ renderExpr_ 1  e0 

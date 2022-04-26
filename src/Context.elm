@@ -25,20 +25,20 @@ hole = { getOption = \expr -> Just expr
 cons0 : Context
 cons0 =
     { getOption= \e -> case e of
-                           Cons e0 _ -> Just e0
+                           App (Var ":") [e0, _] -> Just e0
                            _ -> Nothing
     , set= \e0 e -> case e of
-                        Cons _ e1 -> Cons e0 e1
+                        App (Var ":") [_, e1] -> App (Var ":") [e0,e1]
                         _ -> e
     }
     
 cons1 : Context
 cons1 =
     { getOption= \e -> case e of
-                           Cons _ e1 -> Just e1
+                           App (Var ":") [_, e1] -> Just e1
                            _ -> Nothing
     , set= \e1 e -> case e of
-                        Cons e0 _ -> Cons e0 e1
+                        App (Var ":") [e0, _] -> App (Var ":") [e0, e1]
                         _ -> e
     }
 

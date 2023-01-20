@@ -4,8 +4,9 @@
 -}
 module Pretty exposing (..)
 
-import AST exposing (Expr(..), Pattern(..), Decl(..), Info(..), Name)
+import AST exposing (Expr(..), Pattern(..), Type(..), Decl(..), Info(..), Name)
 import Parser
+import HsParser 
 import List.Extra as List
 import Set
 
@@ -138,14 +139,39 @@ prettyPattern p =
             "(" ++ prettyPattern p1 ++ ":" ++
                 prettyPattern p2 ++ ")"
 
+
+
+prettyType : Type -> String
+prettyType ty = prettyType_ 0 ty
+
+prettyType_ : Int -> Type -> String
+prettyType_ prec ty
+    = case ty of
+          TyInt ->
+              "Int"
+          TyBool ->
+              "Bool"
+          TyVar name ->
+              name
+          TyQVar name ->
+              name
+          TyList ty1 ->
+              "[" ++ prettyType ty1 ++ "]"
+          TyTuple ts ->
+              "(" ++ String.join "," (List.map prettyType ts) ++ ")"
+          TyFun t1 t2 ->
+              paren (prec>0) <|
+                  prettyType_ 1 t1 ++ "->" ++ prettyType_ 0 t2 
+                
+                    
 prettyDecl : Decl -> String
 prettyDecl decl =
     case decl of
         Comment str ->
             "--" ++ str
                 
-        TypeSig f str ->
-            f ++ " :: " ++ str
+        TypeSig f ty ->
+            f ++ " :: " ++ prettyType ty
                 
         Equation f ps expr ->
             case ps of
@@ -171,13 +197,9 @@ prettyInfo info =
         Rewrite decl -> prettyDecl decl
     
           
-operatorChar : Char -> Bool
-operatorChar c =
-    c=='!' || c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
-        c==':' || c=='=' || c=='&' || c=='|' || c=='.' 
 
 
 isOperator : Name -> Bool
-isOperator = String.all operatorChar 
+isOperator = String.all HsParser.operatorChar 
                     
           

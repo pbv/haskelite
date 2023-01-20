@@ -27,7 +27,7 @@ type Expr
 -- * declarations      
 type Decl
     = Comment String
-    | TypeSig Name String 
+    | TypeSig Name Type
     | Equation Name (List Pattern) Expr 
 
 -- * patterns      
@@ -40,9 +40,24 @@ type Pattern
     | ConsP Pattern Pattern
     | TupleP (List Pattern)
 
--- variable substitutions
+
+-- * types
+type Type
+    = TyVar Name         -- free variable
+    | TyQVar Name        -- quantified variable
+    | TyBool
+    | TyInt
+    | TyTuple (List Type)
+    | TyList Type
+    | TyFun Type Type
+
+      
+-- term substitutions
 type alias Subst = Dict Name Expr
 
+--  type substitutions
+type alias TySubst = Dict Name Type
+    
 -- information line associated to a reduction
 type Info
     = Prim String   -- primitive operation

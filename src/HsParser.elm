@@ -7,8 +7,7 @@ module HsParser exposing (..)
 import Parser exposing
     (Parser, (|.), (|=), symbol, keyword, variable, 
      succeed, problem, oneOf, andThen, backtrackable, lazy)
-import AST exposing (Expr(..), Pattern(..), Decl(..), Name)
-import Pretty
+import AST exposing (Expr(..), Pattern(..), Decl(..), Type(..), Name)
 import Char
 import Set
 import List.Extra as List
@@ -66,17 +65,80 @@ infixEquation
          |= topExpr
 
 
--- types are parsed but ignored
 typeSignature : Parser Decl
 typeSignature
     = succeed TypeSig
          |= identifierOrOperator
          |. spaces
          |. operator "::"
-         |. spaces   
-         |= (Parser.chompUntilEndOr "\n"
-            |> Parser.getChompedString)
+         |. spaces
+         |= typeExpr
 
+{-         |= (Parser.chompUntilEndOr "\n"
+            |> Parser.getChompedString)
+-}
+
+
+-- * type expressions
+typeExpr : Parser Type
+typeExpr
+    = succeed tyArrows
+        |= typeBase
+        |. spaces
+        |= oneOf [
+            Parser.sequence
+                { start = "->"
+                , end = ""
+                , separator = "->"
+                , item = typeBase
+                , spaces = spaces
+                , trailing = Parser.Forbidden
+                }
+           , succeed []
+           ]
+
+
+
+          
+typeBase : Parser Type
+typeBase
+    = oneOf
+      [ succeed TyInt
+            |. keyword "Int"
+      , succeed TyBool
+            |. keyword "Bool"
+      , succeed TyQVar
+            |= identifier
+      , succeed TyList
+            |. symbol "["
+            |= lazy (\_ -> typeExpr)
+            |. symbol "]"
+      , succeed tyTuple
+              |= Parser.sequence
+                 { start = "("
+                 , end = ")"
+                 , separator = ","
+                 , item = lazy (\_ -> typeExpr)
+                 , spaces = spaces
+                 , trailing = Parser.Forbidden
+                 }
+      ]
+
+
+tyArrows : Type -> List Type -> Type
+tyArrows t0 ts
+    = case List.unconsLast ts of
+          Nothing -> t0
+          Just (t1, ts1) -> List.foldr TyFun t1 ([t0]++ts1)
+          
+
+tyTuple : List Type -> Type
+tyTuple ts
+    = case ts of
+          [t] -> t
+          _ -> TyTuple ts
+               
+           
 -- comment until end of a line
 lineComment : Parser Decl
 lineComment = succeed Comment
@@ -98,7 +160,7 @@ identifierOrOperator
             
 infixOperator : Parser String
 infixOperator
-    = Parser.chompWhile Pretty.operatorChar
+    = Parser.chompWhile operatorChar
     |> Parser.getChompedString
     |> andThen (\s -> if String.isEmpty s
                       then problem "operator"
@@ -212,7 +274,7 @@ infix2 = infixRight infix3 [ ("||", InfixOp "||") ]
 operator : String -> Parser ()
 operator s
     = backtrackable 
-      (Parser.chompWhile Pretty.operatorChar
+      (Parser.chompWhile operatorChar
       |> Parser.getChompedString
       |> andThen (\r -> if s==r
                         then succeed ()
@@ -461,3 +523,11 @@ spaces
 
 whitespace
     = Parser.chompWhile (\c -> c==' ' || c=='\n' || c=='\r')
+
+
+
+operatorChar : Char -> Bool
+operatorChar c =
+    c=='!' || c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
+        c==':' || c=='=' || c=='&' || c=='|' || c=='.' 
+      

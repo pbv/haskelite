@@ -24,29 +24,36 @@ import List.Extra as List
 import Dict exposing (Dict)
 import Browser
 
-type alias Model
-    = { expression : Expr                 -- current expression
-      , next : Maybe (Expr, Info)        -- next reduction
-      , previous : List (Expr, Info) -- list of previous steps
-      , bindings : Binds
-      , inputExpr : String
-      , inputDecls : String
-      , outputExpr : Result String Expr
-      , outputDecls : Result String (List Decl)
-      , mode : Mode
+
+type Model
+    = Editing EditModel
+    | Reducing ReduceModel
+
+type alias EditModel
+    = { inputExpr : String                -- input expression
+      , inputDecls : String               -- function declarations
+      , resultExpr : Result String Expr            -- result for expression
+      , resultDecls : Result String (List Decl)    -- result for declarations
       }
 
-type Mode
-    = Editing | Reducing 
-
+type alias ReduceModel
+    = { expression : Expr                -- current expression
+      , next : Maybe (Expr, Info)        -- next reduction
+      , previous : List (Expr, Info)     -- list of previous steps
+      , bindings : Binds                 -- all bindings (including Prelude)
+      , inputExpr : String               -- inputs (to go back to editing)
+      , inputDecls : String
+      }
+    
+    
 type Msg
-    = Previous        -- undo one evaluation step
-    | Next            -- next outermost step
-    | Reset           -- reset evaluation
-    | ParseExpr String   -- parse expression
-    | ParseDecls String  -- parse declarations
-    | Edit              -- go into editing mode
-    | Evaluate         -- go into reduction mode
+    = Previous           -- undo one evaluation step
+    | Next               -- next outermost step
+    | Reset              -- reset evaluation
+    | ModifyExpr String   -- parse expression
+    | ModifyDecls String  -- parse declarations
+    | Edit               -- go into editing mode
+    | Evaluate           -- go into reduction mode
 
 
 -- the main entry point for the app
@@ -60,50 +67,35 @@ main =
 
       
 -- * inicializing the application
-init : {expression:String, declarations:String} -> (Model, Cmd msg) 
-init config  =
-    let outputExpr = Result.mapError Pretty.deadEndsToString
+init : {expression:String, declarations:String} -> (Model, Cmd msg)
+init config  = (initModel config, Cmd.none)
+
+initModel : {expression:String, declarations:String} -> Model
+initModel config =
+    let
+        resultExpr = Result.mapError Pretty.deadEndsToString
                      <| Parser.run HsParser.topExprEnd config.expression
-        outputDecls = Result.mapError Pretty.deadEndsToString
+        resultDecls = Result.mapError Pretty.deadEndsToString
                       <| Parser.run HsParser.declListEnd config.declarations
-    in case (outputExpr, outputDecls) of
-           (Ok expr, Ok decls) ->
-               let bindings = Eval.collectBindings decls Prelude.functions
-               in 
-               ({ expression = expr
-                , next = Nothing
-                , previous = []
-                , bindings = bindings
-                , inputExpr = config.expression
-                , outputExpr = outputExpr
-                , inputDecls = config.declarations
-                , outputDecls = outputDecls
-                , mode = Editing
-                }
-               , Cmd.none)
-           _ ->
-               ({ expression = Fail "syntax"
-                , next = Nothing
-                , previous = []
-                , bindings = Prelude.functions
-                , inputExpr = config.expression
-                , outputExpr = outputExpr
-                , inputDecls = config.declarations
-                , outputDecls = outputDecls
-                , mode = Editing
-                }
-               , Cmd.none)
+    in
+        Editing
+        { inputExpr = config.expression
+        , resultExpr = resultExpr
+        , inputDecls = config.declarations
+        , resultDecls = resultDecls
+        }
+        
 
                  
 
         
 view : Model -> Html Msg
 view model =
-    case model.mode of
-        Editing -> editingView model
-        Reducing -> reduceView model
+    case model of
+        Editing m -> editingView m
+        Reducing m -> reduceView m
 
-editingView : Model -> Html Msg
+editingView : EditModel -> Html Msg
 editingView model =
     div [] [ span [] [
                   input [ placeholder "Enter an expression"
@@ -111,12 +103,12 @@ editingView model =
                         , size 65
                         , spellcheck False
                         , class "editline"
-                        , onInput ParseExpr
+                        , onInput ModifyExpr
                         ]  []
                  , button [ class "navbar", onClick Evaluate ] [ text "Evaluate" ]
                ]
            , br [] []
-           , case model.outputExpr of
+           , case model.resultExpr of
                  Err msg -> if model.inputExpr /= "" then
                                 span [class "error"] [text msg]
                             else span [] []
@@ -127,10 +119,10 @@ editingView model =
                       , rows 24
                       , cols 80
                       , spellcheck False
-                      , onInput ParseDecls
+                      , onInput ModifyDecls
                       ] []
            , br [] []
-           , case model.outputDecls of
+           , case model.resultDecls of
                  Err msg -> if model.inputDecls /= "" then
                                 span [class "error"] [text msg]
                             else
@@ -138,7 +130,7 @@ editingView model =
                  _ -> span [] []
            ]
 
-reduceView : Model -> Html Msg
+reduceView : ReduceModel -> Html Msg
 reduceView model =
     div []
         [ span [] [ button [ class "navbar"
@@ -172,88 +164,94 @@ lineView (expr, info) =
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
-    case model.mode of
-        Reducing ->
-            (reduceUpdate msg model, Cmd.none)
-        Editing ->
-            (editUpdate msg model, Cmd.none)
+    case model of
+        Reducing submodel ->
+            (reduceUpdate msg submodel, Cmd.none)
+        Editing submodel ->
+            (editUpdate msg submodel, Cmd.none)
 
         
-reduceUpdate : Msg -> Model -> Model
+reduceUpdate : Msg -> ReduceModel -> Model
 reduceUpdate msg model =
     case msg of
         Previous ->
             case model.previous of
-                ((oldExpr, info) :: rest) ->
+                ((oldExpr, _) :: rest) ->
+                    Reducing
                     { model
                         | expression = oldExpr
                         , next = Eval.reduceNext model.bindings oldExpr
                         , previous = rest
                     }
                 [] ->
-                    model
+                    Reducing model
 
         Next ->
             case model.next of
                 Just (newExpr, info) ->
+                    Reducing
                     { model
                         | expression = newExpr
                         , next = Eval.reduceNext model.bindings newExpr
                         , previous = (model.expression, info) :: model.previous
                     }
                 Nothing ->
-                    model
+                    Reducing model
                         
         Reset ->
             case List.last model.previous of
                 Just (expr,_) ->
+                    Reducing
                     { model
                         | expression = expr
                         , next = Eval.reduceNext model.bindings expr 
-                        , previous = [] }
+                        , previous = []
+                    }
                 Nothing ->
-                    model
+                    Reducing model
         Edit ->
-            { model | mode = Editing }
+            initModel {expression=model.inputExpr, declarations=model.inputDecls}
             
         _ ->
-            model
+            Reducing model
                  
 
            
                 
-editUpdate : Msg -> Model -> Model
+editUpdate : Msg -> EditModel -> Model
 editUpdate msg model =
     case msg of
-        ParseExpr string ->
+        ModifyExpr string ->
             let
                 output = Result.mapError Pretty.deadEndsToString
                          <| Parser.run HsParser.topExprEnd string
             in
-                { model | inputExpr = string, outputExpr = output }
+                Editing { model | inputExpr=string, resultExpr=output }
 
-        ParseDecls string ->
+        ModifyDecls string ->
             let
                 output = Result.mapError Pretty.deadEndsToString
                          <| Parser.run HsParser.declListEnd string
             in
-                { model | inputDecls = string, outputDecls = output }
+                Editing { model | inputDecls=string, resultDecls=output }
         
         Evaluate ->
-            case (model.outputExpr, model.outputDecls) of
+            case (model.resultExpr, model.resultDecls) of
                 (Ok expr, Ok decls) ->
                     let bindings = Eval.collectBindings decls Prelude.functions
                     in 
-                    { model | expression = expr
+                    Reducing
+                    { expression = expr
                     , next = Eval.reduceNext bindings expr
                     , previous = []
                     , bindings = bindings 
-                    , mode = Reducing
+                    , inputExpr = model.inputExpr
+                    , inputDecls = model.inputDecls
                     }
                 _ ->
-                    model 
+                    Editing model 
         _ ->
-            model
+            Editing model
                        
 subscriptions : Model -> Sub msg
 subscriptions _ = Sub.none
@@ -373,17 +371,6 @@ renderExpr_ prec expr
 
 
                       
-{-
--- render a redex with info tooltip
-redexSpan : Binds -> Expr -> Context -> List (Html Msg) -> Html Msg
-redexSpan bindings expr ctx elements =
-    case Eval.redex bindings expr of
-        Just (_, info) ->
-            span [class "redex", onClick (Step ctx)]
-                <| span [class "tooltip"] [text (Pretty.prettyInfo info)] :: elements
-        Nothing ->
-            span [] elements
--}        
                       
 paren : Bool -> Html msg -> Html msg
 paren b html

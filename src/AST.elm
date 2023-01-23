@@ -55,7 +55,7 @@ type Type
 -- term substitutions
 type alias Subst = Dict Name Expr
 
---  type substitutions
+-- type substitutions
 type alias TySubst = Dict Name Type
     
 -- information line associated to a reduction
@@ -131,5 +131,23 @@ uneval expr =
         _ ->
             expr
 
+
+-- apply a type substitution
+applyTySubst : TySubst -> Type -> Type
+applyTySubst s ty
+    = case ty of
+          TyVar name ->
+              case Dict.get name s of
+                  Nothing -> ty
+                  Just t1 -> t1
+          TyList t1
+              -> TyList (applyTySubst s t1)
+          TyTuple ts
+              -> TyTuple (List.map (applyTySubst s) ts)
+          TyFun t1 t2
+              -> TyFun (applyTySubst s t1) (applyTySubst s t2)
+          _
+              -> ty
+          
         
 

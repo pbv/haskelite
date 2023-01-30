@@ -26,8 +26,7 @@ type Expr
 
 -- * declarations      
 type Decl
-    = Comment String
-    | TypeSig Name Type
+    = TypeSig Name Type
     | Equation Name (List Pattern) Expr 
 
 -- * patterns      
@@ -40,28 +39,75 @@ type Pattern
     | ConsP Pattern Pattern
     | TupleP (List Pattern)
 
+-- a single alternative
+type alias Alt
+    = (List Pattern, Expr)
 
+
+-- * programs
+type Program
+    = Letrec (List Bind) Expr
+
+-- * bindings
+type alias Bind
+    = { name: Name, typeSig: Maybe Type, alts: List Alt }
+
+      
 -- * types
 type Type
-    = TyVar Name         -- free variable
-    | TyQVar Name        -- quantified variable
+    = TyVar Name         -- free type variable
+    | TyGen Int          -- quantified (generic) type variable
     | TyBool
     | TyInt
     | TyTuple (List Type)
     | TyList Type
     | TyFun Type Type
-
-      
+     
 -- term substitutions
-type alias Subst = Dict Name Expr
+type alias Subst
+    = Dict Name Expr
 
--- type substitutions
-type alias TySubst = Dict Name Type
     
--- information line associated to a reduction
+-- information line associated with a reduction
 type Info
     = Prim String   -- primitive operation
     | Rewrite Decl  -- rewrite rule 
+
+      
+declName : Decl -> Name
+declName decl
+    = case decl of
+          TypeSig name _ -> name
+          Equation name _ _ -> name
+
+                               
+-- remove evaluation context marker
+uneval : Expr -> Expr
+uneval expr =
+    case expr of
+        App e1 args ->
+            App (uneval e1) (List.map uneval args)
+
+        Lam x e1 ->
+            Lam x (uneval e1)
+
+        ListLit es ->
+            ListLit (List.map uneval es)
+
+        TupleLit es ->
+            TupleLit (List.map uneval es)
+
+        InfixOp op e1 e2 ->
+            InfixOp op (uneval e1) (uneval e2)
+
+        IfThenElse e1 e2 e3 ->
+            IfThenElse (uneval e1) (uneval e2) (uneval e3)
+                
+        Eval e ->
+            e
+
+        _ ->
+            expr
 
 -- perform variable substitution
 applySubst : Subst -> Expr -> Expr
@@ -103,51 +149,6 @@ applySubst s e
               Eval (applySubst s e1)
 
 
--- remove evaluation context marker
-uneval : Expr -> Expr
-uneval expr =
-    case expr of
-        App e1 args ->
-            App (uneval e1) (List.map uneval args)
-
-        Lam x e1 ->
-            Lam x (uneval e1)
-
-        ListLit es ->
-            ListLit (List.map uneval es)
-
-        TupleLit es ->
-            TupleLit (List.map uneval es)
-
-        InfixOp op e1 e2 ->
-            InfixOp op (uneval e1) (uneval e2)
-
-        IfThenElse e1 e2 e3 ->
-            IfThenElse (uneval e1) (uneval e2) (uneval e3)
-                
-        Eval e ->
-            e
-
-        _ ->
-            expr
 
 
--- apply a type substitution
-applyTySubst : TySubst -> Type -> Type
-applyTySubst s ty
-    = case ty of
-          TyVar name ->
-              case Dict.get name s of
-                  Nothing -> ty
-                  Just t1 -> t1
-          TyList t1
-              -> TyList (applyTySubst s t1)
-          TyTuple ts
-              -> TyTuple (List.map (applyTySubst s) ts)
-          TyFun t1 t2
-              -> TyFun (applyTySubst s t1) (applyTySubst s t2)
-          _
-              -> ty
-          
-        
 

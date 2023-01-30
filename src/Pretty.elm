@@ -5,41 +5,9 @@
 module Pretty exposing (..)
 
 import AST exposing (Expr(..), Pattern(..), Type(..), Decl(..), Info(..), Name)
-import Parser
-import HsParser 
 import List.Extra as List
 import Set
 
--- * pretty print parsing errors
-deadEndsToString : List Parser.DeadEnd -> String
-deadEndsToString deadEnds
-    =
-      let
-          groups = List.groupWhile (\a b -> a.row==b.row &&
-                                            a.col==b.col) deadEnds
-      in
-          String.join "; " <|
-          List.map (\(a,r) ->
-                        "line " ++ String.fromInt a.row  ++ "," ++
-                        "col " ++ String.fromInt a.col ++ ": " ++
-                        "expecting " ++
-                        (String.join ", " <|
-                             Set.toList <|
-                             Set.fromList <|
-                             List.map (\d -> problemToString d.problem) (a::r))
-                   ) groups
-      
-problemToString : Parser.Problem -> String
-problemToString prob
-    = case prob of
-          Parser.Expecting s -> s
-          Parser.ExpectingInt -> "integer"
-          Parser.ExpectingVariable -> "variable"
-          Parser.ExpectingSymbol s -> s
-          Parser.ExpectingKeyword s -> s
-          Parser.ExpectingEnd -> "end of input"
-          Parser.Problem s -> s
-          _ -> "?"
 
 
 -- * pretty printing expressions etc
@@ -153,8 +121,8 @@ prettyType_ prec ty
               "Bool"
           TyVar name ->
               name
-          TyQVar name ->
-              name
+          TyGen idx ->
+              showGenVar idx
           TyList ty1 ->
               "[" ++ prettyType ty1 ++ "]"
           TyTuple ts ->
@@ -162,14 +130,15 @@ prettyType_ prec ty
           TyFun t1 t2 ->
               paren (prec>0) <|
                   prettyType_ 1 t1 ++ "->" ++ prettyType_ 0 t2 
-                
+
+
+showGenVar : Int -> String
+showGenVar n
+    = String.fromChar <| Char.fromCode <| Char.toCode 'a' + n
                     
 prettyDecl : Decl -> String
 prettyDecl decl =
     case decl of
-        Comment str ->
-            "--" ++ str
-                
         TypeSig f ty ->
             f ++ " :: " ++ prettyType ty
                 
@@ -197,9 +166,11 @@ prettyInfo info =
         Rewrite decl -> prettyDecl decl
     
           
-
-
 isOperator : Name -> Bool
-isOperator = String.all HsParser.operatorChar 
+isOperator = String.all operatorChar 
                     
+operatorChar : Char -> Bool
+operatorChar c =
+    c=='!' || c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
+        c==':' || c=='=' || c=='&' || c=='|' || c=='.' 
           

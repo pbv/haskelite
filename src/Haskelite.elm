@@ -5,9 +5,10 @@
 -}
 module Haskelite exposing (..)
 
-import AST exposing (Expr(..), Decl, Info, Name)
+import AST exposing (Expr(..), Program(..), Info, Name)
 import HsParser
-import Eval exposing (Binds)
+import Eval exposing (EvalEnv)
+import Typecheck
 import Parser
 import Pretty
 import Prelude
@@ -30,17 +31,16 @@ type Model
     | Reducing ReduceModel
 
 type alias EditModel
-    = { inputExpr : String                -- input expression
-      , inputDecls : String               -- function declarations
-      , resultExpr : Result String Expr            -- result for expression
-      , resultDecls : Result String (List Decl)    -- result for declarations
+    = { inputExpr : String                   -- input expression
+      , inputDecls : String                  -- function declarations
+      , parseResult : Result String Program      -- parsing results
       }
 
 type alias ReduceModel
     = { expression : Expr                -- current expression
       , next : Maybe (Expr, Info)        -- next reduction
       , previous : List (Expr, Info)     -- list of previous steps
-      , bindings : Binds                 -- all bindings (including Prelude)
+      , evalEnv : EvalEnv                -- evaluation environment (include Prelude)
       , inputExpr : String               -- inputs (to go back to editing)
       , inputDecls : String
       }
@@ -65,28 +65,26 @@ main =
         , subscriptions = subscriptions
         }
 
-      
+        
 -- * inicializing the application
 init : {expression:String, declarations:String} -> (Model, Cmd msg)
 init config  = (initModel config, Cmd.none)
 
 initModel : {expression:String, declarations:String} -> Model
-initModel config =
-    let
-        resultExpr = Result.mapError Pretty.deadEndsToString
-                     <| Parser.run HsParser.topExprEnd config.expression
-        resultDecls = Result.mapError Pretty.deadEndsToString
-                      <| Parser.run HsParser.declListEnd config.declarations
-    in
-        Editing
-        { inputExpr = config.expression
-        , resultExpr = resultExpr
-        , inputDecls = config.declarations
-        , resultDecls = resultDecls
-        }
-        
+initModel config
+    = let result = parseAndTypecheck config.expression config.declarations
+      in
+          Editing
+          { inputExpr = config.expression
+          , inputDecls = config.declarations
+          , parseResult = result
+          }
 
-                 
+        
+parseAndTypecheck : String -> String -> Result String Program
+parseAndTypecheck expression declarations
+    = HsParser.parseProg expression declarations |>
+      Result.andThen Typecheck.tcProgram 
 
         
 view : Model -> Html Msg
@@ -108,12 +106,14 @@ editingView model =
                  , button [ class "navbar", onClick Evaluate ] [ text "Evaluate" ]
                ]
            , br [] []
+               {-
            , case model.resultExpr of
                  Err msg -> if model.inputExpr /= "" then
                                 span [class "error"] [text msg]
                             else span [] []
                  _ -> span [] []
            , br [] []
+                -}
            , textarea [ placeholder "Enter function definitions"
                       , value model.inputDecls
                       , rows 24
@@ -122,11 +122,11 @@ editingView model =
                       , onInput ModifyDecls
                       ] []
            , br [] []
-           , case model.resultDecls of
-                 Err msg -> if model.inputDecls /= "" then
-                                span [class "error"] [text msg]
-                            else
+           , case model.parseResult of
+                 Err msg -> if model.inputDecls == "" && model.inputExpr == "" then
                                 span [] []
+                             else
+                                span [class "error"] [text msg]
                  _ -> span [] []
            ]
 
@@ -180,7 +180,7 @@ reduceUpdate msg model =
                     Reducing
                     { model
                         | expression = oldExpr
-                        , next = Eval.reduceNext model.bindings oldExpr
+                        , next = Eval.reduceNext model.evalEnv oldExpr
                         , previous = rest
                     }
                 [] ->
@@ -192,7 +192,7 @@ reduceUpdate msg model =
                     Reducing
                     { model
                         | expression = newExpr
-                        , next = Eval.reduceNext model.bindings newExpr
+                        , next = Eval.reduceNext model.evalEnv newExpr
                         , previous = (model.expression, info) :: model.previous
                     }
                 Nothing ->
@@ -204,7 +204,7 @@ reduceUpdate msg model =
                     Reducing
                     { model
                         | expression = expr
-                        , next = Eval.reduceNext model.bindings expr 
+                        , next = Eval.reduceNext model.evalEnv expr 
                         , previous = []
                     }
                 Nothing ->
@@ -218,38 +218,33 @@ reduceUpdate msg model =
 
            
                 
-editUpdate : Msg -> EditModel -> Model
+editUpdate : Msg -> EditModel -> Model 
 editUpdate msg model =
     case msg of
         ModifyExpr string ->
-            let
-                output = Result.mapError Pretty.deadEndsToString
-                         <| Parser.run HsParser.topExprEnd string
+            let result = HsParser.parseProg string model.inputDecls
             in
-                Editing { model | inputExpr=string, resultExpr=output }
+                Editing { model | inputExpr=string, parseResult=result }
 
         ModifyDecls string ->
-            let
-                output = Result.mapError Pretty.deadEndsToString
-                         <| Parser.run HsParser.declListEnd string
+            let result = HsParser.parseProg model.inputExpr string 
             in
-                Editing { model | inputDecls=string, resultDecls=output }
+                Editing { model | inputDecls=string, parseResult=result }
         
         Evaluate ->
-            case (model.resultExpr, model.resultDecls) of
-                (Ok expr, Ok decls) ->
-                    let bindings = Eval.collectBindings decls Prelude.functions
-                    in 
-                    Reducing
-                    { expression = expr
-                    , next = Eval.reduceNext bindings expr
-                    , previous = []
-                    , bindings = bindings 
-                    , inputExpr = model.inputExpr
-                    , inputDecls = model.inputDecls
-                    }
-                _ ->
-                    Editing model 
+            case parseAndTypecheck model.inputExpr model.inputDecls of
+                Ok (Letrec binds expr) ->
+                    let env = Eval.toEvalEnv (Prelude.bindings ++ binds)
+                    in Reducing
+                        { expression = expr
+                        , next = Eval.reduceNext env expr
+                        , previous = []
+                        , evalEnv = env
+                        , inputExpr = model.inputExpr
+                        , inputDecls = model.inputDecls
+                        }
+                Err msg1 ->
+                    Editing {model | parseResult = Err msg1}
         _ ->
             Editing model
                        

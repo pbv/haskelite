@@ -5,23 +5,18 @@
 -}
 module Prelude exposing (..)
 
-import AST exposing (Decl)
-import Eval exposing (Binds)
+import AST exposing (Type(..), Bind)
 import HsParser
 import Parser
 import Dict
+import Tuple
 
--- global declarations from the prelude      
-declarations : List Decl
-declarations =
-    case Parser.run HsParser.declList prelude of
-        Ok l -> l
-        Err _ -> []  --  NB: this should never happen
+bindings : List Bind
+bindings = case Parser.run HsParser.declarations prelude of
+              Ok r -> r
+              Err _ -> []   --  NB: this should never happen
 
-functions : Binds
-functions = Eval.collectBindings declarations Dict.empty
-
-
+                 
 prelude : String
 prelude =
     """

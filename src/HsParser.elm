@@ -1,46 +1,146 @@
 {-
   Parser for Haskelite, a small subset of Haskell
-  Pedro Vasconcelos, 2021
+  Pedro Vasconcelos, 2021-2023
 -}
 module HsParser exposing (..)
 
-import Parser exposing
-    (Parser, (|.), (|=), symbol, keyword, variable, 
-     succeed, problem, oneOf, andThen, backtrackable, lazy)
-import AST exposing (Expr(..), Pattern(..), Decl(..), Type(..), Name)
+import Parser exposing (Parser, (|.), (|=), symbol, keyword, variable,
+                        succeed, problem, oneOf, andThen, backtrackable, lazy)
+import AST exposing (Expr(..), Pattern(..), Decl(..), Alt, Bind, Program(..),
+                         Type(..), Name)
+import Tc
+import Pretty exposing (operatorChar)
 import Char
 import Set
+import Dict exposing (Dict)
 import List.Extra as List
 
--- declarations
-declListEnd : Parser (List Decl)
-declListEnd
-    = succeed identity
-        |= declList
-        |. Parser.end
+parseProg : String -> String -> Result String Program
+parseProg inputExpr inputDecls
+    = Result.mapError deadEndsToString <|
+        (Parser.run topExprEnd inputExpr |>
+             Result.andThen (\expr ->
+                                 Parser.run declarations inputDecls |>
+                                 Result.andThen (\binds ->
+                                                     Ok (Letrec binds expr))))
 
+-- top-level parsing function
+declarations : Parser (List Bind)
+declarations 
+    = succeed collectBinds
+          |= declList
+          |. Parser.end
 
+             
 declList : Parser (List Decl)
 declList
     = Parser.sequence
       { start = ""
       , end = ""
       , separator = ""
-      , spaces = whitespace
+      , spaces = whitespaceOrComment
       , item = declaration
       , trailing = Parser.Mandatory
       }
 
-         
+
+collectBinds : List Decl -> List Bind
+collectBinds decls
+    = List.map makeBind <|
+      List.groupWhile (\d1 d2 -> AST.declName d1 == AST.declName d2) decls
+
+makeBind : (Decl, List Decl) -> Bind
+makeBind pair =
+    case pair of
+        (TypeSig fun ty, rest) ->
+            { name = fun, typeSig = Just (Tc.generalize ty), alts = collectAlts rest }
+        (Equation fun patts expr, rest) ->
+            { name = fun, typeSig = Nothing, alts = (patts,expr)::collectAlts rest }
+
+collectAlts : List Decl -> List Alt
+collectAlts decls
+    = case decls of
+          (Equation _ patts expr :: rest) ->
+              (patts,expr) :: collectAlts rest
+          _ ->
+              []   -- NB: this fails silently if there are multiple type signatures
+              
+                  
+                
+{-    
+collectBinds : List Decl -> List Bind
+collectBinds decls
+    = Dict.values <| List.foldl addDecl Dict.empty decls
+
+addDecl : Decl -> Dict Name Bind -> Dict Name Bind
+addDecl decl accum
+    = case decl of
+          Equation fun patts expr ->
+              Dict.update fun (addAlt fun patts expr) accum
+          TypeSig fun ty ->
+              Dict.update fun (addTypeSig fun ty) accum
+
+addAlt : Name -> List Pattern -> Expr -> Maybe Bind -> Maybe Bind
+addAlt fun patts expr optbind
+    = case optbind of
+          Nothing ->
+              Just {name=fun, typeSig=Nothing, alts=[(patts,expr)]}
+          Just bind ->
+              Just {bind | alts = bind.alts ++ [(patts,expr)]}
+
+addTypeSig : Name -> Type -> Maybe Bind -> Maybe Bind
+addTypeSig fun ty optbind
+    = case optbind of
+          Nothing ->
+              Just {name=fun, typeSig=Just ty, alts=[]}
+          Just bind ->
+              Just {bind | typeSig=Just ty}
+-}      
+    
+{-
+-- helper functions to transform a list of declarations into a
+-- environments; ignores re-declarations, etc
+collectEnvs : List Decl -> (EvalEnv, TyEnv)
+collectEnvs decls 
+    = ( List.foldl addAlts Dict.empty decls
+      , List.foldl addTypeSig Dict.empty decls)
+
+addAlts : Decl -> EvalEnv -> EvalEnv
+addAlts decl accum 
+    = case decl of
+          (Equation fun ps e) ->
+              Dict.update fun (addAlt ps e) accum
+          _ ->
+              accum
+
+addAlt : List Pattern -> Expr -> Maybe (List Alt) -> Maybe (List Alt)
+addAlt patts expr rhs
+    = case rhs of
+          Nothing ->
+              Just [(patts,expr)]
+          Just alts ->
+              Just (alts ++ [(patts,expr)])
+
+addTypeSig : Decl -> TyEnv -> TyEnv
+addTypeSig decl accum
+    = case decl of
+          (TypeSig fun ty) ->
+              Dict.insert fun ty accum
+          _ ->
+              accum
+-}
+                            
+       
+-- single declaration    
 declaration : Parser Decl
 declaration
     = oneOf
       [ backtrackable typeSignature
       , backtrackable infixEquation
       , prefixEquation
-      , lineComment
       ]
 
+  
 prefixEquation : Parser Decl
 prefixEquation
     = succeed Equation 
@@ -74,9 +174,6 @@ typeSignature
          |. spaces
          |= typeExpr
 
-{-         |= (Parser.chompUntilEndOr "\n"
-            |> Parser.getChompedString)
--}
 
 
 -- * type expressions
@@ -97,8 +194,6 @@ typeExpr
            , succeed []
            ]
 
-
-
           
 typeBase : Parser Type
 typeBase
@@ -107,8 +202,8 @@ typeBase
             |. keyword "Int"
       , succeed TyBool
             |. keyword "Bool"
-      , succeed TyQVar
-            |= identifier
+      , succeed TyVar        -- identifier are parsed as free type vars
+            |= identifier    -- should be generalized if necessary
       , succeed TyList
             |. symbol "["
             |= lazy (\_ -> typeExpr)
@@ -131,21 +226,12 @@ tyArrows t0 ts
           Nothing -> t0
           Just (t1, ts1) -> List.foldr TyFun t1 ([t0]++ts1)
           
-
 tyTuple : List Type -> Type
 tyTuple ts
     = case ts of
           [t] -> t
           _ -> TyTuple ts
-               
-           
--- comment until end of a line
-lineComment : Parser Decl
-lineComment = succeed Comment
-                |. operator "--"
-                |= (Parser.chompUntilEndOr "\n"
-                        |> Parser.getChompedString)
-
+              
            
 identifierOrOperator : Parser Name
 identifierOrOperator
@@ -518,16 +604,67 @@ reservedWords
     = Set.fromList [ "if", "then", "else", "let", "in", "case", "of", "where" ]
 
 
+
+
+whitespaceOrComment : Parser ()
+whitespaceOrComment
+    = Parser.loop 0 <| ifProgress <|
+          oneOf
+          [ Parser.lineComment "--"
+          , Parser.multiComment "{-" "-}" Parser.Nestable
+          , whitespace
+          ]
+
+-- whitespace, including newlines
+whitespace : Parser ()
+whitespace    
+    = Parser.chompWhile (\c -> c==' ' || c=='\t' || c=='\n' || c=='\r')
+
+-- just space (no newlines)
+spaces : Parser ()
 spaces
-    = Parser.chompWhile (\c -> c==' ')
+    = Parser.chompWhile (\c -> c==' ' || c=='\t')
 
-whitespace
-    = Parser.chompWhile (\c -> c==' ' || c=='\n' || c=='\r')
+      
+ifProgress : Parser a -> Int -> Parser (Parser.Step Int ())
+ifProgress parser offset =
+  succeed identity
+    |. parser
+    |= Parser.getOffset
+    |> Parser.map (\newOffset -> if offset == newOffset then Parser.Done () else Parser.Loop newOffset)
+      
 
 
 
-operatorChar : Char -> Bool
-operatorChar c =
-    c=='!' || c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
-        c==':' || c=='=' || c=='&' || c=='|' || c=='.' 
+
+-- * pretty print parsing errors
+deadEndsToString : List Parser.DeadEnd -> String
+deadEndsToString deadEnds
+    =
+      let
+          groups = List.groupWhile (\a b -> a.row==b.row &&
+                                            a.col==b.col) deadEnds
+      in
+          String.join "; " <|
+          List.map (\(a,r) ->
+                        "line " ++ String.fromInt a.row  ++ "," ++
+                        "col " ++ String.fromInt a.col ++ ": " ++
+                        "expecting " ++
+                        (String.join ", " <|
+                             Set.toList <|
+                             Set.fromList <|
+                             List.map (\d -> problemToString d.problem) (a::r))
+                   ) groups
+      
+problemToString : Parser.Problem -> String
+problemToString prob
+    = case prob of
+          Parser.Expecting s -> s
+          Parser.ExpectingInt -> "integer"
+          Parser.ExpectingVariable -> "variable"
+          Parser.ExpectingSymbol s -> s
+          Parser.ExpectingKeyword s -> s
+          Parser.ExpectingEnd -> "end of input"
+          Parser.Problem s -> s
+          _ -> "?"
       

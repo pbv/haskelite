@@ -57,7 +57,7 @@ any, all :: (a -> Bool) -> [a] -> Bool
 
 The following Haskell 98 features are *not* implemented:
 
-* static type checking 
+* ~~static type checking~~ type classes 
 * the numeric tower (Float, Integer, Double, etc.)
 * let and case expressions
 * guards
@@ -67,4 +67,4 @@ The following Haskell 98 features are *not* implemented:
 
 ----
 
-Pedro Vasconcelos, 2021.
+Pedro Vasconcelos, 2023.

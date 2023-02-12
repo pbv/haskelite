@@ -47,13 +47,7 @@ tcExpr env expr
               andThen (\t0 -> tcApplication env t0 args)
 
           Lam vars e ->
-              case vars of
-                  [] ->
-                      tcExpr env e
-                  (v::vs) ->
-                      Tc.freshVar |>
-                      andThen (\a -> tcExpr (extend v a env) (Lam vs e) |>
-                               andThen (\t -> pure (TyFun a t)))
+              tcLambda env vars e
 
           IfThenElse e0 e1 e2 ->
               tcExpr env e0 |>
@@ -88,6 +82,17 @@ extend : Name -> Type -> TyEnv -> TyEnv
 extend v t env
     = Dict.insert v t env         
 
+tcLambda : TyEnv -> List Name -> Expr -> Tc Type
+tcLambda env vars body
+    = case vars of
+          [] ->
+              tcExpr env body
+          (v::vs) ->
+              Tc.freshVar |>
+              andThen (\a -> tcLambda (extend v a env) vs body |>
+                           andThen (\t -> pure (TyFun a t)))
+
+      
 tcApplication : TyEnv -> Type -> List Expr -> Tc Type
 tcApplication env funtype arglist
     = case arglist of

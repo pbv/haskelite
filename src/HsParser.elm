@@ -66,79 +66,16 @@ collectAlts decls
               []   -- NB: this fails silently if there are multiple type signatures
               
                   
-                
-{-    
-collectBinds : List Decl -> List Bind
-collectBinds decls
-    = Dict.values <| List.foldl addDecl Dict.empty decls
-
-addDecl : Decl -> Dict Name Bind -> Dict Name Bind
-addDecl decl accum
-    = case decl of
-          Equation fun patts expr ->
-              Dict.update fun (addAlt fun patts expr) accum
-          TypeSig fun ty ->
-              Dict.update fun (addTypeSig fun ty) accum
-
-addAlt : Name -> List Pattern -> Expr -> Maybe Bind -> Maybe Bind
-addAlt fun patts expr optbind
-    = case optbind of
-          Nothing ->
-              Just {name=fun, typeSig=Nothing, alts=[(patts,expr)]}
-          Just bind ->
-              Just {bind | alts = bind.alts ++ [(patts,expr)]}
-
-addTypeSig : Name -> Type -> Maybe Bind -> Maybe Bind
-addTypeSig fun ty optbind
-    = case optbind of
-          Nothing ->
-              Just {name=fun, typeSig=Just ty, alts=[]}
-          Just bind ->
-              Just {bind | typeSig=Just ty}
--}      
-    
-{-
--- helper functions to transform a list of declarations into a
--- environments; ignores re-declarations, etc
-collectEnvs : List Decl -> (EvalEnv, TyEnv)
-collectEnvs decls 
-    = ( List.foldl addAlts Dict.empty decls
-      , List.foldl addTypeSig Dict.empty decls)
-
-addAlts : Decl -> EvalEnv -> EvalEnv
-addAlts decl accum 
-    = case decl of
-          (Equation fun ps e) ->
-              Dict.update fun (addAlt ps e) accum
-          _ ->
-              accum
-
-addAlt : List Pattern -> Expr -> Maybe (List Alt) -> Maybe (List Alt)
-addAlt patts expr rhs
-    = case rhs of
-          Nothing ->
-              Just [(patts,expr)]
-          Just alts ->
-              Just (alts ++ [(patts,expr)])
-
-addTypeSig : Decl -> TyEnv -> TyEnv
-addTypeSig decl accum
-    = case decl of
-          (TypeSig fun ty) ->
-              Dict.insert fun ty accum
-          _ ->
-              accum
--}
-                            
        
 -- single declaration    
 declaration : Parser Decl
 declaration
     = oneOf
       [ backtrackable typeSignature
-      , backtrackable infixEquation
+      , backtrackable infixEquation 
       , prefixEquation
-      ]
+      ]  
+
 
   
 prefixEquation : Parser Decl
@@ -163,8 +100,8 @@ infixEquation
          |. operator "="
          |. spaces
          |= topExpr
-
-
+            
+            
 typeSignature : Parser Decl
 typeSignature
     = succeed TypeSig
@@ -313,7 +250,7 @@ makeTupleP l =
         [x] -> x
         _ -> TupleP l
 
-    
+patternList : Parser (List Pattern)    
 patternList =
     Parser.sequence
     { start = ""
@@ -322,8 +259,14 @@ patternList =
     , spaces=spaces
     , item = pattern
     , trailing = Parser.Forbidden
-    }
-    
+    } |> andThen (guard distinctPatterns "all pattern variables to be distinct")
+
+
+-- * check all pattern variables are distinct
+distinctPatterns : List Pattern -> Bool
+distinctPatterns ps
+    = let vs = List.filter (\v -> v/="_") <| List.concatMap AST.patternVars ps
+      in List.allDifferent vs
 
     
 -- top-level expressions
@@ -635,7 +578,10 @@ ifProgress parser offset =
       
 
 
-
+    
+guard : (a -> Bool) -> String -> a -> Parser a
+guard pred msg v
+    = if pred v then succeed v else problem msg
 
 -- * pretty print parsing errors
 deadEndsToString : List Parser.DeadEnd -> String

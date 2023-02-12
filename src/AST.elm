@@ -148,7 +148,22 @@ applySubst s e
           Eval e1 ->
               Eval (applySubst s e1)
 
-
-
+                  
+patternVars : Pattern -> List Name
+patternVars patt 
+    = case patt of
+          VarP x ->
+              [x]
+          BangP x ->
+              [x]
+          ListP ps ->
+              List.concatMap patternVars ps
+          TupleP ps ->
+              List.concatMap patternVars ps
+          ConsP p1 p2 ->
+              patternVars p1 ++ patternVars p2
+          _ ->
+              []
+                      
 
 

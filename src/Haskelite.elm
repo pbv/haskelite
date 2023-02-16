@@ -5,7 +5,7 @@
 -}
 module Haskelite exposing (..)
 
-import AST exposing (Expr(..), Program(..), Info, Name)
+import AST exposing (Expr(..), Program(..), Bind, Info, Name)
 import HsParser
 import Eval exposing (EvalEnv)
 import Typecheck
@@ -29,11 +29,13 @@ import Browser
 type Model
     = Editing EditModel
     | Reducing ReduceModel
+    | Panic String                 -- only for initialization errors
 
 type alias EditModel
     = { inputExpr : String                   -- input expression
       , inputDecls : String                  -- function declarations
       , parseResult : Result String Program      -- parsing results
+      , prelude : List Bind
       }
 
 type alias ReduceModel
@@ -72,19 +74,23 @@ init config  = (initModel config, Cmd.none)
 
 initModel : {expression:String, declarations:String} -> Model
 initModel config
-    = let result = parseAndTypecheck config.expression config.declarations
-      in
-          Editing
-          { inputExpr = config.expression
-          , inputDecls = config.declarations
-          , parseResult = result
-          }
-
+    = case Prelude.preludeResult of
+          Err msg ->
+              Panic msg
+          Ok binds ->
+              let result = parseAndTypecheck binds config.expression config.declarations
+              in
+                  Editing
+                  { inputExpr = config.expression
+                  , inputDecls = config.declarations
+                  , parseResult = result
+                  , prelude = binds
+                  }
         
-parseAndTypecheck : String -> String -> Result String Program
-parseAndTypecheck expression declarations
+parseAndTypecheck : List Bind -> String -> String -> Result String Program
+parseAndTypecheck binds expression declarations
     = HsParser.parseProg expression declarations |>
-      Result.andThen Typecheck.tcProgram 
+      Result.andThen (Typecheck.tcProgram binds)
 
         
 view : Model -> Html Msg
@@ -92,7 +98,12 @@ view model =
     case model of
         Editing m -> editingView m
         Reducing m -> reduceView m
+        Panic msg -> panicView msg
 
+panicView : String -> Html msg
+panicView msg =
+    span [class "error"] [text msg]
+                     
 editingView : EditModel -> Html Msg
 editingView model =
     div [] [ span [] [
@@ -169,6 +180,8 @@ update msg model =
             (reduceUpdate msg submodel, Cmd.none)
         Editing submodel ->
             (editUpdate msg submodel, Cmd.none)
+        Panic _ ->
+            (model, Cmd.none)
 
         
 reduceUpdate : Msg -> ReduceModel -> Model
@@ -232,9 +245,9 @@ editUpdate msg model =
                 Editing { model | inputDecls=string, parseResult=result }
         
         Evaluate ->
-            case parseAndTypecheck model.inputExpr model.inputDecls of
+            case parseAndTypecheck model.prelude model.inputExpr model.inputDecls of
                 Ok (Letrec binds expr) ->
-                    let env = Eval.toEvalEnv (Prelude.bindings ++ binds)
+                    let env = Eval.toEvalEnv (model.prelude ++ binds)
                     in Reducing
                         { expression = expr
                         , next = Eval.reduceNext env expr

@@ -3,19 +3,17 @@
   This is a subset of the Haskell 98 prelude
   Pedro Vasconcelos
 -}
-module Prelude exposing (..)
+module Prelude exposing (preludeResult)
 
 import AST exposing (Type(..), Bind)
 import HsParser
 import Parser
-import Dict
-import Tuple
 
-bindings : List Bind
-bindings = case Parser.run HsParser.declarations prelude of
-              Ok r -> r
-              Err _ -> []   --  NB: this should never happen
-
+-- result of parsing the prelude text below
+preludeResult : Result String (List Bind)
+preludeResult
+    = Result.mapError HsParser.deadEndsToString <|
+      Parser.run HsParser.declarations prelude 
                  
 prelude : String
 prelude =

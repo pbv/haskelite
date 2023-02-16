@@ -16,12 +16,12 @@ type alias TyEnv
     = Dict Name Type
 
 
-tcProgram : Program -> Result String Program
-tcProgram prog
+tcProgram : List Bind -> Program -> Result String Program
+tcProgram prelude prog
     = case prog of
           Letrec binds expr ->
               Tc.eval <|
-              (tcRecBind preludeEnv binds |>
+              (tcRecBind (preludeEnv prelude) binds |>
                andThen (\env1 -> tcExpr env1 expr |>
                       andThen (\_ -> pure prog)))
       
@@ -256,10 +256,10 @@ wrongTypeSig name tysig tyinfer
 -- Prelude stuff
 ------------------------------------------------------------------------------
 -- type environment for the Prelude
-preludeEnv : TyEnv
-preludeEnv
+preludeEnv : List Bind -> TyEnv
+preludeEnv binds
     = Dict.union primEnv <|
-      List.foldl addTypeSig Dict.empty Prelude.bindings
+      List.foldl addTypeSig Dict.empty binds
                  
 addTypeSig : Bind -> TyEnv -> TyEnv
 addTypeSig bind tyenv

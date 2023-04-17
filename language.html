@@ -1,0 +1,67 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="screen.css">
+  </head>
+
+  <body>
+    <h1>Language</h1>
+
+<h2>Expressions</h2>
+
+Integers, variables, arithmetic operations (`+, -, *, div, mod`),
+comparisons between integers (`==`, `<=`, etc.), tuples, list enumerations
+(e.g. `[1..10]`) lambda-expressions and if-then-else.
+
+<h2>Function definitions</h2>
+
+Pattern matching over integers, lists and tuples; recursive
+definitions are allowed.
+
+
+<h2>Standard Prelude</h2>
+
+Definitions for the following functions from the Standard Prelude are provided.
+
+<pre>
+even, odd :: Int -> Bool
+max, min :: Int -> Int -> Int
+fst :: (a,b) -> a
+snd :: (a,b) -> b
+(&&), (||) :: Bool -> Bool
+head :: [a] -> a
+tail :: [a] -> [a]
+(++) :: [a] -> [a] -> [a]
+length :: [a] -> Int
+reverse :: [a] -> [a]
+sum, product :: [Int] -> Int
+take, drop :: Int -> [a] -> [a]
+concat :: [[a]] -> [a]
+repeat :: a -> [a]
+cycle :: [a] -> [a]
+map :: (a -> b) -> [a] -> [b]
+filter :: (a -> Bool) -> [a] -> [a]
+foldr :: (a -> b -> b) -> b -> [a] -> b
+foldl :: (a -> b -> a) -> a -> [b] -> a
+zip :: [a] -> [b] -> [(a,b)]
+zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
+takeWhile, dropWhile :: (a -> Bool) -> [a] -> [a]
+any, all :: (a -> Bool) -> [a] -> Bool
+</pre>
+
+<h2>Not implemented</h2>
+
+The following Haskell 98 features are <em>not</em> implemented:
+
+<ul>
+<li><strike>static type checking</strike> type classes
+<li>the numeric tower (Float, Integer, Double, etc.)
+<li>let and case expressions
+<li>guards
+<li>list compreensions
+<li>caracters and strings
+<li>user-defined algebraic data types
+</ul>
+
+<hr>
+Pedro Vasconcelos, 2022

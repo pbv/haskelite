@@ -1,6 +1,6 @@
 {-
   Abstract Syntax Trees for Haskelite, a small subset of Haskell
-  Pedro Vasconcelos, 2021
+  Pedro Vasconcelos, 2021-23
 -}
 module AST exposing (..)
 

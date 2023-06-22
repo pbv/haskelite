@@ -175,14 +175,13 @@ transition conf
 
           (heap, E (ListLit (e1::es)), (PushPat args (ConsP ":" [p1,p2]) m1)::stack) ->
               Just (heap,
-                        M (Arg e1
-                               (Match p1
-                                    (Arg (ListLit es) (Match p2 m1)))) args,
+                        M (Match p1
+                               (Arg (ListLit es) (Match p2 m1))) (e1::args),
                         stack)
 
           (heap, E (Cons ":" [e1,e2]), (PushPat args (ListP (p1::ps)) m1)::stack) ->
-              Just (heap, M (Arg e1 (Match p1
-                                    (Arg e2 (Match (ListP ps) m1)))) args,
+              Just (heap, M (Match p1
+                                 (Arg e2 (Match (ListP ps) m1))) (e1::args),
                         stack)
                   
           -- successful match: return an expression
@@ -248,6 +247,10 @@ transitions conf
                   Just conf1 ->
                       transitions conf1
 
+
+
+--------------------------------------------------------------------
+                          
 example0 : Conf
 example0 = (Dict.empty, E (InfixOp "+" (Number 1) (Number 2)), [])
 
@@ -288,3 +291,19 @@ example5 =
         stack = []
     in
         (heap, control, stack)
+
+example6 : Conf
+example6 =
+    let
+        heap = Dict.singleton "fact"
+               (Lam (Just "fact")
+                    (Alt (Match (NumberP 0)
+                              (Return (Number 1) "fact-1"))
+                         (Match (BangP "n")
+                              (Return (InfixOp "*" (Var "n") (App (Var "fact") (InfixOp "-" (Var "n") (Number 1)))) "sum-2"))))
+        control = E (App (Var "fact") (Number 5))
+        stack = []
+    in
+        (heap, control, stack)
+           
+         

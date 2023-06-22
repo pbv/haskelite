@@ -4,17 +4,26 @@
 -}
 module HsParser exposing (..)
 
-import Parser exposing (Parser, (|.), (|=), symbol, keyword, variable,
-                        succeed, problem, oneOf, andThen, backtrackable, lazy)
-import AST exposing (Expr(..), Pattern(..), Decl(..), Alt, Bind, Program(..),
-                         Type(..), Name)
-import Tc
-import Pretty exposing (operatorChar)
+import Parser exposing (Parser,
+                        (|.), (|=),
+                        symbol, keyword, variable,
+                        succeed, problem, oneOf, andThen,
+                        backtrackable, lazy)
+import AST exposing (Expr(..),
+                     Matching(..),
+                     Pattern(..),
+                     Decl(..),
+                     Bind, Program(..),
+                     Type(..),
+                     Name, Info)
+-- import Tc
+-- import Pretty exposing (operatorChar)
 import Char
 import Set
 import Dict exposing (Dict)
 import List.Extra as List
 
+{-
 parseProg : String -> String -> Result String Program
 parseProg inputExpr inputDecls
     = Result.mapError deadEndsToString <|
@@ -67,26 +76,8 @@ collectAlts decls
               
                   
        
--- single declaration    
-declaration : Parser Decl
-declaration
-    = oneOf
-      [ backtrackable typeSignature
-      , backtrackable infixEquation 
-      , prefixEquation
-      ]  
-
 
   
-prefixEquation : Parser Decl
-prefixEquation
-    = succeed Equation 
-         |= identifier
-         |= patternList
-         |. spaces   
-         |. operator "="
-         |. spaces
-         |= topExpr
 
 infixEquation : Parser Decl
 infixEquation
@@ -100,8 +91,36 @@ infixEquation
          |. operator "="
          |. spaces
          |= topExpr
-            
-            
+-}            
+
+-- single declaration    
+declaration : Parser Decl
+declaration
+    = oneOf
+      [ backtrackable typeSignature
+      -- , backtrackable infixEquation 
+      , prefixEquation
+      ]  
+
+
+
+prefixEquation : Parser Decl
+prefixEquation
+    = getParseChomped (\(id,patts,expr) info ->
+                           Equation id (makeMatching patts expr info))
+      prefixEquationAux 
+                 
+prefixEquationAux : Parser (Name, List Pattern, Expr)
+prefixEquationAux
+    = succeed (\id patts expr -> (id,patts,expr))
+         |= identifier
+         |= patternList
+         |. spaces   
+         |. operator "="
+         |. spaces
+         |= topExpr
+
+
 typeSignature : Parser Decl
 typeSignature
     = succeed TypeSig
@@ -183,7 +202,7 @@ identifierOrOperator
             
 infixOperator : Parser String
 infixOperator
-    = Parser.chompWhile operatorChar
+    = Parser.chompWhile AST.operatorChar
     |> Parser.getChompedString
     |> andThen (\s -> if String.isEmpty s
                       then problem "operator"
@@ -198,6 +217,7 @@ integer = Parser.chompWhile Char.isDigit
 
         
 -- patterns
+pattern : Parser Pattern
 pattern =
     oneOf
     [ succeed VarP
@@ -205,9 +225,9 @@ pattern =
     , succeed BangP
            |. operator "!"
            |= identifier   
-    , succeed (BooleanP True)
+    , succeed (ConsP "True" [])
            |. keyword "True"
-    , succeed (BooleanP False)
+    , succeed (ConsP "False" [])
            |. keyword "False"
     , succeed NumberP
            |= integer -- backtrackable int
@@ -240,8 +260,11 @@ pattern =
           } |> andThen
                  (\l -> case List.reverse l of
                             [] -> problem "pattern"
-                            (p::ps) -> succeed (List.foldr ConsP p
-                                                    (List.reverse ps)))
+                            (p::ps) ->
+                                succeed (List.foldr
+                                         (\x y -> ConsP ":" [x,y])
+                                         p
+                                         (List.reverse ps)))
     ]
 
 
@@ -265,8 +288,9 @@ patternList =
 -- * check all pattern variables are distinct
 distinctPatterns : List Pattern -> Bool
 distinctPatterns ps
-    = let vs = List.filter (\v -> v/="_") <| List.concatMap AST.patternVars ps
-      in List.allDifferent vs
+    = List.allDifferent <|
+      List.filter (\v -> v/="_") <|
+      List.concatMap AST.patternVars ps
 
     
 -- top-level expressions
@@ -283,7 +307,7 @@ topExpr = infix2
 infix7 = infixLeft  applicativeExpr [ ("*", InfixOp "*") ]
 infix6 = infixLeft  infix7  [ ("+", InfixOp "+")
                             , ("-", InfixOp "-") ]
-infix5 = infixRight infix6 [ (":", \e1 e2 -> App (Var ":") [e1,e2])
+infix5 = infixRight infix6 [ (":", \e1 e2 -> makeApp (Var ":") [e1,e2])
                            , ("++", InfixOp "++")
                            ]
 infix4 = infixLeft  infix5 [ ("==", InfixOp "==")
@@ -303,7 +327,7 @@ infix2 = infixRight infix3 [ ("||", InfixOp "||") ]
 operator : String -> Parser ()
 operator s
     = backtrackable 
-      (Parser.chompWhile operatorChar
+      (Parser.chompWhile AST.operatorChar
       |> Parser.getChompedString
       |> andThen (\r -> if s==r
                         then succeed ()
@@ -360,7 +384,11 @@ infixRightCont operand table x
 
 applicativeExpr : Parser Expr
 applicativeExpr
-    = oneOf [ if_then_else, lambda, prefixNeg, backtrackable infixApp, application ]
+    = oneOf [ if_then_else,
+                  lambdaExpr,
+                  prefixNeg,
+                  backtrackable infixApp,
+                  application ]
 
 
       
@@ -374,9 +402,9 @@ delimited =
           |= identifier
     , succeed Number
           |= integer
-    , succeed (Boolean True)
+    , succeed (Cons "True" [])
           |. keyword "True"
-    , succeed (Boolean False)
+    , succeed (Cons "False" [])
           |. keyword "False"
     , backtrackable <|
         succeed Var
@@ -384,14 +412,14 @@ delimited =
           |= infixOperator
           |. symbol ")"
     , backtrackable <|
-        succeed (\e1 -> App (Var "enumFrom") [e1])
+        succeed (App (Var "enumFrom"))
             |. symbol "["
             |= lazy (\_ -> topExpr)
             |. symbol ".."
             |. spaces
             |. symbol "]"
     , backtrackable <|
-        succeed (\e1 e2 -> App (Var "enumFromThen") [e1,e2])
+        succeed (\e1 e2 -> makeApp (Var "enumFromThen") [e1,e2])
             |. symbol "["
             |= lazy (\_ -> topExpr)
             |. symbol ","
@@ -401,7 +429,7 @@ delimited =
             |. spaces
             |. symbol "]"
     , backtrackable <|
-        succeed (\e1 e2 -> App (Var "enumFromTo") [e1,e2])
+        succeed (\e1 e2 -> makeApp (Var "enumFromTo") [e1,e2])
             |. symbol "["
             |= lazy (\_ -> topExpr)
             |. symbol ".."
@@ -409,7 +437,7 @@ delimited =
             |= lazy (\_ -> topExpr)
             |. symbol "]"
     , backtrackable <|
-        succeed (\e1 e2 e3 -> App (Var "enumFromThenTo") [e1,e2,e3])
+        succeed (\e1 e2 e3 -> makeApp (Var "enumFromThenTo") [e1,e2,e3])
             |. symbol "["
             |= lazy (\_ -> topExpr)
             |. symbol ","
@@ -453,15 +481,16 @@ makeTuple l =
         [x] -> x
         _ -> TupleLit l
 
+makeApp : Expr -> List Expr -> Expr             
 makeApp e0 args =
     case args of
         [] -> e0
-        _ -> App e0 args
+        (e1::rest) -> makeApp (App e0 e1) rest
 
 
 prefixNeg : Parser Expr
 prefixNeg
-    = succeed (\e -> App (Var "negate") [e])
+    = succeed (App (Var "negate"))
          |. symbol "-"
          |= delimited
             
@@ -496,17 +525,31 @@ delimitedList
       }
            
 
-lambda : Parser Expr
-lambda
-    = succeed Lam 
+lambdaExpr : Parser Expr
+lambdaExpr
+    = getParseChomped (\(patts,expr) info ->
+                           Lam Nothing (makeMatching patts expr info))
+      lambdaExprAux 
+
+      
+lambdaExprAux : Parser (List Pattern, Expr)
+lambdaExprAux
+    = succeed Tuple.pair
          |. symbol "\\"
          |. spaces
-         |= identifierList
+         |= patternList
          |. spaces
          |. operator "->"
          |. spaces
          |= lazy (\_ -> topExpr)
 
+makeMatching : List Pattern -> Expr -> Info -> Matching
+makeMatching ps expr info
+    = case ps of
+          [] -> Return expr info
+          (p1::rest) -> Match p1 (makeMatching rest expr info)
+
+            
 if_then_else : Parser Expr                
 if_then_else
     = succeed IfThenElse
@@ -568,7 +611,22 @@ spaces : Parser ()
 spaces
     = Parser.chompWhile (\c -> c==' ' || c=='\t')
 
-      
+----------------------------------------------------------------------      
+-- helper functions
+----------------------------------------------------------------------
+
+-- combine a parser result with the chomped string
+getParseChomped : (a -> String -> b) -> Parser a -> Parser b
+getParseChomped cont parser
+    = succeed (\start value end src ->
+                   cont value (String.slice start end src))
+        |= Parser.getOffset
+        |= parser
+        |= Parser.getOffset
+        |= Parser.getSource
+                  
+
+
 ifProgress : Parser a -> Int -> Parser (Parser.Step Int ())
 ifProgress parser offset =
   succeed identity
@@ -576,9 +634,7 @@ ifProgress parser offset =
     |= Parser.getOffset
     |> Parser.map (\newOffset -> if offset == newOffset then Parser.Done () else Parser.Loop newOffset)
       
-
-
-    
+   
 guard : (a -> Bool) -> String -> a -> Parser a
 guard pred msg v
     = if pred v then succeed v else problem msg

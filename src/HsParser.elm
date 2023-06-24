@@ -14,14 +14,14 @@ import AST exposing (Expr(..),
                      Pattern(..),
                      Decl(..),
                      Bind, Program(..),
-                     Type(..),
                      Name, Info)
--- import Tc
--- import Pretty exposing (operatorChar)
+import Types exposing (Type(..))
 import Char
 import Set
 import Dict exposing (Dict)
 import List.Extra as List
+
+
 
 {-
 parseProg : String -> String -> Result String Program
@@ -33,38 +33,8 @@ parseProg inputExpr inputDecls
                                  Result.andThen (\binds ->
                                                      Ok (Letrec binds expr))))
 
--- top-level parsing function
-declarations : Parser (List Bind)
-declarations 
-    = succeed collectBinds
-          |= declList
-          |. Parser.end
-
-             
-declList : Parser (List Decl)
-declList
-    = Parser.sequence
-      { start = ""
-      , end = ""
-      , separator = ""
-      , spaces = whitespaceOrComment
-      , item = declaration
-      , trailing = Parser.Mandatory
-      }
 
 
-collectBinds : List Decl -> List Bind
-collectBinds decls
-    = List.map makeBind <|
-      List.groupWhile (\d1 d2 -> AST.declName d1 == AST.declName d2) decls
-
-makeBind : (Decl, List Decl) -> Bind
-makeBind pair =
-    case pair of
-        (TypeSig fun ty, rest) ->
-            { name = fun, typeSig = Just (Tc.generalize ty), alts = collectAlts rest }
-        (Equation fun patts expr, rest) ->
-            { name = fun, typeSig = Nothing, alts = (patts,expr)::collectAlts rest }
 
 collectAlts : List Decl -> List Alt
 collectAlts decls
@@ -79,9 +49,101 @@ collectAlts decls
 
   
 
+-}            
+
+
+----------------------------------------------------------------
+-- declarations
+----------------------------------------------------------------
+
+declarations : Parser (List Bind)
+declarations 
+    = succeed collectBinds
+          |= declList
+          |. Parser.end
+
+
+-- collect declarations by identifier and make single bindings
+collectBinds : List Decl -> List Bind
+collectBinds decls
+    = List.map makeBind <|
+      List.groupWhile (\d1 d2 -> AST.declName d1 == AST.declName d2) decls
+
+makeBind : (Decl, List Decl) -> Bind
+makeBind pair =
+    case pair of
+        (TypeSig id ty, rest) ->
+            { name = id,
+              typeSig = Just (Types.generalize Set.empty ty),
+              expr = Lam (Just id) (collectAlts rest)
+            }
+        (Equation id match, rest) ->
+            { name = id,
+              typeSig = Nothing,
+              expr = Lam (Just id) (collectAlts (Equation id match::rest))
+            }
+
+collectAlts : List Decl -> Matching
+collectAlts = List.foldr joinAlt Fail
+
+joinAlt : Decl -> Matching -> Matching              
+joinAlt decl match2
+    = case decl of
+          TypeSig _ _ -> match2
+          Equation _ match1 -> case match2 of
+                                   Fail -> match1
+                                   _    -> Alt match1 match2
+             
+             
+declList : Parser (List Decl)
+declList
+    = Parser.sequence
+      { start = ""
+      , end = ""
+      , separator = ""
+      , spaces = whitespaceOrComment
+      , item = declaration
+      , trailing = Parser.Mandatory
+      }
+
+
+
+-- single declaration    
+declaration : Parser Decl
+declaration
+    = oneOf
+      [ backtrackable typeSignature
+      , backtrackable infixEquation 
+      , prefixEquation
+      ]  
+
+
+
+prefixEquation : Parser Decl
+prefixEquation
+    = getParseChomped_ equationLHS |>
+      andThen (\((id,patts),prefix) ->
+                   equationAlts |>
+                   andThen
+                   (\alts ->
+                        case alts of
+                            [] ->
+                                succeed (\(expr,posfix) ->
+                                             Equation id (makeSimpleEquation patts expr (prefix++posfix)))
+                                   |= getParseChomped_ equationRHS
+                            _ ->
+                                succeed (Equation id (makeGuardEquation patts prefix alts))))
+    
+
 infixEquation : Parser Decl
 infixEquation
-    = succeed (\p1 fun p2 e -> Equation fun [p1,p2] e)
+    = getParseChomped infixEquationAux
+          
+
+infixEquationAux : Parser (String -> Decl)
+infixEquationAux                   
+    = succeed (\p1 id p2 e info ->
+                   Equation id (Match p1 (Match p2 (Return e info))))
          |= pattern
          |. spaces
          |= infixOperator
@@ -91,36 +153,79 @@ infixEquation
          |. operator "="
          |. spaces
          |= topExpr
--}            
 
--- single declaration    
-declaration : Parser Decl
-declaration
-    = oneOf
-      [ backtrackable typeSignature
-      -- , backtrackable infixEquation 
-      , prefixEquation
-      ]  
-
-
-
-prefixEquation : Parser Decl
-prefixEquation
-    = getParseChomped (\(id,patts,expr) info ->
-                           Equation id (makeMatching patts expr info))
-      prefixEquationAux 
-                 
-prefixEquationAux : Parser (Name, List Pattern, Expr)
-prefixEquationAux
-    = succeed (\id patts expr -> (id,patts,expr))
+              
+               
+-- left side of an equation,
+-- i.e. an identifier and a list of patterns
+equationLHS : Parser (Name, List Pattern)
+equationLHS
+    = succeed Tuple.pair
          |= identifier
-         |= patternList
-         |. spaces   
-         |. operator "="
          |. spaces
-         |= topExpr
+         |= patternList
+          
+
+-- alternative
+-- i.e. list of guards and expressions (possibly empty)
+equationAlts : Parser (List ((Expr,Expr), String))
+equationAlts
+    = Parser.sequence
+      { start = ""
+      , end = ""
+      , separator = ""
+      , spaces = whitespaceOrComment
+      , item = getParseChomped_ guardedExpr
+      , trailing = Parser.Mandatory
+      }
+
+equationRHS : Parser Expr
+equationRHS
+    = succeed identity
+           |. spaces
+           |. operator "="
+           |. spaces
+           |= topExpr   
+    
+-- a guard and an expression,
+-- i.e. "|" cond "=" expr
+guardedExpr : Parser (Expr, Expr)    
+guardedExpr
+    = succeed Tuple.pair
+          |. operator "|"
+          |. spaces
+          |= topExpr
+          |. spaces
+          |. operator "="
+          |. spaces
+          |= topExpr
 
 
+makeSimpleEquation : List Pattern -> Expr -> String -> Matching
+makeSimpleEquation patts expr info
+    = makeMatching patts (Return expr info)
+
+makeGuardEquation : List Pattern
+                  -> String
+                  -> List ((Expr,Expr),String)
+                  -> Matching      
+makeGuardEquation patts prefix alts
+    =  makeAlts <|
+          List.map (\((guard,expr),posfix) ->
+                        makeMatching patts (Arg guard
+                                                (Match (ConsP "True" [])
+                                                     (Return expr (prefix++posfix))))
+                   ) alts
+
+
+makeAlts : List Matching -> Matching
+makeAlts = List.foldr Alt Fail 
+             
+             
+---------------------------------------------------------------------------
+-- Types
+---------------------------------------------------------------------------
+            
 typeSignature : Parser Decl
 typeSignature
     = succeed TypeSig
@@ -282,7 +387,9 @@ patternList =
     , spaces=spaces
     , item = pattern
     , trailing = Parser.Forbidden
-    } |> andThen (guard distinctPatterns "all pattern variables to be distinct")
+    } |>
+    andThen
+    (ensure distinctPatterns "all pattern variables to be distinct")
 
 
 -- * check all pattern variables are distinct
@@ -307,7 +414,7 @@ topExpr = infix2
 infix7 = infixLeft  applicativeExpr [ ("*", InfixOp "*") ]
 infix6 = infixLeft  infix7  [ ("+", InfixOp "+")
                             , ("-", InfixOp "-") ]
-infix5 = infixRight infix6 [ (":", \e1 e2 -> makeApp (Var ":") [e1,e2])
+infix5 = infixRight infix6 [ (":", \e1 e2 -> Cons ":" [e1,e2])
                            , ("++", InfixOp "++")
                            ]
 infix4 = infixLeft  infix5 [ ("==", InfixOp "==")
@@ -402,10 +509,8 @@ delimited =
           |= identifier
     , succeed Number
           |= integer
-    , succeed (Cons "True" [])
-          |. keyword "True"
-    , succeed (Cons "False" [])
-          |. keyword "False"
+    , succeed (\tag -> Cons tag [])
+          |= constructor
     , backtrackable <|
         succeed Var
           |. symbol "("
@@ -527,14 +632,12 @@ delimitedList
 
 lambdaExpr : Parser Expr
 lambdaExpr
-    = getParseChomped (\(patts,expr) info ->
-                           Lam Nothing (makeMatching patts expr info))
-      lambdaExprAux 
-
+    = getParseChomped lambdaExprAux 
       
-lambdaExprAux : Parser (List Pattern, Expr)
+lambdaExprAux : Parser (String -> Expr)  
 lambdaExprAux
-    = succeed Tuple.pair
+    = succeed (\patts expr info ->
+                   Lam Nothing (makeMatching patts (Return expr info)))
          |. symbol "\\"
          |. spaces
          |= patternList
@@ -543,12 +646,11 @@ lambdaExprAux
          |. spaces
          |= lazy (\_ -> topExpr)
 
-makeMatching : List Pattern -> Expr -> Info -> Matching
-makeMatching ps expr info
-    = case ps of
-          [] -> Return expr info
-          (p1::rest) -> Match p1 (makeMatching rest expr info)
-
+makeMatching : List Pattern -> Matching -> Matching
+makeMatching ps end
+    = List.foldr Match end ps
+           
+                        
             
 if_then_else : Parser Expr                
 if_then_else
@@ -586,6 +688,14 @@ identifier
       , reserved = reservedWords
       }
 
+constructor : Parser String
+constructor
+    = variable
+      { start = \c -> Char.isUpper c
+      , inner = \c -> Char.isAlphaNum c || c=='_' || c=='\''
+      , reserved = Set.empty
+      }
+    
 reservedWords
     = Set.fromList [ "if", "then", "else", "let", "in", "case", "of", "where" ]
 
@@ -616,15 +726,25 @@ spaces
 ----------------------------------------------------------------------
 
 -- combine a parser result with the chomped string
-getParseChomped : (a -> String -> b) -> Parser a -> Parser b
-getParseChomped cont parser
-    = succeed (\start value end src ->
-                   cont value (String.slice start end src))
+getParseChomped : Parser (String -> a) -> Parser a
+getParseChomped parser
+    = succeed (\start fun end src ->
+                   fun (String.slice start end src))
         |= Parser.getOffset
         |= parser
         |= Parser.getOffset
         |= Parser.getSource
-                  
+
+getParseChomped_ : Parser a -> Parser (a, String)
+getParseChomped_ parser
+    = succeed (\start v end src ->
+                   (v, String.slice start end src))
+        |= Parser.getOffset
+        |= parser
+        |= Parser.getOffset
+        |= Parser.getSource
+
+
 
 
 ifProgress : Parser a -> Int -> Parser (Parser.Step Int ())
@@ -634,9 +754,10 @@ ifProgress parser offset =
     |= Parser.getOffset
     |> Parser.map (\newOffset -> if offset == newOffset then Parser.Done () else Parser.Loop newOffset)
       
-   
-guard : (a -> Bool) -> String -> a -> Parser a
-guard pred msg v
+
+-- check a property and abort parsing if it fails       
+ensure : (a -> Bool) -> String -> a -> Parser a
+ensure pred msg v
     = if pred v then succeed v else problem msg
 
 -- * pretty print parsing errors
@@ -670,3 +791,33 @@ problemToString prob
           Parser.Problem s -> s
           _ -> "?"
       
+-----------------------------------------------------
+
+
+example1 : String
+example1 =
+    """
+len :: [a] -> Int
+len [] = 0
+len (x:xs) = 1 + len xs
+
+zip [] _ = [] 
+zip _ [] = [] 
+zip (x:xs) (y:ys) = (x,y) : zip xs ys 
+"""
+
+example2 =
+    """[] ++ ys = ys
+(x:xs) ++ ys = x : (xs++ys)
+"""
+   
+example3 =
+   """
+foo x | x>0 = 42
+      | x<0 = 1+x
+      | otherwise = 0
+foo y = y+1
+"""
+
+example4 = "1+2"
+   

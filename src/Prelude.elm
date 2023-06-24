@@ -3,9 +3,9 @@
   This is a subset of the Haskell 98 prelude
   Pedro Vasconcelos
 -}
-module Prelude exposing (preludeResult)
+module Prelude exposing (preludeResult, prelude)
 
-import AST exposing (Type(..), Bind)
+import AST exposing (Bind)
 import HsParser
 import Parser
 

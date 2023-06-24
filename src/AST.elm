@@ -4,23 +4,21 @@
 -}
 module AST exposing (..)
 
+import Types exposing (Type)
 import Dict exposing (Dict)
 import Maybe
 
 type alias Name
     = String
 
-type alias Tag
-    = String
-      
 -- * expressions 
 type Expr 
     = App Expr Expr
     | Lam (Maybe Name) Matching  
-      -- named lambda if it was defined in a binding
+      -- lambda is named if it was defined through a binding
     | Var Name
     | Number Int
-    | Cons Tag (List Expr)
+    | Cons Name (List Expr)
     | ListLit (List Expr)                         -- [1,2,3]
     | TupleLit (List Expr)                        -- (1,2,3)
     | InfixOp Name Expr Expr                      --  primitive operators +, * etc
@@ -35,11 +33,6 @@ type Matching
     | Arg Expr Matching             -- argument supply
     | Alt Matching Matching         -- alternative
 
-      
--- * declarations      
-type Decl
-    = TypeSig Name Type
-    | Equation Name Matching
 
 -- * patterns      
 type Pattern
@@ -48,27 +41,23 @@ type Pattern
     | NumberP Int
     | ListP (List Pattern)
     | TupleP (List Pattern)
-    | ConsP Tag (List Pattern)
+    | ConsP Name (List Pattern)
 
-
--- * programs
-type Program
-    = Letrec (List Bind) Expr
+      
+-- * declarations      
+type Decl
+    = TypeSig Name Type
+    | Equation Name Matching      
 
 -- * bindings
 type alias Bind
     = { name: Name, typeSig: Maybe Type, expr: Expr }
+    
+-- * programs
+type Program
+    = Letrec (List Bind) Expr
 
-      
--- * types
-type Type
-    = TyVar Name         -- free type variable
-    | TyGen Int          -- quantified (generic) type variable
-    | TyBool
-    | TyInt
-    | TyTuple (List Type)
-    | TyList Type
-    | TyFun Type Type
+     
      
 -- term substitutions
 type alias Subst
@@ -254,3 +243,5 @@ operatorChar c =
         c==':' || c=='=' || c=='&' || c=='|' || c=='.' 
           
              
+
+            

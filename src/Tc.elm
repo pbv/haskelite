@@ -1,23 +1,28 @@
 {-
-  A combined State and Error monad for typechecking
+  A monad for type checking and inference
+  A combination of state (fresh variable generation and 
+  current unifier) and failure (for type errors).
+
+  Pedro Vasconcelos, 2022-23
 -}
 module Tc exposing (Tc, run, eval, pure, fail, explain, andThen,
-                   get, put, modify, traverse, generalize, simplify,
+                   get, put, modify, traverse, simplify,
                    freshVar, freshVars, freshName, freshInst, unify)
 
 import Dict exposing (Dict)
-import AST exposing (Name, Type(..))
+import Set
+import Types exposing (Name, Type(..), TySubst, applyTySubst)
 import State exposing (State)
-import Unify exposing (TySubst, applyTySubst)
+import Unify
 import Tuple
-import List.Extra as List
+
 
 type Tc a
     = Tc (State TcState (Result String a))
 
 type alias TcState
-    = { varcount : Int               -- current fresh variable counter
-      , unifier : TySubst            -- current most general unifier
+    = { varcount : Int          -- current fresh variable counter
+      , unifier : TySubst       -- current most general unifier
       }
 
     
@@ -103,7 +108,7 @@ freshName = get |>
 freshInst : Type -> Tc Type
 freshInst ty
     = let
-        gvs = genVars ty
+        gvs = Set.toList (Types.genVars ty)
       in
           freshVars (List.length gvs) |>
           andThen (\vs -> let r = Dict.fromList <| List.map2 Tuple.pair gvs vs
@@ -134,49 +139,8 @@ freshInst_ r ty
             pure ty
 
 
--- quantify free variable of a type
--- normaly this would remove the free variables in the type environment
--- here we avoid that because we disalow let expressions under lambdas
-generalize : Type -> Type
-generalize ty
-    = let vs = freeTyVars ty
-          gs = List.range 0 (List.length vs - 1)
-          s = Dict.fromList <| List.map2 (\v i -> Tuple.pair v (TyGen i)) vs gs
-      in applyTySubst s ty
-    
--- list of all free type variables in a type
-freeTyVars : Type -> List Name
-freeTyVars ty
-    = case ty of
-          TyVar v ->
-              [v]
-          TyList t1 ->
-              freeTyVars t1
-          TyTuple ts ->
-              List.unique (List.concat (List.map freeTyVars ts))
-          TyFun t1 t2 ->
-              List.unique (freeTyVars t1 ++ freeTyVars t2)
-          _ ->
-              []
-
--- list of all generic vars in a type
-genVars : Type -> List Int
-genVars ty
-    = case ty of
-          TyGen n ->
-              [n]
-          TyList t1 ->
-              genVars t1
-          TyTuple ts ->
-              List.unique (List.concat (List.map genVars ts))
-          TyFun t1 t2 ->
-              List.unique (genVars t1 ++ genVars t2)
-          _ ->
-              []
           
-
-              
-                
+                          
 mkVar : Int -> String
 mkVar n
     = "t" ++ String.fromInt n

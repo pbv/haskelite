@@ -1,21 +1,23 @@
 {-
-  Damas Milner type inference code
+  Damas Milner type checking and inference 
+  Pedro Vasconcelos, 2023
 -}
 
 module Typecheck exposing (..)
 
 import Dict exposing (Dict)
-import AST exposing (Name, Type(..), Expr(..), 
-                         Pattern(..), Alt, Program(..), Bind)
+import Set
+import AST exposing (Expr(..), Matching(..), Pattern(..), Bind, Name)
+import Types exposing (Type(..))
 import Tc exposing (Tc, pure, andThen, explain, fail)
-import Prelude
+-- import Prelude
 import Pretty
 
 -- * type environments      -
 type alias TyEnv
-    = Dict Name Type
+    = Dict AST.Name Type
 
-
+{-
 tcProgram : List Bind -> Program -> Result String Program
 tcProgram prelude prog
     = case prog of
@@ -24,7 +26,7 @@ tcProgram prelude prog
               (tcRecBind (preludeEnv prelude) binds |>
                andThen (\env1 -> tcExpr env1 expr |>
                       andThen (\_ -> pure prog)))
-      
+-}      
 
 -- typecheck a single expression      
 tcExpr : TyEnv -> Expr -> Tc Type
@@ -33,29 +35,47 @@ tcExpr env expr
       <| case expr of
           Number _ ->
               pure TyInt
-          Boolean _ ->
-              pure TyBool
           Var v ->
               case Dict.get v env of
                   Just ty ->
                       Tc.freshInst ty
                   Nothing ->
                       fail ("undefined variable: " ++ v)
-                 
-          App e0 args ->
-              tcExpr env e0 |>
-              andThen (\t0 -> tcApplication env t0 args)
 
-          Lam vars e ->
-              tcLambda env vars e
+          Cons "True" [] ->
+              pure TyBool
+          Cons "False" [] ->
+              pure TyBool
+          Cons ":" [hd,tl] ->
+              tcExpr env hd |>
+              andThen (\tyhd ->
+              tcExpr env tl |>
+              andThen (\tytl ->
+              Tc.unify tytl (TyList tyhd) |>
+              andThen (\_ -> pure tytl)))
+          Cons _ _ ->
+              Tc.fail "not implemented"
+              
+          App fun arg ->
+              tcExpr env fun |>
+              andThen (\tyfun -> tcExpr env arg |>
+              andThen (\tyarg -> Tc.freshVar |>
+              andThen (\a -> Tc.unify tyfun (TyFun tyarg a) |>
+              andThen (\_ -> pure a))))
+
+          Lam _ match ->
+              Tc.freshVar |>
+              andThen (\ty -> tcMatching env match ty |>
+              andThen (\_ -> pure ty))
+                           
 
           IfThenElse e0 e1 e2 ->
               tcExpr env e0 |>
               andThen (\t0 -> Tc.unify t0 TyBool |>
-                       andThen (\_ -> tcExpr env e1 |>
-                                andThen (\t1 -> tcExpr env e2 |>
-                                         andThen (\t2 -> Tc.unify t1 t2 |>
-                                                  andThen (\_ -> pure t1)))))
+              andThen (\_ -> tcExpr env e1 |>
+              andThen (\t1 -> tcExpr env e2 |>
+              andThen (\t2 -> Tc.unify t1 t2 |>
+              andThen (\_ -> pure t1)))))
 
           TupleLit args ->
               Tc.traverse (tcExpr env) args |>
@@ -64,24 +84,59 @@ tcExpr env expr
           ListLit args ->
               Tc.freshVar |>
               andThen (\a ->
-                  Tc.traverse (\arg -> tcExpr env arg |>
-                                       andThen (\t -> Tc.unify t a)) args
-                      |> andThen (\_ -> pure (TyList a)))
+              Tc.traverse (\arg -> tcExpr env arg |>
+              andThen (\t -> Tc.unify t a)) args |>
+              andThen (\_ -> pure (TyList a)))
 
           InfixOp op e1 e2 ->
+              Debug.todo "infix"
+              {-
               tcExpr env (Var op) |>
               andThen (\top -> tcApplication env top [e1,e2])
+               -}
 
-          Fail err ->
+          Error ->
               Tc.freshVar 
-
-          Eval e ->
-              tcExpr env e
 
 extend : Name -> Type -> TyEnv -> TyEnv
 extend v t env
     = Dict.insert v t env         
 
+
+tcMatching : TyEnv -> Matching -> Type -> Tc ()
+tcMatching env match ty
+    = case match of
+          Return expr _ ->
+              tcExpr env expr |>
+              andThen (\tyr -> Tc.unify tyr ty)
+          Fail ->
+              pure ()
+          Match patt match1 ->
+              Tc.freshVar |>
+              andThen (\ty1 ->
+              Tc.freshVar |>
+              andThen (\ty2 ->
+              Tc.unify (TyFun ty1 ty2) ty |>
+              andThen (\_ ->
+              tcPattern env patt ty1 |>
+              andThen (\env1 ->
+              tcMatching env1 match1 ty2))))
+
+          Arg arg match1 ->
+              tcExpr env arg |>
+              andThen (\ty1 ->
+              Tc.freshVar |>
+              andThen (\ty2 ->
+              Tc.unify (TyFun ty1 ty2) ty |>
+              andThen (\_ ->
+              tcMatching env match1 ty2)))
+
+          Alt m1 m2 ->
+              tcMatching env m1 ty |>
+              andThen (\_ -> tcMatching env m2 ty)
+
+                  
+{-      
 tcLambda : TyEnv -> List Name -> Expr -> Tc Type
 tcLambda env vars body
     = case vars of
@@ -91,7 +146,6 @@ tcLambda env vars body
               Tc.freshVar |>
               andThen (\a -> tcLambda (extend v a env) vs body |>
                            andThen (\t -> pure (TyFun a t)))
-
       
 tcApplication : TyEnv -> Type -> List Expr -> Tc Type
 tcApplication env funtype arglist
@@ -103,8 +157,10 @@ tcApplication env funtype arglist
               andThen (\t0 -> Tc.freshVar |>
                           andThen (\t1 -> Tc.unify funtype (TyFun t0 t1) |>
                                 andThen (\_ -> tcApplication env t1 rest)))
+-}
 
--- typechecking patterns
+
+-- typechecking a pattern against a type
 tcPattern : TyEnv -> Pattern -> Type -> Tc TyEnv
 tcPattern env patt ty
     = case patt of
@@ -114,9 +170,19 @@ tcPattern env patt ty
           (BangP var) ->
               pure (extend var ty env)
 
-          (BooleanP _) ->
+          (ConsP "True" []) ->
               Tc.unify ty TyBool |>
               andThen (\_ -> pure env)
+          (ConsP "False" []) ->
+              Tc.unify ty TyBool |>
+              andThen (\_ -> pure env)
+          (ConsP ":" [hd,tl]) ->
+              Tc.freshVar |>
+              andThen (\a -> Tc.unify ty (TyList a) |>
+              andThen (\_ -> tcPattern env hd a |>
+              andThen (\env1 -> tcPattern env1 tl (TyList a))))
+          (ConsP _ _) ->
+              Tc.fail "not implemented"
 
           (NumberP _) ->
               Tc.unify ty TyInt |>
@@ -125,20 +191,17 @@ tcPattern env patt ty
           (ListP patts) ->
               Tc.freshVar |>
               andThen (\a -> Tc.unify ty (TyList a) |>
-                             andThen (\_ -> tcListPatts env patts a))
+              andThen (\_ -> tcListPatts env patts a))
 
-          (ConsP hd tl) ->
-              Tc.freshVar |>
-              andThen (\a -> Tc.unify ty (TyList a) |>
-                   andThen (\_ -> tcPattern env hd a |>
-                            andThen (\env1 -> tcPattern env1 tl (TyList a))))
 
           (TupleP patts) ->
               Tc.freshVars (List.length patts) |>
               andThen (\ts -> Tc.unify ty (TyTuple ts) |>
-                              andThen (\_ -> tcTuplePatts env (List.map2 Tuple.pair patts ts)))
+              andThen (\_ -> tcTuplePatts env (List.map2 Tuple.pair patts ts)))
 
 
+
+-- check many patterns against a type
 tcListPatts : TyEnv -> List Pattern -> Type -> Tc TyEnv
 tcListPatts env patts ty
     = case patts of
@@ -158,7 +221,7 @@ tcTuplePatts env lst
               andThen (\env1 -> tcTuplePatts env1 rest)
 
                 
-              
+{-              
 -- typecheck a single alternative
 tcAlt : TyEnv -> List Pattern -> Expr -> Tc Type
 tcAlt env patts expr
@@ -251,7 +314,9 @@ wrongTypeSig : Name -> Type -> Type -> Tc a
 wrongTypeSig name tysig tyinfer
      = fail ("type signature " ++ name ++ " :: " ++ Pretty.prettyType tysig
                  ++ " is too general; inferred type: " ++ Pretty.prettyType tyinfer)
-                      
+-}
+
+
 ------------------------------------------------------------------------------
 -- Prelude stuff
 ------------------------------------------------------------------------------
@@ -265,7 +330,7 @@ addTypeSig : Bind -> TyEnv -> TyEnv
 addTypeSig bind tyenv
     = case bind.typeSig of
           Just ty ->
-              Dict.insert bind.name (Tc.generalize ty) tyenv
+              Dict.insert bind.name (Types.generalize Set.empty ty) tyenv
           _ ->
               tyenv
 
@@ -279,7 +344,7 @@ primEnv
       in
       Dict.fromList
       [ ("+", intOp), ("*", intOp), ("-", intOp), ("//", intOp),
-            ("mod", intOp), ("div", intOp), ("negate", TyFun TyInt TyInt)
+        ("mod", intOp), ("div", intOp), ("negate", TyFun TyInt TyInt)
       , ("==", cmpOp), ("/=", cmpOp), ("<=", cmpOp)
       , (">=", cmpOp), ("<", cmpOp), (">", cmpOp)
       , (":", TyFun (TyGen 0) (TyFun (TyList (TyGen 0)) (TyList (TyGen 0))))

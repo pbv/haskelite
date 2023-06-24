@@ -1,16 +1,13 @@
 {-
-  Pretty-printer for Haskelite abstract syntax trees
-  Pedro Vasconcelos 2021
+  Pretty-printer for Haskelite expressions and typers
+  Pedro Vasconcelos 2021-23
 -}
 module Pretty exposing (..)
 
-import AST exposing (Expr(..), Pattern(..), Type(..), Decl(..), Info(..), Name)
-import List.Extra as List
-import Set
+import AST exposing (Expr(..), Pattern(..), Decl(..), Info, Name)
+import Types exposing (Type(..))
 
-
-
--- * pretty printing expressions etc
+-- pretty printing expressions etc
 prettyExpr : Expr -> String
 prettyExpr e = prettyExpr_ 0 e
 
@@ -19,9 +16,7 @@ prettyExpr_ prec e =
     case e of
         Number n -> paren (prec>0 && n<0) <| String.fromInt n
 
-        Boolean b -> if b then "True" else "False"
-
-        Var x -> if isOperator x then "("++x++")" else x
+        Var x -> if AST.isOperator x then "("++x++")" else x
 
         ListLit l ->
             "[" ++
@@ -33,20 +28,29 @@ prettyExpr_ prec e =
             (String.join "," <| List.map prettyExpr l) ++
             ")"
 
-        App (Var ":") [e1, e2] ->
+        Cons ":" [e1, e2] ->
             paren (prec>0)
                 <| prettyExpr_ 1 e1 ++ ":" ++ prettyExpr_ 1 e2
 
-        App (Var "enumFrom") [e1] ->
+        Cons tag [] ->
+            tag
+                    
+        Cons tag args ->
+            paren (prec>0) <|
+                tag ++ " " ++
+                String.join " " (List.map (prettyExpr_ 1) args)
+                    
+
+        App (Var "enumFrom") e1 ->
             "[" ++ prettyExpr_ 1 e1 ++ "..]"
 
-        App (Var "enumFromThen") [e1, e2] ->
+        App (App (Var "enumFromThen") e1) e2 ->
             "[" ++ prettyExpr_ 1 e1 ++ "," ++ prettyExpr_ 1 e2 ++ "..]"
                 
-        App (Var "enumFromTo") [e1, e2] ->
+        App (App (Var "enumFromTo") e1) e2 ->
             "[" ++ prettyExpr_ 1 e1 ++ ".." ++ prettyExpr_ 1 e2 ++ "]"
 
-        App (Var "enumFromThenTo") [e1, e2, e3] ->
+        App (App (App (Var "enumFromThenTo") e1) e2) e3 ->
             "[" ++ prettyExpr_ 1 e1 ++ "," ++ prettyExpr_ 1 e2 ++ ".."
                 ++ prettyExpr_ 1 e3 ++ "]"
 
@@ -54,24 +58,24 @@ prettyExpr_ prec e =
             paren (prec>0)
                 <| prettyExpr_ 1 e1 ++ formatOperator op ++ prettyExpr_ 1 e2 
 
-        App e0 args ->
-            paren (prec>0)
-                <| String.join " "
-                <| List.map (prettyExpr_ 1) (e0::args)
+        App e0 e1 ->
+            paren (prec>0) <|
+            prettyExpr e0 ++ " " ++ prettyExpr_ 1 e1
 
-        Lam xs e1 ->
-            paren (prec>0)
-                <| "\\" ++ String.join " " xs ++ " -> " ++ prettyExpr_ 1 e1 
+        Lam (Just id) m ->
+            id
+
+        Lam Nothing _ ->
+            "<function>"
                 
         IfThenElse e1 e2 e3 ->
             paren (prec>0)
                 <|  "if " ++ prettyExpr e1 ++ " then " ++
                     prettyExpr e2 ++ " else " ++ prettyExpr e3
 
-        Fail msg -> msg
+        Error ->
+            "<error>"
 
-        Eval e1 ->
-            prettyExpr_ prec e1
 
 
 paren : Bool -> String -> String
@@ -84,7 +88,7 @@ formatOperator : Name -> String
 formatOperator op
     = if op=="&&" || op == "||"
       then " " ++ op ++ " "
-      else if isOperator op then op else "`" ++ op ++ "`"
+      else if AST.isOperator op then op else "`" ++ op ++ "`"
 
       
                     
@@ -95,18 +99,21 @@ prettyPattern p =
             x
         BangP x ->
             "!"++x
-        BooleanP b ->
-            if b then "True" else "False"
         NumberP n ->
             String.fromInt n
         TupleP ps ->
             "(" ++ String.join "," (List.map prettyPattern ps) ++ ")"
         ListP ps ->
             "[" ++ String.join "," (List.map prettyPattern ps) ++ "]"
-        ConsP p1 p2 ->
-            "(" ++ prettyPattern p1 ++ ":" ++
-                prettyPattern p2 ++ ")"
-
+        ConsP ":" [p1,p2] ->
+            "(" ++ prettyPattern p1 ++ ":" ++ prettyPattern p2 ++ ")"
+        ConsP tag [] ->
+            tag
+        ConsP tag ps ->
+            "(" ++ tag ++ " " ++
+                String.join " " (List.map prettyPattern ps) ++ ")"
+                
+           
 
 
 prettyType : Type -> String
@@ -131,11 +138,11 @@ prettyType_ prec ty
               paren (prec>0) <|
                   prettyType_ 1 t1 ++ "->" ++ prettyType_ 0 t2 
 
-
 showGenVar : Int -> String
 showGenVar n
     = String.fromChar <| Char.fromCode <| Char.toCode 'a' + n
-                    
+
+{-
 prettyDecl : Decl -> String
 prettyDecl decl =
     case decl of
@@ -164,13 +171,6 @@ prettyInfo info =
     case info of
         Prim str -> str
         Rewrite decl -> prettyDecl decl
-    
+-}
           
-isOperator : Name -> Bool
-isOperator = String.all operatorChar 
                     
-operatorChar : Char -> Bool
-operatorChar c =
-    c=='!' || c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
-        c==':' || c=='=' || c=='&' || c=='|' || c=='.' 
-          

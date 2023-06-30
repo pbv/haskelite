@@ -58,11 +58,38 @@ collectAlts decls
 
 declarations : Parser (List Bind)
 declarations 
-    = succeed collectBinds
+    = (succeed collectBinds
           |= declList
-          |. Parser.end
+          |. Parser.end) |>
+      andThen (\binds ->  checkBinds binds |>
+      andThen (\_ -> succeed binds))
 
+-- check arities of all bindings          
+checkBinds : List Bind -> Parser ()
+checkBinds binds 
+    = case binds of
+          [] ->
+              succeed ()
+          (first::rest) ->
+              checkBind first |>
+              andThen (\_ -> checkBinds rest)
 
+checkBind : Bind -> Parser ()
+checkBind bind
+    = case bind.expr of
+          Lam _ m ->
+              case AST.matchingWellformed m of
+                  Just _ ->
+                      succeed ()
+                  Nothing ->
+                      problem ("equations for " ++ bind.name ++
+                                   " have inconsistent number of arguments")
+          _ ->
+              succeed ()
+                              
+                
+
+          
 -- collect declarations by identifier and make single bindings
 collectBinds : List Decl -> List Bind
 collectBinds decls
@@ -74,7 +101,7 @@ makeBind pair =
     case pair of
         (TypeSig id ty, rest) ->
             { name = id,
-              typeSig = Just (Types.generalize Set.empty ty),
+              typeSig = Just ty,
               expr = Lam (Just id) (collectAlts rest)
             }
         (Equation id match, rest) ->
@@ -84,15 +111,16 @@ makeBind pair =
             }
 
 collectAlts : List Decl -> Matching
-collectAlts = List.foldr joinAlt Fail
+collectAlts = List.foldl joinDecl Fail
 
-joinAlt : Decl -> Matching -> Matching              
-joinAlt decl match2
+joinDecl : Decl -> Matching -> Matching    
+joinDecl decl match1
     = case decl of
-          TypeSig _ _ -> match2
-          Equation _ match1 -> case match2 of
-                                   Fail -> match1
-                                   _    -> Alt match1 match2
+          TypeSig _ _ ->
+              match1
+          Equation _ match2 ->
+              joinAlt match1 match2 
+
              
              
 declList : Parser (List Decl)
@@ -129,10 +157,10 @@ prefixEquation
                         case alts of
                             [] ->
                                 succeed (\(expr,posfix) ->
-                                             Equation id (makeSimpleEquation patts expr (prefix++posfix)))
+                                             Equation id (makeSimpleMatching patts expr (prefix++posfix)))
                                    |= getParseChomped_ equationRHS
                             _ ->
-                                succeed (Equation id (makeGuardEquation patts prefix alts))))
+                                succeed (Equation id (makeGuardMatching patts prefix alts))))
     
 
 infixEquation : Parser Decl
@@ -200,26 +228,59 @@ guardedExpr
           |. spaces
           |= topExpr
 
+makeGuardEquation : Name -> Matching -> Parser Decl
+makeGuardEquation id match
+    = case AST.matchingWellformed match of
+          Just _ ->
+              succeed (Equation id match)
+          Nothing ->
+              problem "equations with different number arguments"
+             
 
-makeSimpleEquation : List Pattern -> Expr -> String -> Matching
-makeSimpleEquation patts expr info
+makeSimpleMatching : List Pattern -> Expr -> String -> Matching
+makeSimpleMatching patts expr info
     = makeMatching patts (Return expr info)
 
-makeGuardEquation : List Pattern
+makeGuardMatching : List Pattern
                   -> String
                   -> List ((Expr,Expr),String)
                   -> Matching      
-makeGuardEquation patts prefix alts
-    =  makeAlts <|
-          List.map (\((guard,expr),posfix) ->
-                        makeMatching patts (Arg guard
-                                                (Match (ConsP "True" [])
-                                                     (Return expr (prefix++posfix))))
-                   ) alts
+makeGuardMatching patts prefix alts
+    =  joinAlts <|
+       List.map (\((guard,expr),posfix) ->
+                     makeMatching patts (makeGuard guard
+                                             expr (prefix++posfix))
+                ) alts
 
 
-makeAlts : List Matching -> Matching
-makeAlts = List.foldr Alt Fail 
+
+makeGuard : Expr -> Expr -> String -> Matching
+makeGuard guard expr info
+    = case guard of
+          -- shortcircuit redudant conditions
+          Var "otherwise" ->
+              Return expr info
+          Cons "True" [] ->
+              Return expr info
+          Cons "False" [] ->
+              Fail
+          _ ->
+              Arg guard (Match (ConsP "True" []) (Return expr info))
+              
+
+-- join many matchings into an alternative
+joinAlts : List Matching -> Matching
+joinAlts = List.foldr joinAlt Fail
+
+-- join two matchings           
+-- eliminating redudant Fails 
+joinAlt : Matching -> Matching -> Matching
+joinAlt m1 m2
+    = case m1 of
+          Fail -> m2
+          _ -> case m2 of
+                   Fail -> m1
+                   _ -> Alt m1 m2
              
              
 ---------------------------------------------------------------------------
@@ -325,7 +386,7 @@ integer = Parser.chompWhile Char.isDigit
 pattern : Parser Pattern
 pattern =
     oneOf
-    [ succeed VarP
+    [ succeed (\id -> if id == "_" then DefaultP else VarP id)
            |= identifier
     , succeed BangP
            |. operator "!"
@@ -389,15 +450,13 @@ patternList =
     , trailing = Parser.Forbidden
     } |>
     andThen
-    (ensure distinctPatterns "all pattern variables to be distinct")
+    (ensure distinctPatterns "all pattern variables should be distinct")
 
 
 -- * check all pattern variables are distinct
 distinctPatterns : List Pattern -> Bool
 distinctPatterns ps
-    = List.allDifferent <|
-      List.filter (\v -> v/="_") <|
-      List.concatMap AST.patternVars ps
+    = List.allDifferent <| List.concatMap AST.patternVars ps
 
     
 -- top-level expressions
@@ -807,7 +866,8 @@ zip (x:xs) (y:ys) = (x,y) : zip xs ys
 """
 
 example2 =
-    """[] ++ ys = ys
+    """
+[] ++ ys = ys
 (x:xs) ++ ys = x : (xs++ys)
 """
    
@@ -816,8 +876,14 @@ example3 =
 foo x | x>0 = 42
       | x<0 = 1+x
       | otherwise = 0
-foo y = y+1
+
+bar [] = 1
+bar (x:xs) = 2
 """
 
-example4 = "1+2"
+example4 = """
+foo x y |x>y = x+y
+foo x y = x+z
+"""
+                   
    

@@ -15,15 +15,16 @@ type alias Name
 type Expr 
     = App Expr Expr
     | Lam (Maybe Name) Matching  
-      -- lambda is named if it was defined through a binding
+      -- a lambda is Just name if it was defined through a binding;
+      -- otherwise the name field is Nothing
     | Var Name
     | Number Int
     | Cons Name (List Expr)
-    | ListLit (List Expr)                         -- [1,2,3]
-    | TupleLit (List Expr)                        -- (1,2,3)
-    | InfixOp Name Expr Expr                      --  primitive operators +, * etc
+    | ListLit (List Expr)              -- [1,2,3]
+    | TupleLit (List Expr)             -- (1,2,3)
+    | InfixOp Name Expr Expr           --  primitive operators +, * etc
     | IfThenElse Expr Expr Expr
-    | Error                                       -- runtime errors
+    | Error                            -- runtime errors
       
 -- * matchings
 type Matching 
@@ -36,7 +37,8 @@ type Matching
 
 -- * patterns      
 type Pattern
-    = VarP Name
+    = DefaultP               -- ignore (_)
+    | VarP Name
     | BangP Name             -- bang pattern (for strict evaluation)
     | NumberP Int
     | ListP (List Pattern)
@@ -74,65 +76,7 @@ declName decl
           Equation name _ -> name
 
 
-{-
--- remove evaluation context marker
-removeCtx : Expr -> Expr
-removeCtx expr =
-    case expr of
-        App e1 args ->
-            App (removeCtx e1) (List.map removeCtx args)
-
-        Lam m ->
-            Lam (removeMatchCtx m)
-
-        ListLit es ->
-            ListLit (List.map removeCtx es)
-
-        TupleLit es ->
-            TupleLit (List.map removeCtx es)
-
-        InfixOp op e1 e2 ->
-            InfixOp op (removeCtx e1) (removeCtx e2)
-
-        IfThenElse e1 e2 e3 ->
-            IfThenElse (removeCtx e1) (removeCtx e2) (removeCtx e3)
-                
-        Ctx e ->
-            e
-
-        Var x ->           
-            Var x        -- NB: these have a different type than the lhs
-                         -- hence the duplication
-        Number n ->
-            Number n
-
-        Boolean b ->
-            Boolean b
-
-        Error  ->
-            Error 
-          
-
-removeMatchCtx : Matching -> Matching
-removeMatchCtx m
-    = case m of
-          Return expr info ->
-              Return (removeCtx expr) info
-
-          Fail  ->
-              Fail 
-
-          Match patt m1 ->
-              Match patt (removeMatchCtx m1)
-                  
-          Arg expr m1 ->
-              Arg (removeCtx expr) (removeMatchCtx m1)
-
-          Alt m1 m2 ->
-              Alt (removeMatchCtx m1) (removeMatchCtx m2)
--}
-                
-               
+              
 -- apply substitution to an expression
 applySubst : Subst -> Expr -> Expr
 applySubst s e
@@ -174,7 +118,7 @@ applySubst s e
                   
 applyMatchSubst : Subst -> Matching -> Matching
 applyMatchSubst s m
-    = case m of
+    = case m of          
           Return e info ->
               Return (applySubst s e) info
 
@@ -214,7 +158,7 @@ patternVars patt
                       
 
 
--- * compute the arity of a matching
+-- compute the arity of a matching
 matchingArity : Matching  -> Int
 matchingArity m
     = case m of
@@ -230,10 +174,39 @@ matchingArity m
           Arg _ m1 ->
               max 0 (matchingArity m1 - 1)
                         
-          Alt m1 m2 ->
-              max (matchingArity m1) (matchingArity m2)
-                  -- both arities should be equal
+          Alt m1 _ ->
+              matchingArity m1
+              -- assumes both arities are equal, i.e.
+              -- matching is well formed
 
+
+-- check that a matching is well formed, i.e.
+-- all branches of alternatives have identical arities
+matchingWellformed : Matching -> Maybe Int
+matchingWellformed m
+    = case m of
+          Return _ _ ->
+              Just 0
+
+          Fail ->
+              Just 0
+
+          Match _ m1 ->
+              matchingWellformed m1 |>
+              Maybe.andThen (\a -> Just (1+a))
+
+          Arg _ m1 ->
+              matchingWellformed m1 |>
+              Maybe.andThen (\a -> Just (max 0 (a-1)))
+                        
+          Alt m1 m2 ->
+              matchingWellformed m1 |>
+              Maybe.andThen (\a1 -> matchingWellformed m2 |>
+              Maybe.andThen (\a2 -> if a1==a2 then Just a1 else Nothing))
+              -- both arities should be equal
+          
+      
+                  
 isOperator : Name -> Bool
 isOperator = String.all operatorChar 
                   
@@ -241,7 +214,12 @@ operatorChar : Char -> Bool
 operatorChar c =
     c=='!' || c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
         c==':' || c=='=' || c=='&' || c=='|' || c=='.' 
-          
+
+trueCons : Expr
+trueCons = Cons "True" []
+
+falseCons : Expr           
+falseCons = Cons "False" []           
              
 
             

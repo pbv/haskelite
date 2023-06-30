@@ -1,46 +1,108 @@
 {-
-  Pretty-printer for Haskelite expressions and typers
+  Pretty-printer for Haskelite expressions and types
   Pedro Vasconcelos 2021-23
 -}
 module Pretty exposing (..)
 
-import AST exposing (Expr(..), Pattern(..), Decl(..), Info, Name)
+import AST exposing (Expr(..), Matching(..), Pattern(..), Name)
 import Types exposing (Type(..))
+import DList exposing (DList)
 
--- pretty printing expressions etc
+-- a type for strings with efficient concatenation
+-- i.e. difference lists of strings
+type alias StringBuilder
+    = DList String
+
+-- convert a string builder back into a string      
+toString : StringBuilder -> String
+toString sb
+    = String.concat (DList.toList sb)
+
+-- optionaly add parenthesis around a stringbuilder      
+paren : Bool -> StringBuilder -> StringBuilder
+paren cond sb
+    = if cond then
+          bracket "(" ")" sb
+      else
+          sb
+
+-- bracket a stringbuild with start and end delimiters
+bracket : String -> String -> StringBuilder -> StringBuilder
+bracket start end sb
+    = DList.cons start (DList.append sb (DList.singleton end))
+
+
+-- toplevel function for pretty printing expressions 
 prettyExpr : Expr -> String
-prettyExpr e = prettyExpr_ 0 e
+prettyExpr e = toString (prettyExpr_ 0 e)
 
-prettyExpr_ : Int ->  Expr -> String
+prettyExpr_ : Int ->  Expr -> StringBuilder
 prettyExpr_ prec e =
     case e of
-        Number n -> paren (prec>0 && n<0) <| String.fromInt n
+        Number n ->
+            paren (prec>0 && n<0) <| DList.singleton (String.fromInt n)
 
-        Var x -> if AST.isOperator x then "("++x++")" else x
-
-        ListLit l ->
-            "[" ++
-            (String.join "," <| List.map prettyExpr l) ++
-            "]"
+        Var x ->
+            paren (AST.isOperator x) (DList.singleton x)
                 
+        ListLit l ->
+            bracket "[" "]" <|
+                (DList.intersperse
+                      (DList.singleton ",")                      
+                      (List.map (prettyExpr_ 0) l))
+
+
         TupleLit l ->
-            "(" ++
-            (String.join "," <| List.map prettyExpr l) ++
-            ")"
+            bracket "(" ")" <|
+                 (DList.intersperse
+                      (DList.singleton ",")                      
+                      (List.map (prettyExpr_ 0) l))
+
 
         Cons ":" [e1, e2] ->
             paren (prec>0)
-                <| prettyExpr_ 1 e1 ++ ":" ++ prettyExpr_ 1 e2
+                (DList.append (prettyExpr_ 1 e1)
+                     (DList.cons ":" (prettyExpr_ 1 e2)))
 
         Cons tag [] ->
-            tag
+            DList.singleton tag
                     
         Cons tag args ->
             paren (prec>0) <|
-                tag ++ " " ++
-                String.join " " (List.map (prettyExpr_ 1) args)
+                (DList.intersperse (DList.singleton " ")
+                         ((DList.singleton tag) ::
+                          (List.map (prettyExpr_ 1) args)))
+
+        InfixOp op e1 e2 ->
+            paren (prec>0)
+                <| DList.append (prettyExpr_ 0 e1)
+                    (DList.append (DList.singleton (formatOperator op))
+                                       (prettyExpr_ 1 e2))
+
+        App e0 e1 ->
+            paren (prec>0) <|
+            DList.append (prettyExpr_ 0 e0)
+                (DList.append (DList.singleton " ") (prettyExpr_ 1 e1))
+
+
+        Lam optid match ->
+            case collectArgs match [] of
+                (_, []) ->
+                    prettyLam prec optid match
+                (match1, args1) ->
+                    let
+                        expr1 = List.foldl (\x y->App y x) (Lam optid match1)  args1
+                    in 
+                        prettyExpr_ prec expr1
                     
 
+        Error ->
+            DList.singleton "<runtime error>"
+
+        _ ->
+            DList.singleton "<unimplemented>"
+
+{-                
         App (Var "enumFrom") e1 ->
             "[" ++ prettyExpr_ 1 e1 ++ "..]"
 
@@ -54,13 +116,6 @@ prettyExpr_ prec e =
             "[" ++ prettyExpr_ 1 e1 ++ "," ++ prettyExpr_ 1 e2 ++ ".."
                 ++ prettyExpr_ 1 e3 ++ "]"
 
-        InfixOp op e1 e2 ->
-            paren (prec>0)
-                <| prettyExpr_ 1 e1 ++ formatOperator op ++ prettyExpr_ 1 e2 
-
-        App e0 e1 ->
-            paren (prec>0) <|
-            prettyExpr e0 ++ " " ++ prettyExpr_ 1 e1
 
         Lam (Just id) m ->
             id
@@ -76,12 +131,46 @@ prettyExpr_ prec e =
         Error ->
             "<error>"
 
+-}
+
+collectArgs : Matching -> List Expr -> (Matching, List Expr)
+collectArgs m args
+    = case m of
+          Arg e1 m1 ->
+              collectArgs m1 (e1::args)
+          _ ->
+              (m, args)
 
 
-paren : Bool -> String -> String
-paren b str
-    = if b then "("++str++")" else str
+-- pretty print a lambda
+prettyLam : Int -> Maybe Name -> Matching -> StringBuilder
+prettyLam prec optid m
+    = case optid of
+          Just id ->
+              -- just use the binding name if there is one
+              DList.singleton id
+          Nothing ->
+              -- otherwise check if it has any arguments
+              case m of
+                  Match p m1 ->
+                      paren True <| DList.cons "\\" (prettyMatch m)
+                  Return e _ ->
+                      prettyExpr_ prec e
+                  _ ->
+                      DList.singleton "<unimplemented>"
+          
+-- pretty print a matching            
+prettyMatch : Matching -> StringBuilder
+prettyMatch m =
+    case m of
+        (Match p m1) ->
+            DList.append (prettyPattern p)
+                (DList.cons " " (prettyMatch m1))
+        (Return e _) ->
+            DList.cons "-> " (prettyExpr_ 0 e)
 
+        _ ->
+            DList.singleton "<unimplemented>"
 
 -- format an infix operator, sometimes with spaces either side
 formatOperator : Name -> String
@@ -89,54 +178,67 @@ formatOperator op
     = if op=="&&" || op == "||"
       then " " ++ op ++ " "
       else if AST.isOperator op then op else "`" ++ op ++ "`"
-
-      
-                    
-prettyPattern : Pattern -> String
+              
+-- pretty print a pattern                   
+prettyPattern : Pattern -> StringBuilder
 prettyPattern p =
     case p of
+        DefaultP ->
+            DList.singleton "_"
         VarP x ->
-            x
+            DList.singleton x
         BangP x ->
-            "!"++x
+            DList.singleton ("!"++x)
         NumberP n ->
-            String.fromInt n
+            DList.singleton (String.fromInt n)
         TupleP ps ->
-            "(" ++ String.join "," (List.map prettyPattern ps) ++ ")"
+            bracket "(" ")" <|
+                DList.intersperse
+                    (DList.singleton ",")
+                    (List.map prettyPattern ps)
         ListP ps ->
-            "[" ++ String.join "," (List.map prettyPattern ps) ++ "]"
+            bracket "[" "]" <|
+                DList.intersperse
+                    (DList.singleton ",")
+                    (List.map prettyPattern ps) 
         ConsP ":" [p1,p2] ->
-            "(" ++ prettyPattern p1 ++ ":" ++ prettyPattern p2 ++ ")"
+            bracket "(" ")" <|
+                DList.append (prettyPattern p1)
+                    (DList.cons ":" (prettyPattern p2))
         ConsP tag [] ->
-            tag
+            DList.singleton tag
         ConsP tag ps ->
-            "(" ++ tag ++ " " ++
-                String.join " " (List.map prettyPattern ps) ++ ")"
+            bracket "(" ")" <|
+                DList.intersperse (DList.singleton " ")
+                    ((DList.singleton tag) :: (List.map prettyPattern ps))
                 
            
 
-
 prettyType : Type -> String
-prettyType ty = prettyType_ 0 ty
+prettyType ty = toString (prettyType_ 0 ty)
 
-prettyType_ : Int -> Type -> String
+prettyType_ : Int -> Type -> StringBuilder
 prettyType_ prec ty
     = case ty of
           TyInt ->
-              "Int"
+              DList.singleton "Int"
           TyBool ->
-              "Bool"
+              DList.singleton "Bool"
           TyVar name ->
-              name
+              DList.singleton name
           TyGen idx ->
-              showGenVar idx
+              DList.singleton (showGenVar idx)
           TyList ty1 ->
-              "[" ++ prettyType ty1 ++ "]"
+              bracket "[" "]" (prettyType_ 0 ty)
           TyTuple ts ->
-              "(" ++ String.join "," (List.map prettyType ts) ++ ")"
+              bracket "(" ")" <|
+                  DList.intersperse
+                      (DList.singleton ",")
+                      (List.map (prettyType_ 0) ts) 
           TyFun t1 t2 ->
               paren (prec>0) <|
-                  prettyType_ 1 t1 ++ "->" ++ prettyType_ 0 t2 
+                  DList.append (prettyType_ 1 t1)
+                      (DList.cons "->" (prettyType_ 0 t2))
 
 showGenVar : Int -> String
 showGenVar n
@@ -174,3 +276,9 @@ prettyInfo info =
 -}
           
                     
+example1 = Lam (Just "foo") (Match (VarP "x") (Return (Number 42) ""))
+
+example2 = Lam (Just "foo") (Arg (App (Var "f") (Number 2)) (Arg (Number 1) (Match (VarP "x") (Return (Number 42) ""))))
+
+match2 = (Arg (Number 2) (Arg (Number 1) (Match (VarP "x") (Match (VarP "y") (Return (App (Var "f") (Number 42)) "")))))
+           

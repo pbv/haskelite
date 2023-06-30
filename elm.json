@@ -13,7 +13,8 @@
             "elm/json": "1.1.3",
             "elm/parser": "1.1.0",
             "elm-community/list-extra": "8.3.1",
-            "folkertdev/elm-state": "3.0.1"
+            "folkertdev/elm-state": "3.0.1",
+            "league/difference-list": "2.0.0"
         },
         "indirect": {
             "elm/time": "1.0.0",

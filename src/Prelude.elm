@@ -18,6 +18,9 @@ preludeResult
 prelude : String
 prelude =
     """
+otherwise :: Bool
+otherwise = True
+
 (&&) :: Bool -> Bool -> Bool
 False && x = False
 True  && x = x
@@ -37,10 +40,12 @@ odd :: Int -> Bool
 odd x = mod x 2 == 1
 
 min :: Int -> Int -> Int
-min x y = if x<=y then x else y
+min x y | x<=y = x
+        | otherwise = y
 
 max :: Int -> Int -> Int
-max x y = if x<=y then y else x
+max x y | x<=y = y
+        | otherwise = x
 
 fst :: (a,b) -> a
 fst (x,y) = x
@@ -112,7 +117,8 @@ map f (x:xs) = f x : map f xs
 
 filter :: (a -> Bool) -> [a] -> [a]
 filter f [] = []
-filter f (x:xs)= if f x then x : filter f xs else filter f xs
+filter f (x:xs) | f x = x : filter f xs 
+                | otherwise = filter f xs
 
 zip :: [a] -> [b] -> [(a,b)]
 zip [] ys = []
@@ -138,9 +144,11 @@ foldl' f !z (x:xs) = foldl' f (f z x) xs
 
 takeWhile :: (a -> Bool) -> [a] -> [a]
 takeWhile p [] = []
-takeWhile p (x:xs) = if p x then x : takeWhile p xs else []
+takeWhile p (x:xs) | p x = x : takeWhile p xs
+                   | otherwise = []
 
 dropWhile :: (a -> Bool) -> [a] -> [a]
 dropWhile p [] = []
-dropWhile p (x:xs) = if p x then dropWhile p xs else x:xs
+dropWhile p (x:xs) | p x = dropWhile p xs
+                   | otherwise = x:xs
 """

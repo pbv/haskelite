@@ -15,6 +15,7 @@ import AST exposing (Expr(..),
 import Dict exposing (Dict)
 import Debug
 
+
 type alias Conf
     = (Heap, Control, Stack)
 
@@ -68,11 +69,6 @@ getControl (_, control, _) = control
 getStack : Conf -> Stack
 getStack (_, _, stack) = stack           
 
-last : List a -> Maybe a
-last xs = case xs of
-              [] -> Nothing
-              [x] -> Just x
-              (x::xs1) -> last xs1
                          
 --                
 -- a single step transition of the machine
@@ -117,10 +113,10 @@ transition conf
 
           (heap, E (Number v2), (RetPrim2 op v1)::stack) ->
               case applyPrimitive op v1 v2 of
-                  Just v ->
-                      Just (heap, E (Number v), stack)
+                  Just result ->
+                      Just (heap, E result, stack)
                   _ ->
-                      Nothing
+                      Just (heap, E Error, stack)
                   
           -- update variable
           (heap, E w, Update y::stack) ->
@@ -132,6 +128,10 @@ transition conf
               else
                   Nothing
 
+          -- ignore an argument
+          (heap, M (Match DefaultP m1) (e1::args), stack) ->
+              Just (heap, M m1 args, stack)
+                      
           -- bind a variable
           (heap, M (Match (VarP x) m1) (e1::args), stack) ->
               let
@@ -223,31 +223,66 @@ applyArgs expr args =
             applyArgs (App expr arg1) rest
               
 
-applyPrimitive : Name -> Int -> Int -> Maybe Int
+applyPrimitive : Name -> Int -> Int -> Maybe Expr
 applyPrimitive op v1 v2
     = case op of
-          "+" -> Just (v1 + v2)
-          "-" -> Just (v1 - v2)
-          "*" -> Just (v1 * v2)
+          "+" -> Just (Number (v1 + v2))
+          "-" -> Just (Number (v1 - v2))
+          "*" -> Just (Number (v1 * v2))
           "div" ->
-              if v2 /= 0 then
-                  Just (v1 // v2)
-              else
-                  Nothing
+              Just (if v2 /= 0 then
+                        Number (v1 // v2)
+                    else
+                        Error)
+          "==" ->
+              Just (compareOp (v1 == v2))
+          ">" ->
+              Just (compareOp (v1 > v2))
+          ">=" ->
+              Just (compareOp (v1 >= v2))
+          "<" ->
+              Just (compareOp (v1 < v2))
+          "<=" ->
+              Just (compareOp (v1 <= v2))
           _ ->
               Nothing
 
+compareOp : Bool -> Expr
+compareOp c = if c then AST.trueCons else AST.falseCons
 
 
 transitions : Conf -> List Conf
 transitions conf
-    = conf :: case transition conf of
+    = conf :: case next conf of
                   Nothing ->
                       []
                   Just conf1 ->
                       transitions conf1
 
+next : Conf -> Maybe Conf
+next conf
+    = case transition conf of
+          Nothing ->
+              Nothing
+          Just conf1 ->
+              if observable conf1 then
+                  Just conf1
+              else
+                  next conf1
 
+                          
+-- check whether a configuration should be shown to the user
+observable : Conf -> Bool
+observable (heap, control, stack)
+    = case (control, stack) of
+          (E (Lam optname m), _) -> True
+          (E (InfixOp op e1 e2), _) -> True
+          (E w, Update y::_) -> False
+          (E w, _) -> isWhnf w
+          (M (Return _ _) _, _) -> True
+          _ -> False
+                          
+--------------------------------------------------------------------
 
 --------------------------------------------------------------------
                           

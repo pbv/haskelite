@@ -30,7 +30,7 @@ unifyAux s t1 t2 eqs
                         
           (TyVar x, _) ->
               if occurs x t2 then
-                 occurCheck t1 t2
+                 occurCheckFail t1 t2
               else
                   unifyEqs (extend x t2 s) eqs
                         
@@ -85,8 +85,8 @@ mismatch t1 t2
                Pretty.prettyType t2)
       
 
-occurCheck : Type -> Type -> Result String a
-occurCheck t1 t2
+occurCheckFail : Type -> Type -> Result String a
+occurCheckFail t1 t2
     = Err ("occur check fail (infinite type): " ++
                Pretty.prettyType t1 ++ " = " ++
                Pretty.prettyType t2 )

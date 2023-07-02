@@ -13,14 +13,14 @@ import AST exposing (Expr(..),
                      Name,
                      Subst)
 import Dict exposing (Dict)
+import Pretty exposing (StringBuilder)
+import DList
+import Heap exposing (Heap)
 import Debug
 
 
 type alias Conf
     = (Heap, Control, Stack)
-
-type alias Heap 
-    = Dict Name Expr
 
 type Control
     = E Expr
@@ -60,6 +60,15 @@ isWhnf expr =
             False
 
 
+isVar : Expr -> Bool
+isVar expr =
+    case expr of
+        Var _ ->
+            True
+        _ ->
+            False
+              
+
 getHeap : Conf -> Heap
 getHeap (heap,_,_) = heap
 
@@ -85,7 +94,16 @@ transition conf
               else
                   case stack of
                       PushArg e1::rest ->
-                          Just (heap, E (Lam Nothing (Arg e1 m)), rest)
+                          -- check if neeed to memoize the
+                          -- result of evaluation
+                          if isVar e1 || isWhnf e1 then
+                              Just (heap, E (Lam optname (Arg e1 m)), rest)
+                          else
+                              -- create new indirection to the expression
+                              let
+                                  (loc, heap1) = Heap.newIndirection heap e1
+                              in
+                                  Just (heap1, E (Lam optname (Arg (Var loc) m)), rest)
                       Update y::rest ->
                           let
                               heap1 = Dict.insert y (Lam optname m) heap
@@ -97,10 +115,16 @@ transition conf
           (heap, E (Var y), stack) ->
               case Dict.get y heap of
                   Just expr ->
-                      let
-                          heap1 = Dict.remove y heap
-                      in
-                          Just (heap1, E expr, Update y::stack)
+                      if isWhnf expr then
+                          Just (heap, E expr, stack)
+                      else
+                          -- blackhole the location before evaluating
+                          -- let
+                          --    heap1 = Dict.remove y heap
+                          -- in
+                          -- NB: THIS IS COMMENTED OUT SO WE CAN
+                          -- PRETTY-PRINT INDIRECTIONS!
+                          Just (heap, E expr, Update y::stack)
                   _ ->
                       Nothing
 
@@ -250,14 +274,21 @@ applyPrimitive op v1 v2
 compareOp : Bool -> Expr
 compareOp c = if c then AST.trueCons else AST.falseCons
 
-
-transitions : Conf -> List Conf
-transitions conf
-    = conf :: case next conf of
-                  Nothing ->
-                      []
-                  Just conf1 ->
-                      transitions conf1
+              
+-- debugging function
+transitions : Conf -> ()
+transitions conf = transitions_ 0 conf
+              
+transitions_ : Int -> Conf -> ()
+transitions_ n conf
+    = let
+        _ = Debug.log (String.fromInt n) (getControl conf, getStack conf)
+      in
+       case next conf of
+           Nothing ->
+               ()
+           Just conf1 ->
+               transitions_ (n+1) conf1
 
 next : Conf -> Maybe Conf
 next conf
@@ -265,24 +296,86 @@ next conf
           Nothing ->
               Nothing
           Just conf1 ->
-              if observable conf1 then
+              if observe conf1 then
                   Just conf1
               else
                   next conf1
 
                           
 -- check whether a configuration should be shown to the user
-observable : Conf -> Bool
-observable (heap, control, stack)
-    = case (control, stack) of
-          (E (Lam optname m), _) -> True
-          (E (InfixOp op e1 e2), _) -> True
-          (E w, Update y::_) -> False
-          (E w, _) -> isWhnf w
-          (M (Return _ _) _, _) -> True
-          _ -> False
-                          
+observe : Conf -> Bool
+observe (heap, control, stack) 
+    = case (control,stack) of
+          (E (Var _),  _) ->
+              False
+          (E (App _ _), _) ->
+              False
+          (E (Lam _ m), _) ->
+              AST.matchingArity m == 0
+          (E w, (Update _::_)) ->
+               False
+          (E _, _) ->
+              True
+          (M (Return _ _) _, (MatchEnd::_)) ->
+              True
+          (M Fail _, (MatchEnd::_)) ->
+              True
+          (M _ _, _) ->
+              False
+
+{-
+explainConf : Conf -> Maybe String
+explainConf (heap, control, stack)
+    = case control of
+          M (Return expr info) _ ->
+              Just info
+          _ ->
+              Nothing
+-}
+                  
+prettyConf : Conf -> Maybe String
+prettyConf (heap, control, stack)
+   = case control of
+         (E expr) ->
+             Just <|
+                 Pretty.toString <|
+                 prettyCont heap stack <|
+                 Pretty.prettyExpr_ heap 0 expr
+         _ ->
+             Nothing
+
+                 
+-- convert a continuation stack into an pretty expression
+prettyCont : Heap -> Stack -> StringBuilder -> StringBuilder
+prettyCont heap stack acc
+    = case stack of
+          [] ->
+              acc
+          (Update _::rest) ->
+              prettyCont heap rest acc
+          (PushArg arg::rest) ->
+              let
+                  acc1 = DList.append acc
+                         (DList.cons " " (Pretty.prettyExpr_ heap 1 arg))
+              in
+                  prettyCont heap rest acc1
+          (RetPrim1 op e2::rest) ->
+              let acc1 = DList.append
+                         acc (DList.cons op
+                                  (Pretty.prettyExpr_ heap 1 e2))
+              in 
+                 prettyCont heap rest acc1
+          (RetPrim2 op v::rest) ->
+              let acc1 = DList.append
+                         (DList.singleton (String.fromInt v))
+                              (DList.cons op acc)
+              in
+                  prettyCont heap rest acc1
+          (_::rest) ->
+              prettyCont heap rest acc
 --------------------------------------------------------------------
+
+
 
 --------------------------------------------------------------------
                           
@@ -301,13 +394,20 @@ example1 =
 example3 : Conf
 example3 =
    let tl =  Lam (Just "tail")
-             (Match (ConsP ":" [VarP "h", VarP "t"])
-                      (Return (Var "t") "tail"))
+             (Match (ConsP ":" [VarP "x", VarP "xs"])
+                      (Return (Var "xs") "tail (x:xs) = xs"))
        e = App tl (ListLit [Number 1, Number 2, Number 3])
    in (Dict.empty, E e, [])
 
 example4 : Conf
-example4 = (Dict.fromList [],M (Match (VarP "h") (Arg (ListLit []) (Match (VarP "t") (Return (Var "t") "tail")))) [Number 1],[MatchEnd])
+example4
+    = let
+        expr = App (Lam Nothing
+                        (Match (ConsP ":" [VarP "h",VarP "t"])
+                             (Return (Var "h") "head")))
+               (ListLit [])
+    in (Dict.empty, E expr, []) 
+    
 
 
 example5 : Conf
@@ -315,13 +415,13 @@ example5 =
     let
         heap = Dict.singleton "sum"
                (Lam (Just "sum")
-                    (Alt (Match (ConsP ":" [VarP "h",VarP "t"])
+                    (Alt (Match (ConsP ":" [VarP "x",VarP "xs"])
                               (Return (InfixOp "+"
-                                           (Var "h")
-                                           (App (Var "sum") (Var "t")))
-                                           "sum-1"))
+                                           (Var "x")
+                                           (App (Var "sum") (Var "xs")))
+                                           "sum (x:xs) = x + sum xs"))
                          (Match (ListP [])
-                              (Return (Number 1) "sum-2"))))
+                              (Return (Number 0) "sum [] = 0"))))
         control = E (App (Var "sum") (ListLit [Number 1,Number 2,Number 3]))
         stack = []
     in
@@ -333,12 +433,40 @@ example6 =
         heap = Dict.singleton "fact"
                (Lam (Just "fact")
                     (Alt (Match (NumberP 0)
-                              (Return (Number 1) "fact-1"))
-                         (Match (BangP "n")
-                              (Return (InfixOp "*" (Var "n") (App (Var "fact") (InfixOp "-" (Var "n") (Number 1)))) "sum-2"))))
+                              (Return (Number 1) "fact 0 = 1"))
+                         (Match (VarP "n")
+                              (Return (InfixOp "*" (Var "n") (App (Var "fact") (InfixOp "-" (Var "n") (Number 1)))) "fact n = n * fact (n-1)"))))
         control = E (App (Var "fact") (Number 5))
         stack = []
     in
         (heap, control, stack)
            
          
+example7 : Conf
+example7 =
+    let heap = Dict.singleton "factAcc"
+               (Lam (Just "factAcc")
+                    (Alt (Match (NumberP 0)
+                              (Match (VarP "acc")
+                                   (Return (Var "acc") "factAcc 0 acc = acc")))
+                         (Match (VarP "n")
+                              (Match (VarP "acc")
+                                   (Return (App (App (Var "factAcc")
+                                                     (InfixOp "-" (Var "n") (Number 1)))
+                                                (InfixOp "*" (Var "n") (Var "acc"))) "factAcc n acc = factAcc (n-1) (n*acc)")))))
+        control = E (App (App (Var "factAcc") (Number 5)) (Number 1))
+        stack = []
+    in
+        (heap, control, stack)
+
+
+example8
+    = let heap = Dict.fromList
+                 [ ("square", Lam (Just "square")
+                        (Match (VarP "x")
+                             (Return (InfixOp "*" (Var "x") (Var "x"))
+                                  "square x = x*x")))
+                 ]
+      in
+          (heap, E (App (Var "square") (App (Var "square") (Number 5))), [])
+               

@@ -6,6 +6,8 @@ module Pretty exposing (..)
 
 import AST exposing (Expr(..), Matching(..), Pattern(..), Name)
 import Types exposing (Type(..))
+import Heap exposing (Heap)
+import Dict
 import DList exposing (DList)
 
 -- a type for strings with efficient concatenation
@@ -33,36 +35,44 @@ bracket start end sb
 
 
 -- toplevel function for pretty printing expressions 
-prettyExpr : Expr -> String
-prettyExpr e = toString (prettyExpr_ 0 e)
+prettyExpr : Heap -> Expr -> String
+prettyExpr h e = toString (prettyExpr_ h 0 e)
 
-prettyExpr_ : Int ->  Expr -> StringBuilder
-prettyExpr_ prec e =
+prettyExpr_ : Heap -> Int ->  Expr -> StringBuilder
+prettyExpr_ heap prec e =
     case e of
         Number n ->
             paren (prec>0 && n<0) <| DList.singleton (String.fromInt n)
 
         Var x ->
-            paren (AST.isOperator x) (DList.singleton x)
+            if Heap.isIndirection x then
+                case Dict.get x heap of
+                    Just e1 ->
+                        prettyExpr_ heap prec e1
+                    Nothing ->
+                        DList.singleton "?"
+                        -- DList.singleton x -- should not happen!
+            else
+                paren (AST.isOperator x) (DList.singleton x)
                 
         ListLit l ->
             bracket "[" "]" <|
                 (DList.intersperse
                       (DList.singleton ",")                      
-                      (List.map (prettyExpr_ 0) l))
+                      (List.map (prettyExpr_ heap 0) l))
 
 
         TupleLit l ->
             bracket "(" ")" <|
                  (DList.intersperse
                       (DList.singleton ",")                      
-                      (List.map (prettyExpr_ 0) l))
+                      (List.map (prettyExpr_ heap 0) l))
 
 
         Cons ":" [e1, e2] ->
             paren (prec>0)
-                (DList.append (prettyExpr_ 1 e1)
-                     (DList.cons ":" (prettyExpr_ 1 e2)))
+                (DList.append (prettyExpr_ heap 1 e1)
+                     (DList.cons ":" (prettyExpr_ heap 1 e2)))
 
         Cons tag [] ->
             DList.singleton tag
@@ -71,29 +81,29 @@ prettyExpr_ prec e =
             paren (prec>0) <|
                 (DList.intersperse (DList.singleton " ")
                          ((DList.singleton tag) ::
-                          (List.map (prettyExpr_ 1) args)))
+                          (List.map (prettyExpr_ heap 1) args)))
 
         InfixOp op e1 e2 ->
             paren (prec>0)
-                <| DList.append (prettyExpr_ 0 e1)
+                <| DList.append (prettyExpr_ heap 1 e1)
                     (DList.append (DList.singleton (formatOperator op))
-                                       (prettyExpr_ 1 e2))
+                                       (prettyExpr_ heap 1 e2))
 
         App e0 e1 ->
             paren (prec>0) <|
-            DList.append (prettyExpr_ 0 e0)
-                (DList.append (DList.singleton " ") (prettyExpr_ 1 e1))
+            DList.append (prettyExpr_ heap 0 e0)
+                (DList.append (DList.singleton " ") (prettyExpr_ heap 1 e1))
 
 
         Lam optid match ->
             case collectArgs match [] of
                 (_, []) ->
-                    prettyLam prec optid match
+                    prettyLam heap prec optid match
                 (match1, args1) ->
                     let
                         expr1 = List.foldl (\x y->App y x) (Lam optid match1)  args1
                     in 
-                        prettyExpr_ prec expr1
+                        prettyExpr_ heap prec expr1
                     
 
         Error ->
@@ -116,20 +126,11 @@ prettyExpr_ prec e =
             "[" ++ prettyExpr_ 1 e1 ++ "," ++ prettyExpr_ 1 e2 ++ ".."
                 ++ prettyExpr_ 1 e3 ++ "]"
 
-
-        Lam (Just id) m ->
-            id
-
-        Lam Nothing _ ->
-            "<function>"
-                
+              
         IfThenElse e1 e2 e3 ->
             paren (prec>0)
                 <|  "if " ++ prettyExpr e1 ++ " then " ++
                     prettyExpr e2 ++ " else " ++ prettyExpr e3
-
-        Error ->
-            "<error>"
 
 -}
 
@@ -143,8 +144,8 @@ collectArgs m args
 
 
 -- pretty print a lambda
-prettyLam : Int -> Maybe Name -> Matching -> StringBuilder
-prettyLam prec optid m
+prettyLam : Heap -> Int -> Maybe Name -> Matching -> StringBuilder
+prettyLam heap prec optid m
     = case optid of
           Just id ->
               -- just use the binding name if there is one
@@ -153,21 +154,21 @@ prettyLam prec optid m
               -- otherwise check if it has any arguments
               case m of
                   Match p m1 ->
-                      paren True <| DList.cons "\\" (prettyMatch m)
+                      paren True <| DList.cons "\\" (prettyMatch heap m)
                   Return e _ ->
-                      prettyExpr_ prec e
+                      prettyExpr_ heap prec e
                   _ ->
                       DList.singleton "<unimplemented>"
           
 -- pretty print a matching            
-prettyMatch : Matching -> StringBuilder
-prettyMatch m =
+prettyMatch : Heap -> Matching -> StringBuilder
+prettyMatch heap m =
     case m of
         (Match p m1) ->
             DList.append (prettyPattern p)
-                (DList.cons " " (prettyMatch m1))
+                (DList.cons " " (prettyMatch heap m1))
         (Return e _) ->
-            DList.cons "-> " (prettyExpr_ 0 e)
+            DList.cons "-> " (prettyExpr_ heap 0 e)
 
         _ ->
             DList.singleton "<unimplemented>"
@@ -229,7 +230,7 @@ prettyType_ prec ty
           TyGen idx ->
               DList.singleton (showGenVar idx)
           TyList ty1 ->
-              bracket "[" "]" (prettyType_ 0 ty)
+              bracket "[" "]" (prettyType_ 0 ty1)
           TyTuple ts ->
               bracket "(" ")" <|
                   DList.intersperse

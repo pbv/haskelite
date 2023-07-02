@@ -209,7 +209,8 @@ matchingWellformed m
                   
 isOperator : Name -> Bool
 isOperator = String.all operatorChar 
-                  
+
+             
 operatorChar : Char -> Bool
 operatorChar c =
     c=='!' || c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
@@ -220,6 +221,9 @@ trueCons = Cons "True" []
 
 falseCons : Expr           
 falseCons = Cons "False" []           
-             
 
-            
+    
+-- smart constructor for multi-arity applications
+makeApp : Expr -> List Expr -> Expr
+makeApp fun args
+    = List.foldl (\x y->App y x) fun args

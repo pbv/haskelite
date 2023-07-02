@@ -7,32 +7,33 @@ module Typecheck exposing (..)
 
 import Dict exposing (Dict)
 import Set
-import AST exposing (Expr(..), Matching(..), Pattern(..), Bind, Name)
+import AST exposing (Expr(..), Matching(..), Pattern(..),
+                         Program(..), Bind, Name)
 import Types exposing (Type(..))
 import Tc exposing (Tc, pure, andThen, explain, fail)
--- import Prelude
 import Pretty
 
--- * type environments      -
+-- * type environments      
 type alias TyEnv
     = Dict AST.Name Type
 
-{-
-tcProgram : List Bind -> Program -> Result String Program
-tcProgram prelude prog
-    = case prog of
-          Letrec binds expr ->
-              Tc.eval <|
-              (tcRecBind (preludeEnv prelude) binds |>
-               andThen (\env1 -> tcExpr env1 expr |>
-                      andThen (\_ -> pure prog)))
--}      
+
+tcProgram : List Bind -> Program -> Result String ()
+tcProgram prelude (Letrec binds expr)
+    = let
+        env = Dict.union primitiveEnv (makeEnv prelude)
+     in
+         Tc.eval <|
+         (tcRecBind env binds |>
+          andThen (\env1 -> tcExpr env1 expr |>
+                   andThen (\_ -> pure ())))
+      
 
 -- typecheck a single expression      
 tcExpr : TyEnv -> Expr -> Tc Type
 tcExpr env expr
-    = explain ("in expression " ++ Pretty.prettyExpr expr ++ ": ")
-      <| case expr of
+    = -- explain ("in expression " ++ Pretty.prettyExpr expr ++ ": ") <|
+      case expr of
           Number _ ->
               pure TyInt
           Var v ->
@@ -40,28 +41,19 @@ tcExpr env expr
                   Just ty ->
                       Tc.freshInst ty
                   Nothing ->
-                      fail ("undefined variable: " ++ v)
+                      fail ("undefined variable " ++ v)
 
-          Cons "True" [] ->
-              pure TyBool
-          Cons "False" [] ->
-              pure TyBool
-          Cons ":" [hd,tl] ->
-              tcExpr env hd |>
-              andThen (\tyhd ->
-              tcExpr env tl |>
-              andThen (\tytl ->
-              Tc.unify tytl (TyList tyhd) |>
-              andThen (\_ -> pure tytl)))
-          Cons _ _ ->
-              Tc.fail "not implemented"
+          Cons tag args ->
+              case Dict.get tag env of
+                  Just ty ->
+                      Tc.freshInst ty |>
+                      andThen (\ty1 -> tcApplication env ty1 args)
+                  Nothing ->
+                      Tc.fail ("unknown constructor "++tag)
               
           App fun arg ->
               tcExpr env fun |>
-              andThen (\tyfun -> tcExpr env arg |>
-              andThen (\tyarg -> Tc.freshVar |>
-              andThen (\a -> Tc.unify tyfun (TyFun tyarg a) |>
-              andThen (\_ -> pure a))))
+              andThen (\tyfun -> tcApplication env tyfun [arg])
 
           Lam _ match ->
               Tc.freshVar |>
@@ -89,11 +81,7 @@ tcExpr env expr
               andThen (\_ -> pure (TyList a)))
 
           InfixOp op e1 e2 ->
-              Debug.todo "infix"
-              {-
-              tcExpr env (Var op) |>
-              andThen (\top -> tcApplication env top [e1,e2])
-               -}
+              tcExpr env (App (App (Var op) e1) e2)
 
           Error ->
               Tc.freshVar 
@@ -103,12 +91,23 @@ extend v t env
     = Dict.insert v t env         
 
 
+tcApplication : TyEnv -> Type -> List Expr -> Tc Type
+tcApplication env tyfun args
+    = case args of
+          [] ->
+              pure tyfun
+          (e1::rest) ->
+              tcExpr env e1 |>
+              andThen (\tyarg -> Tc.freshVar |>
+              andThen (\a -> Tc.unify tyfun (TyFun tyarg a) |>
+              andThen (\_ -> tcApplication env a rest)))
+
 tcMatching : TyEnv -> Matching -> Type -> Tc ()
 tcMatching env match ty
     = case match of
           Return expr _ ->
-              tcExpr env expr |>
-              andThen (\tyr -> Tc.unify tyr ty)
+              explain ("in expression " ++ Pretty.prettyExpr expr ++ ": ")
+              (tcExpr env expr |> andThen (Tc.unify ty))
           Fail ->
               pure ()
           Match patt match1 ->
@@ -136,53 +135,28 @@ tcMatching env match ty
               andThen (\_ -> tcMatching env m2 ty)
 
                   
-{-      
-tcLambda : TyEnv -> List Name -> Expr -> Tc Type
-tcLambda env vars body
-    = case vars of
-          [] ->
-              tcExpr env body
-          (v::vs) ->
-              Tc.freshVar |>
-              andThen (\a -> tcLambda (extend v a env) vs body |>
-                           andThen (\t -> pure (TyFun a t)))
-      
-tcApplication : TyEnv -> Type -> List Expr -> Tc Type
-tcApplication env funtype arglist
-    = case arglist of
-          [] ->
-              pure funtype
-          (arg0::rest) ->
-              tcExpr env arg0 |>
-              andThen (\t0 -> Tc.freshVar |>
-                          andThen (\t1 -> Tc.unify funtype (TyFun t0 t1) |>
-                                andThen (\_ -> tcApplication env t1 rest)))
--}
 
 
 -- typechecking a pattern against a type
 tcPattern : TyEnv -> Pattern -> Type -> Tc TyEnv
 tcPattern env patt ty
     = case patt of
+          DefaultP ->
+              pure env
+                  
           (VarP var) -> 
               pure (extend var ty env)
 
           (BangP var) ->
               pure (extend var ty env)
 
-          (ConsP "True" []) ->
-              Tc.unify ty TyBool |>
-              andThen (\_ -> pure env)
-          (ConsP "False" []) ->
-              Tc.unify ty TyBool |>
-              andThen (\_ -> pure env)
-          (ConsP ":" [hd,tl]) ->
-              Tc.freshVar |>
-              andThen (\a -> Tc.unify ty (TyList a) |>
-              andThen (\_ -> tcPattern env hd a |>
-              andThen (\env1 -> tcPattern env1 tl (TyList a))))
-          (ConsP _ _) ->
-              Tc.fail "not implemented"
+          (ConsP tag args) ->
+              case Dict.get tag env of
+                  Just tyc ->
+                      Tc.freshInst tyc |>
+                      andThen (\tyc1 -> tcConsArgs env args tyc1 ty)
+                  Nothing ->
+                      Tc.fail ("unknown constructor " ++ tag)
 
           (NumberP _) ->
               Tc.unify ty TyInt |>
@@ -200,6 +174,26 @@ tcPattern env patt ty
               andThen (\_ -> tcTuplePatts env (List.map2 Tuple.pair patts ts)))
 
 
+-- typecheck patterns arguments to a a constructor pattern
+-- returns augmented type environment
+tcConsArgs : TyEnv -> List Pattern -> Type -> Type -> Tc TyEnv
+tcConsArgs env patts tyc1 ty
+    = case patts of
+          [] ->
+              Tc.unify tyc1 ty |>
+              andThen (\_ -> pure env)
+
+          (p::ps) ->
+              Tc.freshVar |>
+              andThen (\a ->
+              Tc.freshVar |>
+              andThen (\b ->
+              Tc.unify tyc1 (TyFun a b) |>
+              andThen (\_ ->
+              tcPattern env p a |>
+              andThen (\env1 ->
+              tcConsArgs env1 ps b ty))))                           
+              
 
 -- check many patterns against a type
 tcListPatts : TyEnv -> List Pattern -> Type -> Tc TyEnv
@@ -211,6 +205,7 @@ tcListPatts env patts ty
               tcPattern env patt ty |>
               andThen (\env1 -> tcListPatts env1 rest ty)
 
+-- check patterns for a tupple                  
 tcTuplePatts : TyEnv -> List (Pattern, Type) -> Tc TyEnv
 tcTuplePatts env lst
     = case lst of
@@ -221,34 +216,7 @@ tcTuplePatts env lst
               andThen (\env1 -> tcTuplePatts env1 rest)
 
                 
-{-              
--- typecheck a single alternative
-tcAlt : TyEnv -> List Pattern -> Expr -> Tc Type
-tcAlt env patts expr
-    = case patts of
-          [] ->
-              tcExpr env expr
-                  
-          (pat::rest) ->
-              Tc.freshVar |>
-              andThen (\a -> tcPattern env pat a |>
-                           andThen (\env1 -> tcAlt env1 rest expr |>
-                                        andThen (\t -> pure (TyFun a t))))
-                  
--- typecheck a list of alternatives 
-tcAlts : TyEnv -> Type -> List Alt -> Tc ()
-tcAlts env tr alts
-    = Tc.traverse (\(ps,e) ->
-                       tcAlt env ps e |>
-                       andThen (\t -> Tc.unify tr t)) alts |>
-      andThen (\_ -> pure ())
-      
 
-
-
-
-
--- mutually recursive let bindings
 tcRecBind : TyEnv -> List Bind -> Tc TyEnv
 tcRecBind tyenv binds
     = Tc.traverse tcRecType binds |>
@@ -260,19 +228,12 @@ tcRecBind tyenv binds
                    in
                        Tc.traverse Tc.freshInst tys |>
                        andThen (\tyrs ->
-                                    let lst = List.map2 Tuple.pair binds tyrs
-                                    in tcRecAlts tyenv2 lst |>
-                       andThen (\_ -> tcRecGen tyenv lst )))
+                                    let
+                                        lst = List.map2 Tuple.pair binds tyrs
+                                    in
+                                        tcRecAlts tyenv2 lst |>
+                                        andThen (\_ -> tcRecGen tyenv lst)))
 
-
--- types for environment of recursive bindings
-tcRecType : Bind -> Tc Type
-tcRecType bind
-    = case bind.typeSig of
-          Nothing -> Tc.freshVar
-          Just tysig -> pure tysig
-
-                        
 tcRecAlts : TyEnv -> List (Bind, Type) -> Tc ()
 tcRecAlts tyenv lst
     = case lst of
@@ -280,10 +241,14 @@ tcRecAlts tyenv lst
               pure ()
           ((bind,ty) :: rest) ->
               (explain ("definition of " ++ bind.name ++ ": ") <|
-                   tcAlts tyenv ty bind.alts) |>
+               (tcExpr tyenv bind.expr |>
+                andThen (\ty1 -> Tc.unify ty ty1))) |>
                   andThen (\_ -> tcRecAlts tyenv rest)
 
 
+
+          
+-- generalize recursive types 
 tcRecGen : TyEnv -> List (Bind,Type) -> Tc TyEnv
 tcRecGen tyenv lst
     = case lst of
@@ -292,12 +257,27 @@ tcRecGen tyenv lst
           ((bind,ty) :: rest) ->
               Tc.simplify ty |>
               andThen (\ty1 ->
-                           let tyinfer = Tc.generalize ty1
-                           in checkTypSig bind tyinfer |>
-                              andThen (\_ -> let tyenv1 = extend bind.name tyinfer tyenv
+                           let
+                               tyinfer = Types.generalize Set.empty ty1
+                           in
+                               checkTypSig bind tyinfer |>
+                               andThen (\_ ->
+                                            let tyenv1 = extend bind.name tyinfer tyenv
                                              in tcRecGen tyenv1 rest))
 
--- check user type signature if there is one                           
+
+          
+-- get a type for a binding
+tcRecType : Bind -> Tc Type
+tcRecType bind
+    = case bind.typeSig of
+          Nothing ->
+              Tc.freshVar
+          Just tysig ->
+              pure tysig
+
+
+-- check annotated type signature against infered type
 checkTypSig : Bind -> Type -> Tc ()
 checkTypSig bind tyinfer
     = case bind.typeSig of
@@ -305,26 +285,21 @@ checkTypSig bind tyinfer
               pure ()
           Just tysig ->
               if tysig /= tyinfer then
-                  wrongTypeSig bind.name tysig tyinfer
+                  fail ("type signature " ++ bind.name ++ " :: " ++ 
+                        Pretty.prettyType tysig ++ 
+                        " is too general; inferred type: " ++
+                        Pretty.prettyType tyinfer)
               else
                   pure ()
-
-                           
-wrongTypeSig : Name -> Type -> Type -> Tc a
-wrongTypeSig name tysig tyinfer
-     = fail ("type signature " ++ name ++ " :: " ++ Pretty.prettyType tysig
-                 ++ " is too general; inferred type: " ++ Pretty.prettyType tyinfer)
--}
 
 
 ------------------------------------------------------------------------------
 -- Prelude stuff
 ------------------------------------------------------------------------------
--- type environment for the Prelude
-preludeEnv : List Bind -> TyEnv
-preludeEnv binds
-    = Dict.union primEnv <|
-      List.foldl addTypeSig Dict.empty binds
+-- make a type environment from a list of bindings
+makeEnv : List Bind -> TyEnv
+makeEnv binds
+    = List.foldl addTypeSig Dict.empty binds
                  
 addTypeSig : Bind -> TyEnv -> TyEnv
 addTypeSig bind tyenv
@@ -336,8 +311,8 @@ addTypeSig bind tyenv
 
 
 -- type environment for primitives
-primEnv : TyEnv
-primEnv
+primitiveEnv : TyEnv
+primitiveEnv
     = let
         intOp = TyFun TyInt (TyFun TyInt TyInt)
         cmpOp = TyFun TyInt (TyFun TyInt TyBool)
@@ -347,6 +322,7 @@ primEnv
         ("mod", intOp), ("div", intOp), ("negate", TyFun TyInt TyInt)
       , ("==", cmpOp), ("/=", cmpOp), ("<=", cmpOp)
       , (">=", cmpOp), ("<", cmpOp), (">", cmpOp)
+      , ("True", TyBool), ("False", TyBool)   
       , (":", TyFun (TyGen 0) (TyFun (TyList (TyGen 0)) (TyList (TyGen 0))))
       , ("enumFrom", TyFun TyInt (TyList TyInt))
       , ("enumFromTo", TyFun TyInt (TyFun TyInt (TyList TyInt)))

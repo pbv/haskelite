@@ -50,10 +50,6 @@ isWhnf expr =
             AST.matchingArity m > 0
         Number _ ->
             True
-        ListLit _ ->
-            True
-        TupleLit _ ->
-            True
         Cons _ _ ->
             True
         _ ->
@@ -106,14 +102,14 @@ transition conf
                                   Just (heap1, E (Lam optname (Arg (Var loc) m)), rest)
                       Update y::rest ->
                           let
-                              heap1 = Dict.insert y (Lam optname m) heap
+                              heap1 = Heap.update y (Lam optname m) heap
                           in 
                               Just (heap1, E (Lam optname m), rest)
                       _ ->
                           Nothing
 
           (heap, E (Var y), stack) ->
-              case Dict.get y heap of
+              case Heap.get y heap of
                   Just expr ->
                       if isWhnf expr then
                           Just (heap, E expr, stack)
@@ -185,29 +181,7 @@ transition conf
                   Just (heap, M m1 args, stack)
               else
                   Just (heap, M Fail [], stack)
-          
-                      
-          -- special cases for list patterns                
-          (heap, E (ListLit []), (PushPat args (ConsP ":" [p1,p2]) m1)::stack) ->
-               Just (heap, M Fail [], stack)                    
-                      
-          (heap, E (ListLit es), (PushPat args (ListP ps) m1)::stack) ->
-              if List.length es == List.length ps then
-                  Just (heap, M (matchCons es ps m1) args, stack)
-              else
-                  Just (heap, M Fail [], stack)
-
-          (heap, E (ListLit (e1::es)), (PushPat args (ConsP ":" [p1,p2]) m1)::stack) ->
-              Just (heap,
-                        M (Match p1
-                               (Arg (ListLit es) (Match p2 m1))) (e1::args),
-                        stack)
-
-          (heap, E (Cons ":" [e1,e2]), (PushPat args (ListP (p1::ps)) m1)::stack) ->
-              Just (heap, M (Match p1
-                                 (Arg e2 (Match (ListP ps) m1))) (e1::args),
-                        stack)
-                  
+                                
           -- successful match: return an expression
           (heap, M (Return expr info) args, MatchEnd::stack) ->
               Just (heap, E (applyArgs expr args), stack)
@@ -396,7 +370,7 @@ example3 =
    let tl =  Lam (Just "tail")
              (Match (ConsP ":" [VarP "x", VarP "xs"])
                       (Return (Var "xs") "tail (x:xs) = xs"))
-       e = App tl (ListLit [Number 1, Number 2, Number 3])
+       e = App tl (AST.listLit [Number 1,Number 2,Number 3])
    in (Dict.empty, E e, [])
 
 example4 : Conf
@@ -405,7 +379,7 @@ example4
         expr = App (Lam Nothing
                         (Match (ConsP ":" [VarP "h",VarP "t"])
                              (Return (Var "h") "head")))
-               (ListLit [])
+               (AST.listLit [])
     in (Dict.empty, E expr, []) 
     
 
@@ -420,9 +394,9 @@ example5 =
                                            (Var "x")
                                            (App (Var "sum") (Var "xs")))
                                            "sum (x:xs) = x + sum xs"))
-                         (Match (ListP [])
+                         (Match (ConsP "[]" [])
                               (Return (Number 0) "sum [] = 0"))))
-        control = E (App (Var "sum") (ListLit [Number 1,Number 2,Number 3]))
+        control = E (App (Var "sum") (AST.listLit [Number 1,Number 2,Number 3]))
         stack = []
     in
         (heap, control, stack)
@@ -470,3 +444,21 @@ example8
       in
           (heap, E (App (Var "square") (App (Var "square") (Number 5))), [])
                
+
+example9
+    = let heap = Dict.fromList
+                 [ ("revacc", Lam (Just "revacc")
+                        (Alt
+                         (Match (ConsP ":" [VarP "x",VarP "xs"])
+                              (Match (VarP "acc")
+                                   (Return
+                                        (App (App (Var "revacc") (Var "xs"))  (Cons ":" [Var "x",Var "acc"])) "revacc (x:xs) acc = revacc xs (x:acc)")))
+                         (Match (ConsP "[]" [])
+                              (Match (VarP "acc")
+                                   (Return (Var "acc")
+                                        "revacc [] acc = acc")))
+                        ))
+                 ]
+      in (heap, E (App (App (Var "revacc") (AST.listLit [Number 1, Number 2, Number 3])) (AST.listLit [])), [])
+              
+                       

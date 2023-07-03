@@ -50,23 +50,15 @@ prettyExpr_ heap prec e =
                     Just e1 ->
                         prettyExpr_ heap prec e1
                     Nothing ->
-                        DList.singleton "?"
-                        -- DList.singleton x -- should not happen!
+                        DList.singleton x -- this should not happen!
             else
                 paren (AST.isOperator x) (DList.singleton x)
-                
-        ListLit l ->
-            bracket "[" "]" <|
-                (DList.intersperse
-                      (DList.singleton ",")                      
-                      (List.map (prettyExpr_ heap 0) l))
 
-
-        TupleLit l ->
+        Cons "," args ->
             bracket "(" ")" <|
                  (DList.intersperse
                       (DList.singleton ",")                      
-                      (List.map (prettyExpr_ heap 0) l))
+                      (List.map (prettyExpr_ heap 0) args))
 
 
         Cons ":" [e1, e2] ->
@@ -192,16 +184,13 @@ prettyPattern p =
             DList.singleton ("!"++x)
         NumberP n ->
             DList.singleton (String.fromInt n)
-        TupleP ps ->
+                
+        ConsP "," ps ->
             bracket "(" ")" <|
                 DList.intersperse
                     (DList.singleton ",")
                     (List.map prettyPattern ps)
-        ListP ps ->
-            bracket "[" "]" <|
-                DList.intersperse
-                    (DList.singleton ",")
-                    (List.map prettyPattern ps) 
+
         ConsP ":" [p1,p2] ->
             bracket "(" ")" <|
                 DList.append (prettyPattern p1)

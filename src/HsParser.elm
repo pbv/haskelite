@@ -64,7 +64,7 @@ declarations
       andThen (\binds ->  checkBinds binds |>
       andThen (\_ -> succeed binds))
 
--- check arities of all bindings          
+-- check arities of a list of bindings
 checkBinds : List Bind -> Parser ()
 checkBinds binds 
     = case binds of
@@ -83,7 +83,7 @@ checkBind bind
                       succeed ()
                   Nothing ->
                       problem ("equations for " ++ bind.name ++
-                                   " have inconsistent number of arguments")
+                               " have inconsistent number of arguments")
           _ ->
               succeed ()
                               
@@ -111,7 +111,7 @@ makeBind pair =
             }
 
 collectAlts : List Decl -> Matching
-collectAlts = List.foldl joinDecl Fail
+collectAlts = List.foldr joinDecl Fail
 
 joinDecl : Decl -> Matching -> Matching    
 joinDecl decl match1
@@ -119,7 +119,7 @@ joinDecl decl match1
           TypeSig _ _ ->
               match1
           Equation _ match2 ->
-              joinAlt match1 match2 
+              joinAlt match2 match1
 
              
              
@@ -396,8 +396,8 @@ pattern =
     , succeed (ConsP "False" [])
            |. keyword "False"
     , succeed NumberP
-           |= integer -- backtrackable int
-    , succeed ListP
+           |= integer 
+    , succeed AST.listPat
          |= Parser.sequence
             { start = "["
             , end = "]"
@@ -407,7 +407,7 @@ pattern =
             , trailing = Parser.Forbidden
             }
     , backtrackable
-          <| succeed makeTupleP
+          <| succeed AST.tuplePat
                |= Parser.sequence
                   { start = "("
                   , end = ")"
@@ -434,10 +434,6 @@ pattern =
     ]
 
 
-makeTupleP l =
-    case l of
-        [x] -> x
-        _ -> TupleP l
 
 patternList : Parser (List Pattern)    
 patternList =
@@ -618,7 +614,7 @@ delimited =
 
 literalList : Parser Expr
 literalList
-    = succeed ListLit
+    = succeed AST.listLit
          |= Parser.sequence
             { start = "["
             , end = "]"
@@ -630,7 +626,7 @@ literalList
 
 literalTuple : Parser Expr
 literalTuple
-    = succeed makeTuple
+    = succeed AST.tupleLit
          |= Parser.sequence
             { start = "("
             , end = ")"
@@ -640,10 +636,6 @@ literalTuple
             , trailing = Parser.Forbidden
             }
 
-makeTuple l =
-    case l of
-        [x] -> x
-        _ -> TupleLit l
 
 makeApp : Expr -> List Expr -> Expr             
 makeApp e0 args =
@@ -873,12 +865,10 @@ example2 =
    
 example3 =
    """
-foo x | x>0 = 42
-      | x<0 = 1+x
+foo x | x==0 = 42
+      | x==1 = 1+x
+      | x==2 = 2*x
       | otherwise = 0
-
-bar [] = 1
-bar (x:xs) = 2
 """
 
 example4 = """
@@ -886,4 +876,9 @@ foo x y |x>y = x+y
 foo x y = x+z
 """
                    
-   
+example5 = """
+len [] = 0
+len [x] = 1
+len [x,y] = 2
+len [x,y,z] = 3
+"""   

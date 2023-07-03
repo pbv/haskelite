@@ -4,23 +4,43 @@
 -} 
 module Context exposing (..)
 
-import AST exposing (Expr(..))
+import AST exposing (Expr(..), Tag)
 
 import Monocle.Common as Monocle
 import Monocle.Optional exposing (Optional)
 
-
--- * evaluation contexts
-type alias Context 
+-- evaluation context for expressions
+type alias ExprCtx
     = Optional Expr Expr
 
 
 -- empty context
-hole : Context
-hole = { getOption = \expr -> Just expr
-       , set = \new _ -> new
-       }
+empty : ExprCtx
+empty = { getOption = \expr -> Just expr
+        , set = \new _ -> new
+        }
 
+-- context for ith constructor argument
+cons : Tag -> Int -> ExprCtx
+cons tag i =
+    { getOption = \e -> case e of
+                            Cons tag1 args ->
+                                if tag==tag1 then
+                                    .getOption (Monocle.list i) args
+                                else
+                                    Nothing
+                            _ -> Nothing
+    , set = \n e -> case e of
+                        Cons tag1 args ->
+                            if tag==tag1 then
+                                Cons tag1 (.set (Monocle.list i) n args)
+                            else
+                                e
+                        _ -> e
+    }
+          
+
+{-    
 -- contexts for list construtor
 cons0 : Context
 cons0 =
@@ -41,8 +61,9 @@ cons1 =
                         App (Var ":") [e0, _] -> App (Var ":") [e0, e1]
                         _ -> e
     }
+-}
 
-    
+{-
 -- contexts for looking into infix operators
 infixOp0 : Context
 infixOp0 =
@@ -107,9 +128,9 @@ tupleItem i =
                         TupleLit items -> TupleLit (.set (Monocle.list i) n items)
                         _ -> e
     }
-
+-}
         
-    
+{-    
 --- contexts for if expressions
 
 if0 : Context
@@ -141,3 +162,4 @@ if2 =
                         IfThenElse e0 e1 _ -> IfThenElse e0 e1 e2
                         _ -> e
     }
+-}

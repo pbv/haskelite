@@ -8,9 +8,19 @@ import Types exposing (Type)
 import Dict exposing (Dict)
 import Maybe
 
+-- variables
 type alias Name
     = String
 
+-- constructor tags      
+type alias Tag
+    = String
+
+-- information associated with a successful match
+type alias Info
+    = String
+      
+      
 -- * expressions 
 type Expr 
     = App Expr Expr
@@ -19,9 +29,7 @@ type Expr
       -- otherwise the name field is Nothing
     | Var Name
     | Number Int
-    | Cons Name (List Expr)
-    | ListLit (List Expr)              -- [1,2,3]
-    | TupleLit (List Expr)             -- (1,2,3)
+    | Cons Tag (List Expr)
     | InfixOp Name Expr Expr           --  primitive operators +, * etc
     | IfThenElse Expr Expr Expr
     | Error                            -- runtime errors
@@ -41,9 +49,7 @@ type Pattern
     | VarP Name
     | BangP Name             -- bang pattern (for strict evaluation)
     | NumberP Int
-    | ListP (List Pattern)
-    | TupleP (List Pattern)
-    | ConsP Name (List Pattern)
+    | ConsP Tag (List Pattern)
 
       
 -- * declarations      
@@ -58,17 +64,12 @@ type alias Bind
 -- * programs
 type Program
     = Letrec (List Bind) Expr
-
-     
      
 -- term substitutions
 type alias Subst
     = Dict Name Expr
-    
--- information associated with a reduction
-type alias Info
-    = String
       
+-- get the name associated with a declaration      
 declName : Decl -> Name
 declName decl
     = case decl of
@@ -94,13 +95,6 @@ applySubst s e
                   
           InfixOp op e1 e2 ->
               InfixOp op (applySubst s e1) (applySubst s e2)
-                  
-          ListLit l ->
-              ListLit (List.map (applySubst s) l)
-                  
-          TupleLit l ->
-              TupleLit (List.map (applySubst s) l)
-
           Cons c args ->
               Cons c (List.map (applySubst s) args)
 
@@ -147,13 +141,11 @@ patternVars patt
               [x]
           BangP x ->
               [x]
-          ListP ps ->
+          ConsP c ps ->
               List.concatMap patternVars ps
-          TupleP ps ->
-              List.concatMap patternVars ps
-          ConsP tag ps ->
-              List.concatMap patternVars ps
-          _ ->
+          NumberP _ ->
+              []
+          DefaultP ->
               []
                       
 
@@ -222,8 +214,26 @@ trueCons = Cons "True" []
 falseCons : Expr           
 falseCons = Cons "False" []           
 
-    
+-- smart constructors for literal lists and tuples
+listLit : List Expr -> Expr
+listLit = List.foldr (\x xs -> Cons ":" [x,xs]) (Cons "[]" [])
+
+tupleLit : List Expr -> Expr
+tupleLit args
+    = case args of
+          [e] -> e   -- no singleton tuple
+          _ -> Cons "," args
+
+listPat : List Pattern -> Pattern
+listPat = List.foldr (\p ps -> ConsP ":" [p,ps]) (ConsP "[]" [])
+
+tuplePat : List Pattern -> Pattern
+tuplePat ps
+    = case ps of
+          [p] -> p          -- no singleton tuple
+          _ -> ConsP "," ps
+          
+            
 -- smart constructor for multi-arity applications
-makeApp : Expr -> List Expr -> Expr
-makeApp fun args
-    = List.foldl (\x y->App y x) fun args
+applyMany : Expr -> List Expr -> Expr
+applyMany = List.foldl (\x y->App y x) 

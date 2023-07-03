@@ -12,6 +12,7 @@ import AST exposing (Expr(..), Matching(..), Pattern(..),
 import Types exposing (Type(..))
 import Tc exposing (Tc, pure, andThen, explain, fail)
 import Pretty
+import Heap
 
 -- * type environments      
 type alias TyEnv
@@ -69,17 +70,6 @@ tcExpr env expr
               andThen (\t2 -> Tc.unify t1 t2 |>
               andThen (\_ -> pure t1)))))
 
-          TupleLit args ->
-              Tc.traverse (tcExpr env) args |>
-              andThen (\ts -> pure (TyTuple ts))
-
-          ListLit args ->
-              Tc.freshVar |>
-              andThen (\a ->
-              Tc.traverse (\arg -> tcExpr env arg |>
-              andThen (\t -> Tc.unify t a)) args |>
-              andThen (\_ -> pure (TyList a)))
-
           InfixOp op e1 e2 ->
               tcExpr env (App (App (Var op) e1) e2)
 
@@ -106,7 +96,8 @@ tcMatching : TyEnv -> Matching -> Type -> Tc ()
 tcMatching env match ty
     = case match of
           Return expr _ ->
-              explain ("in expression " ++ Pretty.prettyExpr expr ++ ": ")
+              explain ("in expression " ++
+                       Pretty.prettyExpr Heap.empty expr ++ ": ")
               (tcExpr env expr |> andThen (Tc.unify ty))
           Fail ->
               pure ()
@@ -162,16 +153,6 @@ tcPattern env patt ty
               Tc.unify ty TyInt |>
               andThen (\_ -> pure env)
 
-          (ListP patts) ->
-              Tc.freshVar |>
-              andThen (\a -> Tc.unify ty (TyList a) |>
-              andThen (\_ -> tcListPatts env patts a))
-
-
-          (TupleP patts) ->
-              Tc.freshVars (List.length patts) |>
-              andThen (\ts -> Tc.unify ty (TyTuple ts) |>
-              andThen (\_ -> tcTuplePatts env (List.map2 Tuple.pair patts ts)))
 
 
 -- typecheck patterns arguments to a a constructor pattern
@@ -324,6 +305,7 @@ primitiveEnv
       , (">=", cmpOp), ("<", cmpOp), (">", cmpOp)
       , ("True", TyBool), ("False", TyBool)   
       , (":", TyFun (TyGen 0) (TyFun (TyList (TyGen 0)) (TyList (TyGen 0))))
+      , ("[]", TyList (TyGen 0))
       , ("enumFrom", TyFun TyInt (TyList TyInt))
       , ("enumFromTo", TyFun TyInt (TyFun TyInt (TyList TyInt)))
       , ("enumFromThen", TyFun TyInt (TyFun TyInt (TyList TyInt)))

@@ -10,6 +10,18 @@ import Dict exposing (Dict)
 type alias Heap 
     = Dict Name Expr
 
+empty : Heap
+empty = Dict.empty
+
+get : Name -> Heap -> Maybe Expr
+get = Dict.get
+
+fromList : List (Name,Expr) -> Heap
+fromList = Dict.fromList
+      
+update : Name -> Expr -> Heap -> Heap
+update = Dict.insert
+      
 isIndirection : Name -> Bool
 isIndirection = String.startsWith "$"
 

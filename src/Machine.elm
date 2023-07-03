@@ -256,7 +256,7 @@ transitions conf = transitions_ 0 conf
 transitions_ : Int -> Conf -> ()
 transitions_ n conf
     = let
-        _ = Debug.log (String.fromInt n) (getControl conf, getStack conf)
+        _ = Debug.log (String.fromInt n) (getStack conf)
       in
        case next conf of
            Nothing ->
@@ -288,7 +288,9 @@ observe (heap, control, stack)
               AST.matchingArity m == 0
           (E w, (Update _::_)) ->
                False
-          (E _, _) ->
+          (E e, (PushPat _ _ _::_)) ->
+              not (isWhnf e)
+          (E _ , _) ->
               True
           (M (Return _ _) _, (MatchEnd::_)) ->
               True
@@ -307,16 +309,23 @@ explainConf (heap, control, stack)
               Nothing
 -}
                   
-prettyConf : Conf -> Maybe String
+prettyConf : Conf -> Maybe (String, Maybe String)
 prettyConf (heap, control, stack)
-   = case control of
-         (E expr) ->
+   = case (control, stack) of
+         (E expr, _) ->
              Just <|
-                 Pretty.toString <|
-                 prettyCont heap stack <|
-                 Pretty.prettyExpr_ heap 0 expr
+                 (Pretty.toString <|
+                  prettyCont heap stack <|
+                  Pretty.prettyExpr_ heap 0 expr
+                 , Nothing)
+         (M (Return expr info) [], MatchEnd::_) ->
+             Just <|
+                 (Pretty.toString <|
+                  Pretty.prettyExpr_ heap 0 expr
+                 , Just info)
          _ ->
              Nothing
+             
 
                  
 -- convert a continuation stack into an pretty expression
@@ -347,12 +356,14 @@ prettyCont heap stack acc
                   prettyCont heap rest acc1
           (_::rest) ->
               prettyCont heap rest acc
+
+
+
+
 --------------------------------------------------------------------
+-- examples for debugging 
+-------------------------------------------------------------------
 
-
-
---------------------------------------------------------------------
-                          
 example0 : Conf
 example0 = (Dict.empty, E (InfixOp "+" (Number 1) (Number 2)), [])
 

@@ -4,7 +4,7 @@
 -}
 module Heap exposing (..)
 
-import AST exposing (Expr, Name)
+import AST exposing (Expr, Name, Bind)
 import Dict exposing (Dict)
 
 type alias Heap 
@@ -18,6 +18,9 @@ get = Dict.get
 
 fromList : List (Name,Expr) -> Heap
 fromList = Dict.fromList
+
+fromBinds : List Bind -> Heap
+fromBinds binds = Dict.fromList (List.map (\b -> (b.name, b.expr)) binds)
       
 update : Name -> Expr -> Heap -> Heap
 update = Dict.insert

@@ -23,9 +23,8 @@ import List.Extra as List
 
 
 
-{-
-parseProg : String -> String -> Result String Program
-parseProg inputExpr inputDecls
+parseProgram : String -> String -> Result String Program
+parseProgram inputExpr inputDecls
     = Result.mapError deadEndsToString <|
         (Parser.run topExprEnd inputExpr |>
              Result.andThen (\expr ->
@@ -35,7 +34,7 @@ parseProg inputExpr inputDecls
 
 
 
-
+{-
 collectAlts : List Decl -> List Alt
 collectAlts decls
     = case decls of

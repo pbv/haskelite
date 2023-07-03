@@ -1,18 +1,19 @@
 {-
   Haskelite, a single-step interpreter for a subset of Haskell.
   Main module exporting an interactive HTML entity
-  Pedro Vasconcelos, 2021
+  Pedro Vasconcelos, 2021-23
 -}
 module Haskelite exposing (..)
 
 import AST exposing (Expr(..), Program(..), Bind, Info, Name)
 import HsParser
-import Eval exposing (EvalEnv)
+import Machine
+import Heap
 import Typecheck
 import Parser
 import Pretty
 import Prelude
-import Context exposing (Context)
+-- import Context exposing (Context)
 import Monocle.Optional as Monocle
 import Html exposing (..)
 import Html.Attributes exposing (value, class, placeholder, disabled,
@@ -27,26 +28,25 @@ import Browser
 
 
 type Model
-    = Editing EditModel
-    | Reducing ReduceModel
-    | Panic String                 -- only for initialization errors
+    = Editing EditModel            -- while editing
+    | Reducing ReduceModel         -- while doing evaluations
+    | Panic String                 -- when initialization failed
 
 type alias EditModel
     = { inputExpr : String                   -- input expression
       , inputDecls : String                  -- function declarations
-      , parseResult : Result String Program      -- parsing results
+      , parseResult : Result String Program  -- result of parsing
       , prelude : List Bind
       }
 
 type alias ReduceModel
-    = { expression : Expr                -- current expression
-      , next : Maybe (Expr, Info)        -- next reduction
-      , previous : List (Expr, Info)     -- list of previous steps
-      , evalEnv : EvalEnv                -- evaluation environment (include Prelude)
-      , inputExpr : String               -- inputs (to go back to editing)
+    = { current : Machine.Conf           -- current configuration
+      , next : Maybe Machine.Conf        -- optional next configuration
+      , previous : List Machine.Conf     -- list of previous configs
+      , inputExpr : String               -- saved input text (to go back to editing)
       , inputDecls : String
       }
-    
+
     
 type Msg
     = Previous           -- undo one evaluation step
@@ -68,7 +68,7 @@ main =
         }
 
         
--- * inicializing the application
+-- initializing the application
 init : {expression:String, declarations:String} -> (Model, Cmd msg)
 init config  = (initModel config, Cmd.none)
 
@@ -77,20 +77,23 @@ initModel config
     = case Prelude.preludeResult of
           Err msg ->
               Panic msg
-          Ok binds ->
-              let result = parseAndTypecheck binds config.expression config.declarations
+          Ok prelude ->
+              let
+                  result = parseAndTypecheck prelude config.expression config.declarations
               in
                   Editing
                   { inputExpr = config.expression
                   , inputDecls = config.declarations
                   , parseResult = result
-                  , prelude = binds
+                  , prelude = prelude
                   }
-        
+
+-- the first argument are the prelude bindings                  
 parseAndTypecheck : List Bind -> String -> String -> Result String Program
-parseAndTypecheck binds expression declarations
-    = HsParser.parseProg expression declarations |>
-      Result.andThen (Typecheck.tcProgram binds)
+parseAndTypecheck prelude expression declarations
+    = HsParser.parseProgram expression declarations |>
+      Result.andThen (\prog -> Typecheck.tcProgram prelude prog |>
+      Result.andThen (\_ -> Ok prog))
 
         
 view : Model -> Html Msg
@@ -117,14 +120,6 @@ editingView model =
                  , button [ class "navbar", onClick Evaluate ] [ text "Evaluate" ]
                ]
            , br [] []
-               {-
-           , case model.resultExpr of
-                 Err msg -> if model.inputExpr /= "" then
-                                span [class "error"] [text msg]
-                            else span [] []
-                 _ -> span [] []
-           , br [] []
-                -}
            , textarea [ placeholder "Enter function definitions"
                       , value model.inputDecls
                       , rows 24
@@ -134,7 +129,8 @@ editingView model =
                       ] []
            , br [] []
            , case model.parseResult of
-                 Err msg -> if model.inputDecls == "" && model.inputExpr == "" then
+                 Err msg -> if model.inputDecls == "" &&
+                               model.inputExpr == "" then
                                 span [] []
                              else
                                 span [class "error"] [text msg]
@@ -160,18 +156,19 @@ reduceView model =
         , div [class "lines"]
              <| List.map lineView (List.reverse model.previous) ++
                  [ div [class "current"]
-                          [ renderExpr model.expression ]
+                          [ renderConf model.current ]
                  ]
         ]
 
          
-lineView : (Expr, Info) -> Html Msg
-lineView (expr, info) =
-    div [class "line"]
-        [ renderExpr expr
-        , div [class "info"] [ text (Pretty.prettyInfo info) ]
-        ]
+lineView : Machine.Conf -> Html Msg
+lineView conf =
+    renderConf conf 
 
+{-
+        , div [class "info"] [ text (Pretty.prettyInfo info) ]              
+        ]
+-}
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
@@ -189,11 +186,11 @@ reduceUpdate msg model =
     case msg of
         Previous ->
             case model.previous of
-                ((oldExpr, _) :: rest) ->
+                (first :: rest) ->
                     Reducing
                     { model
-                        | expression = oldExpr
-                        , next = Eval.reduceNext model.evalEnv oldExpr
+                        | current = first
+                        , next = Just model.current
                         , previous = rest
                     }
                 [] ->
@@ -201,23 +198,23 @@ reduceUpdate msg model =
 
         Next ->
             case model.next of
-                Just (newExpr, info) ->
+                Just new ->
                     Reducing
                     { model
-                        | expression = newExpr
-                        , next = Eval.reduceNext model.evalEnv newExpr
-                        , previous = (model.expression, info) :: model.previous
+                        | current = new
+                        , next = Machine.next new
+                        , previous = model.current :: model.previous
                     }
                 Nothing ->
                     Reducing model
                         
         Reset ->
             case List.last model.previous of
-                Just (expr,_) ->
+                Just first ->
                     Reducing
                     { model
-                        | expression = expr
-                        , next = Eval.reduceNext model.evalEnv expr 
+                        | current = first
+                        , next = Machine.next first 
                         , previous = []
                     }
                 Nothing ->
@@ -229,30 +226,34 @@ reduceUpdate msg model =
             Reducing model
                  
 
+
+
+                
            
                 
 editUpdate : Msg -> EditModel -> Model 
 editUpdate msg model =
     case msg of
         ModifyExpr string ->
-            let result = HsParser.parseProg string model.inputDecls
+            let result = HsParser.parseProgram string model.inputDecls
             in
                 Editing { model | inputExpr=string, parseResult=result }
 
         ModifyDecls string ->
-            let result = HsParser.parseProg model.inputExpr string 
+            let result = HsParser.parseProgram model.inputExpr string 
             in
                 Editing { model | inputDecls=string, parseResult=result }
         
         Evaluate ->
             case parseAndTypecheck model.prelude model.inputExpr model.inputDecls of
                 Ok (Letrec binds expr) ->
-                    let env = Eval.toEvalEnv (model.prelude ++ binds)
+                    let
+                        heap0 = Heap.fromBinds (model.prelude ++ binds)
+                        conf0 = (heap0, Machine.E expr, [])
                     in Reducing
-                        { expression = expr
-                        , next = Eval.reduceNext env expr
+                        { current = conf0
+                        , next = Machine.next conf0
                         , previous = []
-                        , evalEnv = env
                         , inputExpr = model.inputExpr
                         , inputDecls = model.inputDecls
                         }
@@ -264,8 +265,25 @@ editUpdate msg model =
 subscriptions : Model -> Sub msg
 subscriptions _ = Sub.none
 
-                 
--- render an expression; toplevel function
+
+-- render a configuration to HTML
+renderConf : Machine.Conf -> Html msg
+renderConf conf
+    = case Machine.prettyConf conf of
+          Just (txt,Just info) ->
+              div [class "line"]
+                  [ text txt
+                  , div [class "info"] [ text info]
+                  ]
+          Just (txt,Nothing) ->
+              div [class "line"]
+                  [ text txt ]                  
+          Nothing ->
+              span [] []
+
+
+{-                     
+-- render an expression to HTML; toplevel function
 renderExpr : Expr -> Html msg
 renderExpr expr =
     renderExpr_ 0 expr 
@@ -387,4 +405,4 @@ paren b html
        else
            html
         
-
+-}

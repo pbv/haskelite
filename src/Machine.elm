@@ -256,7 +256,7 @@ transitions conf = transitions_ 0 conf
 transitions_ : Int -> Conf -> ()
 transitions_ n conf
     = let
-        _ = Debug.log (String.fromInt n) (getStack conf)
+        _ = Debug.log (String.fromInt n) (prettyConf conf)
       in
        case next conf of
            Nothing ->
@@ -264,6 +264,9 @@ transitions_ n conf
            Just conf1 ->
                transitions_ (n+1) conf1
 
+
+-- a "bigger step" transiton
+-- ignoring trival steps that are not very informative
 next : Conf -> Maybe Conf
 next conf
     = case transition conf of
@@ -276,28 +279,28 @@ next conf
                   next conf1
 
                           
--- check whether a configuration should be shown to the user
+-- check whether a configuration should be shown not be skipped
 observe : Conf -> Bool
-observe (heap, control, stack) 
+observe (heap, control, stack)                                 
     = case (control,stack) of
+          {-
+          (E (Lam _ _), _) ->
+              False
+          -}
           (E (Var _),  _) ->
               False
-          (E (App _ _), _) ->
-              False
-          (E (Lam _ m), _) ->
-              AST.matchingArity m == 0
-          (E w, (Update _::_)) ->
+          (E _, (Update _::_)) ->
                False
-          (E e, (PushPat _ _ _::_)) ->
-              not (isWhnf e)
-          (E _ , _) ->
+          (E _, _) ->
               True
+          -- observe only the last step of matching
           (M (Return _ _) _, (MatchEnd::_)) ->
               True
           (M Fail _, (MatchEnd::_)) ->
               True
           (M _ _, _) ->
               False
+
 
 {-
 explainConf : Conf -> Maybe String
@@ -309,24 +312,37 @@ explainConf (heap, control, stack)
               Nothing
 -}
                   
-prettyConf : Conf -> Maybe (String, Maybe String)
+prettyConf : Conf ->  Maybe String
 prettyConf (heap, control, stack)
    = case (control, stack) of
          (E expr, _) ->
              Just <|
-                 (Pretty.toString <|
+                  Pretty.toString <|
                   prettyCont heap stack <|
                   Pretty.prettyExpr_ heap 0 expr
-                 , Nothing)
+
          (M (Return expr info) [], MatchEnd::_) ->
              Just <|
-                 (Pretty.toString <|
+                  Pretty.toString <|
+                  prettyCont heap stack <|
                   Pretty.prettyExpr_ heap 0 expr
-                 , Just info)
+         (M Fail [], MatchEnd::_) ->
+             Just "pattern match failure"
          _ ->
              Nothing
              
 
+-- construct the justification for the following reduction step
+justifies : Conf -> Maybe String
+justifies (heap, control, stack)
+    = case (control, stack) of
+         (E (Number v1), (RetPrim2 op v2::_)) ->
+             Just ("primitive " ++ op)
+         (M (Return expr info) [], MatchEnd::_) ->
+             Just info
+         _ ->
+             Nothing
+                 
                  
 -- convert a continuation stack into an pretty expression
 prettyCont : Heap -> Stack -> StringBuilder -> StringBuilder
@@ -351,11 +367,12 @@ prettyCont heap stack acc
           (RetPrim2 op v::rest) ->
               let acc1 = DList.append
                          (DList.singleton (String.fromInt v))
-                              (DList.cons op acc)
+                              (DList.cons op (Pretty.bracket "(" ")" acc))
               in
                   prettyCont heap rest acc1
           (_::rest) ->
-              prettyCont heap rest acc
+              Pretty.bracket "(..." "...)" acc                  
+              -- prettyCont heap rest acc
 
 
 

@@ -23,9 +23,11 @@ import Platform.Cmd as Cmd
 import Platform.Sub as Sub
 
 import List.Extra as List
-import Dict exposing (Dict)
 import Browser
+import Debug
 
+type alias Inputs 
+    = { expression:String, declarations:String }
 
 type Model
     = Editing EditModel            -- while editing
@@ -33,18 +35,16 @@ type Model
     | Panic String                 -- when initialization failed
 
 type alias EditModel
-    = { inputExpr : String                   -- input expression
-      , inputDecls : String                  -- function declarations
-      , parseResult : Result String Program  -- result of parsing
-      , prelude : List Bind
+    = { inputs : Inputs                 -- user inputs
+      , parsed : Result String Program  -- result of parsing
+      , prelude : List Bind             -- parsed prelude
       }
 
 type alias ReduceModel
     = { current : Machine.Conf           -- current configuration
-      , next : Maybe Machine.Conf        -- optional next configuration
       , previous : List Machine.Conf     -- list of previous configs
-      , inputExpr : String               -- saved input text (to go back to editing)
-      , inputDecls : String
+      , next : Maybe Machine.Conf        -- optional next configuration
+      , inputs : Inputs           -- saved inputs (to go back to editing)
       }
 
     
@@ -52,11 +52,11 @@ type Msg
     = Previous           -- undo one evaluation step
     | Next               -- next outermost step
     | Reset              -- reset evaluation
-    | ModifyExpr String   -- parse expression
-    | ModifyDecls String  -- parse declarations
-    | Edit               -- go into editing mode
-    | Evaluate           -- go into reduction mode
+    | EditMode           -- go into editing mode
+    | EvalMode           -- go into reduction mode
+    | Edit Inputs        -- modify inputs
 
+      
 
 -- the main entry point for the app
 main =
@@ -69,29 +69,28 @@ main =
 
         
 -- initializing the application
-init : {expression:String, declarations:String} -> (Model, Cmd msg)
-init config  = (initModel config, Cmd.none)
+init : Inputs -> (Model, Cmd msg)
+init inputs  = (initModel inputs, Cmd.none)
 
-initModel : {expression:String, declarations:String} -> Model
-initModel config
+initModel : Inputs -> Model
+initModel inputs
     = case Prelude.preludeResult of
           Err msg ->
               Panic msg
           Ok prelude ->
               let
-                  result = parseAndTypecheck prelude config.expression config.declarations
+                  result = parseAndTypecheck prelude inputs
               in
                   Editing
-                  { inputExpr = config.expression
-                  , inputDecls = config.declarations
-                  , parseResult = result
+                  { inputs = inputs
+                  , parsed = result
                   , prelude = prelude
                   }
 
 -- the first argument are the prelude bindings                  
-parseAndTypecheck : List Bind -> String -> String -> Result String Program
-parseAndTypecheck prelude expression declarations
-    = HsParser.parseProgram expression declarations |>
+parseAndTypecheck : List Bind -> Inputs -> Result String Program
+parseAndTypecheck prelude inputs
+    = HsParser.parseProgram inputs.expression inputs.declarations |>
       Result.andThen (\prog -> Typecheck.tcProgram prelude prog |>
       Result.andThen (\_ -> Ok prog))
 
@@ -111,26 +110,28 @@ editingView : EditModel -> Html Msg
 editingView model =
     div [] [ span [] [
                   input [ placeholder "Enter an expression"
-                        , value model.inputExpr
+                        , value model.inputs.expression
                         , size 65
                         , spellcheck False
                         , class "editline"
-                        , onInput ModifyExpr
+                        , onInput (\str -> Edit {expression=str,declarations=model.inputs.declarations})
                         ]  []
-                 , button [ class "navbar", onClick Evaluate ] [ text "Evaluate" ]
+                 , button
+                      [ class "navbar", onClick EvalMode ]
+                      [ text "Evaluate" ]
                ]
            , br [] []
            , textarea [ placeholder "Enter function definitions"
-                      , value model.inputDecls
+                      , value model.inputs.declarations
                       , rows 24
                       , cols 80
                       , spellcheck False
-                      , onInput ModifyDecls
+                      , onInput (\str -> Edit {expression=model.inputs.expression,declarations=str})
                       ] []
            , br [] []
-           , case model.parseResult of
-                 Err msg -> if model.inputDecls == "" &&
-                               model.inputExpr == "" then
+           , case model.parsed of
+                 Err msg -> if model.inputs.expression == "" &&
+                               model.inputs.declarations == "" then
                                 span [] []
                              else
                                 span [class "error"] [text msg]
@@ -142,7 +143,7 @@ reduceView model =
     div []
         [ span [] [ button [ class "navbar"
                            , disabled (not (List.isEmpty model.previous))
-                           , onClick Edit] [text "Edit"]
+                           , onClick EditMode] [text "Edit"]
                   , button [ class "navbar"
                            , onClick Reset
                            ] [text "Reset"]
@@ -219,8 +220,8 @@ reduceUpdate msg model =
                     }
                 Nothing ->
                     Reducing model
-        Edit ->
-            initModel {expression=model.inputExpr, declarations=model.inputDecls}
+        EditMode ->
+            initModel model.inputs
             
         _ ->
             Reducing model
@@ -234,18 +235,13 @@ reduceUpdate msg model =
 editUpdate : Msg -> EditModel -> Model 
 editUpdate msg model =
     case msg of
-        ModifyExpr string ->
-            let result = HsParser.parseProgram string model.inputDecls
+        Edit inputs ->
+            let result = HsParser.parseProgram inputs.expression inputs.declarations
             in
-                Editing { model | inputExpr=string, parseResult=result }
-
-        ModifyDecls string ->
-            let result = HsParser.parseProgram model.inputExpr string 
-            in
-                Editing { model | inputDecls=string, parseResult=result }
+                Editing { model | inputs=inputs, parsed=result }
         
-        Evaluate ->
-            case parseAndTypecheck model.prelude model.inputExpr model.inputDecls of
+        EvalMode ->
+            case parseAndTypecheck model.prelude model.inputs of
                 Ok (Letrec binds expr) ->
                     let
                         heap0 = Heap.fromBinds (model.prelude ++ binds)
@@ -254,11 +250,10 @@ editUpdate msg model =
                         { current = conf0
                         , next = Machine.next conf0
                         , previous = []
-                        , inputExpr = model.inputExpr
-                        , inputDecls = model.inputDecls
+                        , inputs = model.inputs
                         }
                 Err msg1 ->
-                    Editing {model | parseResult = Err msg1}
+                    Editing {model | parsed = Err msg1}
         _ ->
             Editing model
                        
@@ -268,16 +263,23 @@ subscriptions _ = Sub.none
 
 -- render a configuration to HTML
 renderConf : Machine.Conf -> Html msg
+{-             
+renderConf conf = div [class "line"]
+                  [ text <| Debug.toString
+                        (Machine.getControl conf,
+                         Machine.getStack conf) ]
+-}
 renderConf conf
     = case Machine.prettyConf conf of
-          Just (txt,Just info) ->
+          Just txt ->
               div [class "line"]
                   [ text txt
-                  , div [class "info"] [ text info]
+                  , case Machine.justifies conf of
+                        Just info ->
+                            div [class "info"] [ text info]
+                        Nothing ->
+                            span [] []
                   ]
-          Just (txt,Nothing) ->
-              div [class "line"]
-                  [ text txt ]                  
           Nothing ->
               span [] []
 

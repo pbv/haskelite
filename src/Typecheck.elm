@@ -112,14 +112,10 @@ tcMatching env match ty
               andThen (\env1 ->
               tcMatching env1 match1 ty2))))
 
-          Arg arg match1 ->
+          Arg arg m1 ->
               tcExpr env arg |>
               andThen (\ty1 ->
-              Tc.freshVar |>
-              andThen (\ty2 ->
-              Tc.unify (TyFun ty1 ty2) ty |>
-              andThen (\_ ->
-              tcMatching env match1 ty2)))
+              tcMatching env m1 (TyFun ty1 ty))
 
           Alt m1 m2 ->
               tcMatching env m1 ty |>

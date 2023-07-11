@@ -388,7 +388,7 @@ pattern =
     [ succeed (\id -> if id == "_" then DefaultP else VarP id)
            |= identifier
     , succeed BangP
-           |. operator "!"
+           |. symbol "!"
            |= identifier   
     , succeed (ConsP "True" [])
            |. keyword "True"
@@ -469,7 +469,7 @@ infix7 = infixLeft  applicativeExpr [ ("*", InfixOp "*") ]
 infix6 = infixLeft  infix7  [ ("+", InfixOp "+")
                             , ("-", InfixOp "-") ]
 infix5 = infixRight infix6 [ (":", \e1 e2 -> Cons ":" [e1,e2])
-                           , ("++", InfixOp "++")
+                           , ("++", \e1 e2 -> App (App (Var "++") e1) e2)
                            ]
 infix4 = infixLeft  infix5 [ ("==", InfixOp "==")
                            , ("/=", InfixOp "/=")
@@ -479,8 +479,8 @@ infix4 = infixLeft  infix5 [ ("==", InfixOp "==")
                            , (">", InfixOp ">")
                            ] -- TODO: these should be non-associative
 
-infix3 = infixRight infix4 [ ("&&", InfixOp "&&") ]
-infix2 = infixRight infix3 [ ("||", InfixOp "||") ]
+infix3 = infixRight infix4 [ ("&&", \e1 e2 -> App (App (Var "&&") e1) e2) ]
+infix2 = infixRight infix3 [ ("||", \e1 e2 -> App (App (Var "||") e2) e2) ]
 
 
 -- parse a given operator
@@ -871,13 +871,11 @@ foo x | x==0 = 42
 """
 
 example4 = """
-foo x y |x>y = x+y
-foo x y = x+z
+fact n | n>0 = n*fact (n-1)
+       | otherwise = 1
 """
-                   
+ 
 example5 = """
-len [] = 0
-len [x] = 1
-len [x,y] = 2
-len [x,y,z] = 3
+enumFrom :: Int -> [Int]
+enumFrom !n = n : enumFrom (n+1)
 """   

@@ -302,6 +302,8 @@ primitiveEnv
       , ("True", TyBool), ("False", TyBool)   
       , (":", TyFun (TyGen 0) (TyFun (TyList (TyGen 0)) (TyList (TyGen 0))))
       , ("[]", TyList (TyGen 0))
+      -- TODO: generalize this for more tuple sizes
+      , (",", TyFun (TyGen 0) (TyFun (TyGen 1) (TyTuple [TyGen 0, TyGen 1])))
       , ("enumFrom", TyFun TyInt (TyList TyInt))
       , ("enumFromTo", TyFun TyInt (TyFun TyInt (TyList TyInt)))
       , ("enumFromThen", TyFun TyInt (TyFun TyInt (TyList TyInt)))

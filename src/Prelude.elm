@@ -22,22 +22,22 @@ otherwise :: Bool
 otherwise = True
 
 (&&) :: Bool -> Bool -> Bool
-False && x = False
+False && _ = False
 True  && x = x
 
 (||) :: Bool -> Bool -> Bool
 False || x = x
-True  || x = True
+True  || _ = True
 
 not :: Bool -> Bool
 not True = False
 not False = True
 
 even :: Int -> Bool
-even x = mod x 2 == 0
+even x = x `mod` 2 == 0
 
 odd :: Int -> Bool
-odd x = mod x 2 == 1
+odd x = x `mod` 2 == 1
 
 min :: Int -> Int -> Int
 min x y | x<=y = x
@@ -48,24 +48,24 @@ max x y | x<=y = y
         | otherwise = x
 
 fst :: (a,b) -> a
-fst (x,y) = x
+fst (x,_) = x
 
 snd :: (a,b) -> b
-snd (x,y) = y
+snd (_,y) = y
 
 null :: [a] -> Bool
 null [] = True
-null (x:xs) = False
+null (_:_) = False
 
 head :: [a] -> a
-head (x:xs) = x
+head (x:_) = x
 
 tail :: [a] -> [a]
-tail (x:xs) = xs
+tail (_:xs) = xs
 
 length :: [a] -> Int
 length [] = 0
-length (x:xs) = 1 + length xs
+length (_:xs) = 1 + length xs
 
 (++) :: [a] -> [a] -> [a]
 [] ++ ys = ys
@@ -121,8 +121,8 @@ filter f (x:xs) | f x = x : filter f xs
                 | otherwise = filter f xs
 
 zip :: [a] -> [b] -> [(a,b)]
-zip [] ys = []
-zip xs [] = []
+zip [] _ = []
+zip _ [] = []
 zip (x:xs) (y:ys) = (x,y) : zip xs ys
 
 zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
@@ -151,4 +151,11 @@ dropWhile :: (a -> Bool) -> [a] -> [a]
 dropWhile p [] = []
 dropWhile p (x:xs) | p x = dropWhile p xs
                    | otherwise = x:xs
+
+enumFrom :: Int -> [Int]
+enumFrom !n = n : enumFrom (n+1)
+
+enumFromTo :: Int -> Int -> [Int]
+enumFromTo i j | i<=j = i : enumFromTo (i+1) j
+               | otherwise = []
 """

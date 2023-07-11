@@ -11,11 +11,14 @@ import AST exposing (Expr(..),
                      Decl(..),
                      Info,
                      Name,
+                     Tag,
                      Subst)
 import Dict exposing (Dict)
 import Pretty exposing (StringBuilder)
 import DList
 import Heap exposing (Heap)
+import Context exposing (ExprCtx)
+import Monocle.Optional as Monocle
 import Debug
 
 
@@ -40,7 +43,9 @@ type Cont
     | PushPat ArgStack Pattern Matching
       -- continuations for primitive operations
     | RetPrim1 Name Expr
-    | RetPrim2 Name Int 
+    | RetPrim2 Name Int
+      -- for full normal form evaluation
+    | DeepEval Expr ExprCtx
       
 
 isWhnf : Expr -> Bool
@@ -90,8 +95,7 @@ transition conf
               else
                   case stack of
                       PushArg e1::rest ->
-                          -- check if neeed to memoize the
-                          -- result of evaluation
+                          -- check if neeed to memoize the result of evaluation
                           if isVar e1 || isWhnf e1 then
                               Just (heap, E (Lam optname (Arg e1 m)), rest)
                           else
@@ -159,7 +163,7 @@ transition conf
               in
                   Just (heap, M m2 args, stack)
                       
-          -- match a constructor
+          -- match a constructor or a strict (bang) pattern 
           (heap, M (Match p1 m1) (e1::args), stack) ->
               Just (heap, E e1, (PushPat args p1 m1)::stack)
                       
@@ -200,7 +204,13 @@ transition conf
           -- deal with arguments
           (heap, M (Arg e m1) args, stack) ->
               Just (heap, M m1 (e::args), stack)
-                  
+
+          -- deep evaluation
+          (heap, E w, (DeepEval expr ctx)::stack) ->
+              if isWhnf w then
+                  deepEval heap (ctx.set w expr) stack
+              else
+                  Nothing
           _ ->
               Nothing
 
@@ -232,6 +242,11 @@ applyPrimitive op v1 v2
                         Number (v1 // v2)
                     else
                         Error)
+          "mod" ->
+              Just (if v2 /= 0 then
+                        Number (modBy v2 v1)
+                    else
+                        Error)
           "==" ->
               Just (compareOp (v1 == v2))
           ">" ->
@@ -248,25 +263,17 @@ applyPrimitive op v1 v2
 compareOp : Bool -> Expr
 compareOp c = if c then AST.trueCons else AST.falseCons
 
-              
--- debugging function
-transitions : Conf -> ()
-transitions conf = transitions_ 0 conf
-              
-transitions_ : Int -> Conf -> ()
-transitions_ n conf
-    = let
-        _ = Debug.log (String.fromInt n) (prettyConf conf)
-      in
-       case next conf of
-           Nothing ->
-               ()
-           Just conf1 ->
-               transitions_ (n+1) conf1
 
 
--- a "bigger step" transiton
--- ignoring trival steps that are not very informative
+              
+---
+-- starting configuration
+start : Heap -> Expr -> Conf
+start heap expr
+    = (heap, E expr, [DeepEval expr Context.empty])
+                   
+-- a "bigger step" transition
+-- ignoring steps that are not very informative
 next : Conf -> Maybe Conf
 next conf
     = case transition conf of
@@ -281,18 +288,18 @@ next conf
                           
 -- check whether a configuration should be shown not be skipped
 observe : Conf -> Bool
-observe (heap, control, stack)                                 
+observe (heap, control, stack)
     = case (control,stack) of
-          {-
-          (E (Lam _ _), _) ->
-              False
-          -}
-          (E (Var _),  _) ->
-              False
-          (E _, (Update _::_)) ->
-               False
-          (E _, _) ->
+          (E (Number _), RetPrim2 _ _::_) ->
               True
+          (E w, (DeepEval _ _::_)) ->
+               isWhnf w
+          (E w, []) ->
+              isWhnf w
+          (E w, (PushPat _ _ _::_)) ->
+              isWhnf w
+          (E _, _) ->
+              False
           -- observe only the last step of matching
           (M (Return _ _) _, (MatchEnd::_)) ->
               True
@@ -302,15 +309,6 @@ observe (heap, control, stack)
               False
 
 
-{-
-explainConf : Conf -> Maybe String
-explainConf (heap, control, stack)
-    = case control of
-          M (Return expr info) _ ->
-              Just info
-          _ ->
-              Nothing
--}
                   
 prettyConf : Conf ->  Maybe String
 prettyConf (heap, control, stack)
@@ -370,16 +368,77 @@ prettyCont heap stack acc
                               (DList.cons op (Pretty.bracket "(" ")" acc))
               in
                   prettyCont heap rest acc1
+          MatchEnd::rest ->
+              prettyCont heap rest acc
+
           (_::rest) ->
-              Pretty.bracket "(..." "...)" acc                  
-              -- prettyCont heap rest acc
+              Pretty.bracket "(..." "...)" acc
 
 
 
+-----------------------------------------------------------------------
+-- reduction to full normal form
+-----------------------------------------------------------------------
+deepEval : Heap -> Expr -> Stack -> Maybe Conf
+deepEval heap expr stack
+    = case outermostRedex expr of
+          Just ctx ->
+              ctx.getOption expr |>
+              Maybe.andThen
+                  (\expr1 ->
+                       Just (heap, E expr1, DeepEval expr ctx::stack))
+          Nothing ->
+              Just (heap, E expr, stack)
 
+
+                  
+-- determine the outermost reduction context
+outermostRedex : Expr -> Maybe ExprCtx
+outermostRedex expr
+    = case expr of
+          Cons tag args ->
+              outermostRedexArgs tag 0 args
+          _ ->
+              Nothing
+
+outermostRedexArgs : Tag -> Int -> List Expr -> Maybe ExprCtx
+outermostRedexArgs tag i args
+    = case args of
+          [] ->
+              Nothing
+          (arg1::rest) ->
+              if isWhnf arg1 then
+                  case outermostRedex arg1 of
+                      Nothing ->
+                          outermostRedexArgs tag (i+1) rest
+                      Just ctx1 ->
+                          Just (Monocle.compose (Context.cons tag i) ctx1)
+              else
+                  Just (Context.cons tag i)
+                  
+
+
+               
+                  
 --------------------------------------------------------------------
 -- examples for debugging 
 -------------------------------------------------------------------
+
+-- debugging function
+transitions : Conf -> ()
+transitions conf = transitions_ 0 conf
+              
+transitions_ : Int -> Conf -> ()
+transitions_ n conf
+    = let
+        _ = Debug.log (String.fromInt n) (getControl conf, getStack conf )
+      in
+       case next conf of
+           Nothing ->
+               ()
+           Just conf1 ->
+               transitions_ (n+1) conf1
+
 
 example0 : Conf
 example0 = (Dict.empty, E (InfixOp "+" (Number 1) (Number 2)), [])
@@ -434,10 +493,12 @@ example6 =
     let
         heap = Dict.singleton "fact"
                (Lam (Just "fact")
-                    (Alt (Match (NumberP 0)
-                              (Return (Number 1) "fact 0 = 1"))
-                         (Match (VarP "n")
-                              (Return (InfixOp "*" (Var "n") (App (Var "fact") (InfixOp "-" (Var "n") (Number 1)))) "fact n = n * fact (n-1)"))))
+                   (Alt (Match (VarP "n")
+                             (Arg (InfixOp ">" (Var "n") (Number 0))
+                                  (Match (ConsP "True" [])
+                                       (Return (InfixOp "*" (Var "n") (App (Var "fact") (InfixOp "-" (Var "n") (Number 1)))) "fact n | n>0 = n*fact (n-1)"))))
+                        (Match (VarP "n")
+                             (Return (Number 1) "fact n | otherwise = 1"))))
         control = E (App (Var "fact") (Number 5))
         stack = []
     in
@@ -448,14 +509,14 @@ example7 : Conf
 example7 =
     let heap = Dict.singleton "factAcc"
                (Lam (Just "factAcc")
-                    (Alt (Match (NumberP 0)
+                    (Alt (Match (VarP "n")
                               (Match (VarP "acc")
-                                   (Return (Var "acc") "factAcc 0 acc = acc")))
-                         (Match (VarP "n")
+                                   (Arg (InfixOp ">" (Var "n") (Number 1))
+                                        (Match (ConsP "True" [])
+                                             (Return (App (App (Var "factAcc") (InfixOp "-" (Var "n") (Number 1))) (InfixOp "*" (Var "n") (Var "acc"))) "factAcc n acc | n>0 = facAcc (n-1) (n*acc)")))))
+                         (Match DefaultP
                               (Match (VarP "acc")
-                                   (Return (App (App (Var "factAcc")
-                                                     (InfixOp "-" (Var "n") (Number 1)))
-                                                (InfixOp "*" (Var "n") (Var "acc"))) "factAcc n acc = factAcc (n-1) (n*acc)")))))
+                                   (Return (Var "acc") "factAcc _ acc = acc")))))
         control = E (App (App (Var "factAcc") (Number 5)) (Number 1))
         stack = []
     in
@@ -489,4 +550,23 @@ example9
                  ]
       in (heap, E (App (App (Var "revacc") (AST.listLit [Number 1, Number 2, Number 3])) (AST.listLit [])), [])
               
-                       
+
+
+example10
+    = let heap = Dict.fromList
+                 [ ("double", Lam (Just "double")
+                      (Alt
+                       (Match (ConsP ":" [VarP "x", VarP "xs"])
+                            (Return
+                                 (Cons ":"
+                                 [InfixOp "*" (Number 2) (Var "x"),
+                                      App (Var "double") (Var "xs")])
+                                 "double-1"))
+                       (Match (ConsP "[]" [])
+                            (Return (Cons "[]" []) "double-2"))
+                           ))
+                     ]
+
+          expr = (App (Var "double") (AST.listLit [Number 1, Number 2, Number 3]))
+      in
+          (heap, E expr, [DeepEval expr Context.empty])

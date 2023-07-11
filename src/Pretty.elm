@@ -81,6 +81,17 @@ prettyExpr_ heap prec e =
                     (DList.append (DList.singleton (formatOperator op))
                                        (prettyExpr_ heap 1 e2))
 
+        App (App (Var op) e1) e2 ->
+            if AST.isOperator op then
+                DList.append (prettyExpr_ heap 1 e1)
+                    (DList.cons op
+                         (prettyExpr_ heap 1 e2))
+            else
+                paren (prec>0) <|
+                    DList.append (prettyExpr_ heap 0 (App (Var op) e1))
+                        (DList.append (DList.singleton " ") (prettyExpr_ heap 1 e2))
+                
+                        
         App e0 e1 ->
             paren (prec>0) <|
             DList.append (prettyExpr_ heap 0 e0)

@@ -37,14 +37,14 @@ type Model
 type alias EditModel
     = { inputs : Inputs                 -- user inputs
       , parsed : Result String Program  -- result of parsing
-      , prelude : List Bind             -- parsed prelude
+      , prelude : List Bind             -- prelude bindings
       }
 
 type alias ReduceModel
     = { current : Machine.Conf           -- current configuration
       , previous : List Machine.Conf     -- list of previous configs
       , next : Maybe Machine.Conf        -- optional next configuration
-      , inputs : Inputs           -- saved inputs (to go back to editing)
+      , inputs : Inputs                  -- saved inputs (to go back to editing)
       }
 
     
@@ -53,7 +53,7 @@ type Msg
     | Next               -- next outermost step
     | Reset              -- reset evaluation
     | EditMode           -- go into editing mode
-    | EvalMode           -- go into reduction mode
+    | EvalMode           -- go into evaluation mode
     | Edit Inputs        -- modify inputs
 
       
@@ -87,7 +87,8 @@ initModel inputs
                   , prelude = prelude
                   }
 
--- the first argument are the prelude bindings                  
+-- parse and typecheck input expression and declararations
+-- the first argument are the bindings for the prelude
 parseAndTypecheck : List Bind -> Inputs -> Result String Program
 parseAndTypecheck prelude inputs
     = HsParser.parseProgram inputs.expression inputs.declarations |>
@@ -98,9 +99,12 @@ parseAndTypecheck prelude inputs
 view : Model -> Html Msg
 view model =
     case model of
-        Editing m -> editingView m
-        Reducing m -> reduceView m
-        Panic msg -> panicView msg
+        Editing m ->
+            editingView m
+        Reducing m ->
+            reduceView m
+        Panic msg ->
+            panicView msg
 
 panicView : String -> Html msg
 panicView msg =
@@ -245,7 +249,7 @@ editUpdate msg model =
                 Ok (Letrec binds expr) ->
                     let
                         heap0 = Heap.fromBinds (model.prelude ++ binds)
-                        conf0 = (heap0, Machine.E expr, [])
+                        conf0 = Machine.start heap0 expr
                     in Reducing
                         { current = conf0
                         , next = Machine.next conf0
@@ -276,7 +280,7 @@ renderConf conf
                   [ text txt
                   , case Machine.justifies conf of
                         Just info ->
-                            div [class "info"] [ text info]
+                            div [class "info"] [text info]
                         Nothing ->
                             span [] []
                   ]

@@ -24,7 +24,7 @@ import Platform.Sub as Sub
 
 import List.Extra as List
 import Browser
-import Debug
+-- import Debug
 
 type alias Inputs 
     = { expression:String, declarations:String }

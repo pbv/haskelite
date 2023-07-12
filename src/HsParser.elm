@@ -34,23 +34,6 @@ parseProgram inputExpr inputDecls
 
 
 
-{-
-collectAlts : List Decl -> List Alt
-collectAlts decls
-    = case decls of
-          (Equation _ patts expr :: rest) ->
-              (patts,expr) :: collectAlts rest
-          _ ->
-              []   -- NB: this fails silently if there are multiple type signatures
-              
-                  
-       
-
-  
-
--}            
-
-
 ----------------------------------------------------------------
 -- declarations
 ----------------------------------------------------------------
@@ -842,7 +825,6 @@ problemToString prob
           _ -> "?"
       
 -----------------------------------------------------
-
 
 example1 : String
 example1 =

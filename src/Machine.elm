@@ -14,12 +14,11 @@ import AST exposing (Expr(..),
                      Tag,
                      Subst)
 import Dict exposing (Dict)
-import Pretty exposing (StringBuilder)
-import DList
+import Pretty 
 import Heap exposing (Heap)
 import Context exposing (ExprCtx)
 import Monocle.Optional as Monocle
-import Debug
+-- import Debug
 
 
 type alias Conf
@@ -47,7 +46,9 @@ type Cont
       -- for full normal form evaluation
     | DeepEval Expr ExprCtx
       
+           
 
+      
 isWhnf : Expr -> Bool
 isWhnf expr =
     case expr of
@@ -95,8 +96,10 @@ transition conf
               else
                   case stack of
                       PushArg e1::rest ->
-                          -- check if neeed to memoize the result of evaluation
+                          -- check if we neeed to update the
+                          -- result of evaluation
                           if isVar e1 || isWhnf e1 then
+                              -- no update
                               Just (heap, E (Lam optname (Arg e1 m)), rest)
                           else
                               -- create new indirection to the expression
@@ -292,6 +295,8 @@ observe (heap, control, stack)
     = case (control,stack) of
           (E (Number _), RetPrim2 _ _::_) ->
               True
+          (E Error, _) ->
+              True
           (E w, (DeepEval _ _::_)) ->
                isWhnf w
           (E w, []) ->
@@ -308,22 +313,17 @@ observe (heap, control, stack)
           (M _ _, _) ->
               False
 
-
+-------------------------------------------------------------------------------------
+-- showing configurations 
+-------------------------------------------------------------------------------------
                   
 prettyConf : Conf ->  Maybe String
 prettyConf (heap, control, stack)
    = case (control, stack) of
          (E expr, _) ->
-             Just <|
-                  Pretty.toString <|
-                  prettyCont heap stack <|
-                  Pretty.prettyExpr_ heap 0 expr
-
+             Just <| prettyCont heap stack expr
          (M (Return expr info) [], MatchEnd::_) ->
-             Just <|
-                  Pretty.toString <|
-                  prettyCont heap stack <|
-                  Pretty.prettyExpr_ heap 0 expr
+             Just <| prettyCont heap stack expr
          (M Fail [], MatchEnd::_) ->
              Just "pattern match failure"
          _ ->
@@ -342,37 +342,26 @@ justifies (heap, control, stack)
              Nothing
                  
                  
--- convert a continuation stack into an pretty expression
-prettyCont : Heap -> Stack -> StringBuilder -> StringBuilder
+-- convert a continuation stack into a string
+prettyCont : Heap -> Stack -> Expr -> String
 prettyCont heap stack acc
     = case stack of
           [] ->
-              acc
+              Pretty.prettyExpr heap acc
           (Update _::rest) ->
               prettyCont heap rest acc
           (PushArg arg::rest) ->
-              let
-                  acc1 = DList.append acc
-                         (DList.cons " " (Pretty.prettyExpr_ heap 1 arg))
-              in
-                  prettyCont heap rest acc1
+              prettyCont heap rest (App acc arg)
           (RetPrim1 op e2::rest) ->
-              let acc1 = DList.append
-                         acc (DList.cons op
-                                  (Pretty.prettyExpr_ heap 1 e2))
-              in 
-                 prettyCont heap rest acc1
+              prettyCont heap rest (InfixOp op acc e2)
           (RetPrim2 op v::rest) ->
-              let acc1 = DList.append
-                         (DList.singleton (String.fromInt v))
-                              (DList.cons op (Pretty.bracket "(" ")" acc))
-              in
-                  prettyCont heap rest acc1
+              prettyCont heap rest (InfixOp op (Number v) acc)
           MatchEnd::rest ->
               prettyCont heap rest acc
-
+          DeepEval expr ctx::rest ->
+              prettyCont heap rest (ctx.set acc expr)
           (_::rest) ->
-              Pretty.bracket "(..." "...)" acc
+              "... " ++ Pretty.prettyExpr heap acc
 
 
 
@@ -423,7 +412,7 @@ outermostRedexArgs tag i args
 --------------------------------------------------------------------
 -- examples for debugging 
 -------------------------------------------------------------------
-
+{-
 -- debugging function
 transitions : Conf -> ()
 transitions conf = transitions_ 0 conf
@@ -438,7 +427,7 @@ transitions_ n conf
                ()
            Just conf1 ->
                transitions_ (n+1) conf1
-
+-}
 
 example0 : Conf
 example0 = (Dict.empty, E (InfixOp "+" (Number 1) (Number 2)), [])

@@ -112,31 +112,27 @@ freshInst ty
       in
           freshVars (List.length gvs) |>
           andThen (\vs -> let r = Dict.fromList <| List.map2 Tuple.pair gvs vs
-                          in freshInst_ r ty)
+                          in pure (freshInst_ r ty))
 
--- worker function 
-freshInst_ : Dict Int Type -> Type -> Tc Type
+-- worker function to perform the generic variable replacement
+freshInst_ : Dict Int Type -> Type -> Type
 freshInst_ r ty
     = case ty of
           TyGen gv -> 
-              pure <|
                   case Dict.get gv r of
-                  Just t -> t
-                  Nothing -> TyGen gv  -- NB: this should not happen!
+                      Just t -> t
+                      Nothing -> ty  -- NB: this should not happen!
           TyFun t1 t2 ->
-              freshInst_ r t1 |>
-              andThen (\t1n ->
-              freshInst_ r t2 |>
-              andThen (\t2n ->
-              pure (TyFun t1n t2n)))
+              TyFun (freshInst_ r t1) (freshInst_ r t2)
+                  
           TyList t1 ->
-              freshInst_ r t1 |>
-              andThen (\t1n -> pure (TyList t1n))
+              TyList (freshInst_ r t1)
+
           TyTuple ts ->
-              traverse (freshInst_ r) ts |>
-              andThen (\nts -> pure (TyTuple nts))
+              TyTuple (List.map (freshInst_ r) ts)
+
           _ ->
-            pure ty
+            ty
 
 
           

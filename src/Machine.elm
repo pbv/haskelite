@@ -313,24 +313,16 @@ observe (heap, control, stack)
     = case (control,stack) of
           (E (Number _), RetPrim2 _ _::_) ->
               True
-          {-
-          (E w, RetPrim2 _ _::_) ->
-              not (isWhnf w)
-          -}
           (E Error, _) ->
               True
-                  {-
-          (E w, (DeepEval _ _::_)) ->
-               isWhnf w
-                   -}
           (E w, []) ->
               isWhnf w
-          (E w, (PushPat _ _ _::_)) ->
-              not (isWhnf w)
+          (E e, (PushPat _ _ _::_)) ->
+              not (isWhnf e)
           (E _, _) ->
               False
           -- observe only the final steps of matching
-          (M (Return _ _) _, (MatchEnd::_)) ->
+          (M (Return _ _) [], (MatchEnd::_)) ->
               True
           (M Fail _, (MatchEnd::_)) ->
               True

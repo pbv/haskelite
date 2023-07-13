@@ -6,6 +6,7 @@
 module Typecheck exposing (..)
 
 import Dict exposing (Dict)
+import Set exposing (Set)
 import Set
 import AST exposing (Expr(..), Matching(..), Pattern(..),
                          Program(..), Bind, Name)
@@ -261,7 +262,7 @@ checkTypSig bind tyinfer
           Nothing ->
               pure ()
           Just tysig ->
-              if tysig /= tyinfer then
+              if Types.generalize Set.empty tysig /= tyinfer then
                   fail ("type signature " ++ bind.name ++ " :: " ++ 
                         Pretty.prettyType tysig ++ 
                         " is too general; inferred type: " ++
@@ -269,6 +270,12 @@ checkTypSig bind tyinfer
               else
                   pure ()
 
+
+-- free type vars in a typing environment
+freeTyEnvVars : TyEnv -> Set Name
+freeTyEnvVars 
+    = Dict.foldl (\_ ty acc -> Set.union (Types.freeTyVars ty) acc) Set.empty 
+                      
 
 ------------------------------------------------------------------------------
 -- Prelude stuff

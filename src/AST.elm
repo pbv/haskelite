@@ -18,8 +18,7 @@ type alias Tag
 
 -- information associated with a successful match
 type alias Info
-    = String
-      
+    = String     
       
 -- * expressions 
 type Expr 

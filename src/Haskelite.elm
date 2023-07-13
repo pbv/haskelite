@@ -13,8 +13,6 @@ import Typecheck
 import Parser
 import Pretty
 import Prelude
--- import Context exposing (Context)
-import Monocle.Optional as Monocle
 import Html exposing (..)
 import Html.Attributes exposing (value, class, placeholder, disabled,
                                      size, rows, cols, spellcheck)
@@ -24,7 +22,7 @@ import Platform.Sub as Sub
 
 import List.Extra as List
 import Browser
--- import Debug
+
 
 type alias Inputs 
     = { expression:String, declarations:String }
@@ -170,10 +168,7 @@ lineView : Machine.Conf -> Html Msg
 lineView conf =
     renderConf conf 
 
-{-
-        , div [class "info"] [ text (Pretty.prettyInfo info) ]              
-        ]
--}
+
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =

@@ -18,7 +18,7 @@ import Pretty
 import Heap exposing (Heap)
 import Context exposing (ExprCtx)
 import Monocle.Optional as Monocle
--- import Debug
+import Debug
 
 
 type alias Conf
@@ -267,13 +267,31 @@ compareOp : Bool -> Expr
 compareOp c = if c then AST.trueCons else AST.falseCons
 
 
+-------------------------------------------------------------------------
+-- a heap with lambda matchings for primitive operations
+-- to allow partial applications
+-------------------------------------------------------------------------
+heap0 : Heap
+heap0
+    = Dict.fromList <|
+      List.map  (\op -> (op, Lam (Just op)
+                             (Match (VarP "x")
+                              (Match (VarP "y")
+                               (Return (InfixOp op (Var "x") (Var "y"))
+                                    ("apply primitive " ++ op)
+                               ))))) <|
+      [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]
+          
 
               
 ---
 -- starting configuration
 start : Heap -> Expr -> Conf
 start heap expr
-    = (heap, E expr, [DeepEval expr Context.empty])
+    = let
+        heap1 = Dict.union heap0 heap
+      in
+        (heap1, E expr, [DeepEval expr Context.empty])
                    
 -- a "bigger step" transition
 -- ignoring steps that are not very informative
@@ -295,17 +313,23 @@ observe (heap, control, stack)
     = case (control,stack) of
           (E (Number _), RetPrim2 _ _::_) ->
               True
+          {-
+          (E w, RetPrim2 _ _::_) ->
+              not (isWhnf w)
+          -}
           (E Error, _) ->
               True
+                  {-
           (E w, (DeepEval _ _::_)) ->
                isWhnf w
+                   -}
           (E w, []) ->
               isWhnf w
           (E w, (PushPat _ _ _::_)) ->
-              isWhnf w
+              not (isWhnf w)
           (E _, _) ->
               False
-          -- observe only the last step of matching
+          -- observe only the final steps of matching
           (M (Return _ _) _, (MatchEnd::_)) ->
               True
           (M Fail _, (MatchEnd::_)) ->
@@ -330,9 +354,9 @@ prettyConf (heap, control, stack)
              Nothing
              
 
--- construct the justification for the following reduction step
-justifies : Conf -> Maybe String
-justifies (heap, control, stack)
+-- justification for a transition step 
+justification : Conf -> Maybe String
+justification (heap, control, stack)
     = case (control, stack) of
          (E (Number v1), (RetPrim2 op v2::_)) ->
              Just ("primitive " ++ op)
@@ -412,7 +436,7 @@ outermostRedexArgs tag i args
 --------------------------------------------------------------------
 -- examples for debugging 
 -------------------------------------------------------------------
-{-
+
 -- debugging function
 transitions : Conf -> ()
 transitions conf = transitions_ 0 conf
@@ -427,18 +451,21 @@ transitions_ n conf
                ()
            Just conf1 ->
                transitions_ (n+1) conf1
--}
+
 
 example0 : Conf
-example0 = (Dict.empty, E (InfixOp "+" (Number 1) (Number 2)), [])
+example0 = (heap0, E (InfixOp "*" (Number 1) (Number 2)), [])
 
 example1 : Conf
 example1 =
     let
-        heap = Dict.singleton "x" (InfixOp "+" (Number 1) (Number 2))
+        heap = Dict.singleton "square"
+               (Lam (Just "square")
+                    (Match (VarP "x") (Return (InfixOp "*" (Var "x") (Var "x"))
+                                           "square x = x*x")))
         stack = []
     in 
-        (heap, E (Var "x"), stack)
+        (heap, E (App (Var "square") (Number 5)), stack)
 
 
 example3 : Conf

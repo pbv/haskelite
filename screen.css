@@ -8,11 +8,14 @@
 
 .lines   {
     font-family: monospace;
-    padding: 1em;
-    margin: 5em;
-    margin: 1em 0;
+    padding: 2em;
+    margin: 1em 1em;
     background: lightyellow;
     cursor: default;
+    height: 30em;
+    overflow-y: auto;
+    flex-direction: column-reverse;
+    display: flex;
 }
 
 .line {

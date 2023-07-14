@@ -6,18 +6,27 @@
 
   <body>
     <h1>Recursive factorial</h1>
-    <p>Computing the factorial of 5 recursively.
+    <p>Three different ways of computing the factorial.
       <a href="index.html">Back</a></p>
     <div id="haskelite"></div>
     <script src="haskelite-min.js"></script>
     <script>
-      var decls = "factorial 0 = 1\nfactorial n = n*factorial (n-1)";
+      var decls =
+	  "fact1 :: Int -> Int\n" +
+	  "fact1 0 = 1\n" +
+	  "fact1 n = n*fact1 (n-1)\n\n" +
+	  "fact2 :: Int -> Int\n"+
+	  "fact2 n\n"+
+	  "   | n>0 = n*fact2 (n-1)\n"+
+	  "   | otherwise = 1\n\n"+
+	  "fact3 :: Int -> Int\n"+
+	  "fact3 n = product [1..n]\n";
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
-	  flags: { expression:"factorial 5", declarations: decls }
+	  flags: { expression:"fact1 10", declarations: decls }
       });
     </script>
     <hr>
-    Pedro Vasconcelos, 2022.
+    Pedro Vasconcelos, 2023.
   </body>
 </html>

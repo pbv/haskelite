@@ -1,5 +1,6 @@
 {-
-  Pretty-printer for Haskelite expressions and types
+  Pretty-printer for Haskelite expressions, types
+  and machine configurations
   Pedro Vasconcelos 2021-23
 -}
 module Pretty exposing (..)
@@ -7,6 +8,7 @@ module Pretty exposing (..)
 import AST exposing (Expr(..), Matching(..), Pattern(..), Name)
 import Types exposing (Type(..))
 import Heap exposing (Heap)
+import Machine exposing (Conf, Stack, Control(..), Cont(..))
 import Dict
 import DList exposing (DList)
 
@@ -245,41 +247,38 @@ showGenVar : Int -> String
 showGenVar n
     = String.fromChar <| Char.fromCode <| Char.toCode 'a' + n
 
-{-
-prettyDecl : Decl -> String
-prettyDecl decl =
-    case decl of
-        TypeSig f ty ->
-            f ++ " :: " ++ prettyType ty
-                
-        Equation f ps expr ->
-            case ps of
-                [p1, p2] -> if isOperator f then
-                                prettyInfix f p1 p2 expr
-                            else
-                                prettyEquation f ps expr
-                _ -> prettyEquation f ps expr
+----------------------------------------------------------------------------------
+-- showing configurations 
+----------------------------------------------------------------------------------
+                  
+prettyConf : Conf ->  Maybe String
+prettyConf (heap, control, stack)
+   = case (control, stack) of
+         (E expr, _) ->
+             Just <| prettyCont heap stack expr
+         _ ->
+             Nothing
+             
 
-prettyEquation f ps expr
-    = (String.join " " <| (f :: List.map prettyPattern ps))
-      ++ " = " ++ prettyExpr expr
+                 
+-- convert a continuation stack into a string
+prettyCont : Heap -> Stack -> Expr -> String
+prettyCont heap stack acc
+    = case stack of
+          [] ->
+              prettyExpr heap acc
+          (Update _::rest) ->
+              prettyCont heap rest acc
+          (PushArg arg::rest) ->
+              prettyCont heap rest (App acc arg)
+          (RetPrim1 op e2::rest) ->
+              prettyCont heap rest (InfixOp op acc e2)
+          (RetPrim2 op v::rest) ->
+              prettyCont heap rest (InfixOp op (Number v) acc)
+          MatchEnd::rest ->
+              prettyCont heap rest acc
+          DeepEval expr ctx::rest ->
+              prettyCont heap rest (ctx.set acc expr)
+          (_::rest) ->
+              "... " ++ prettyExpr heap acc
 
-prettyInfix f p1 p2 expr
-    = prettyPattern p1 ++ " " ++ f ++ " " ++
-      prettyPattern p2 ++ " = " ++ prettyExpr expr
-
-
-prettyInfo : Info -> String
-prettyInfo info =
-    case info of
-        Prim str -> str
-        Rewrite decl -> prettyDecl decl
--}
-          
-                    
-example1 = Lam (Just "foo") (Match (VarP "x") (Return (Number 42) ""))
-
-example2 = Lam (Just "foo") (Arg (App (Var "f") (Number 2)) (Arg (Number 1) (Match (VarP "x") (Return (Number 42) ""))))
-
-match2 = (Arg (Number 2) (Arg (Number 1) (Match (VarP "x") (Match (VarP "y") (Return (App (Var "f") (Number 42)) "")))))
-           

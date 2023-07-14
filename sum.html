@@ -3,7 +3,6 @@
   <head>
     <link rel="stylesheet" href="screen.css">
   </head>
-
   <body>
     <h1>Summing squares</h1>
     <p>Summing the squares of numbers from 1 to 5. <a href="index.html">Back</a></p>
@@ -13,10 +12,11 @@
       var decls = "square x = x*x";
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
-	  flags: { expression:"sum (map square [1..5])", declarations: decls }
+	  flags: { expression:"sum (map square [1..5])",
+		   declarations: decls }
       });
     </script>
     <hr>
-    Pedro Vasconcelos, 2022.
+    Pedro Vasconcelos, 2023.
   </body>
 </html>

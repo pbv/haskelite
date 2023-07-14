@@ -13,15 +13,16 @@ import Typecheck
 import Parser
 import Pretty
 import Prelude
+
 import Html exposing (..)
 import Html.Attributes exposing (value, class, placeholder, disabled,
                                      size, rows, cols, spellcheck)
 import Html.Events exposing (on, onClick, onInput)
 import Platform.Cmd as Cmd
 import Platform.Sub as Sub
+import Browser
 
 import List.Extra as List
-import Browser
 
 
 type alias Inputs 
@@ -174,7 +175,7 @@ reduceView model =
          
 renderStep  : Step -> Html Msg
 renderStep (conf, info)
-    = case Machine.prettyConf conf of
+    = case Pretty.prettyConf conf of
           Just txt ->
               div [class "line"]
                   [ text txt,

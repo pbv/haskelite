@@ -15,7 +15,6 @@ import AST exposing (Expr(..),
                      Tag,
                      Subst)
 import Dict exposing (Dict)
-import Pretty 
 import Heap exposing (Heap)
 import Context exposing (ExprCtx)
 import Monocle.Optional as Monocle
@@ -342,31 +341,26 @@ start heap expr
 --
 next : Conf -> Maybe (Conf, Info)
 next conf0
-    = case transition conf0 of
-          Nothing ->
-              Nothing
-          Just conf1 ->
-              case justification conf0 of
-                  Just info ->
-                      Just (conf1, info)
-                  Nothing ->
-                      next conf1
+    = nextW 100 conf0
+
+-- worker function with an iteration limit
+nextW : Int -> Conf -> Maybe (Conf, Info)
+nextW iters conf0
+    = if iters > 0 then
+          case transition conf0 of
+              Nothing ->
+                  Nothing
+              Just conf1 ->
+                  case justification conf0 of
+                      Just info ->
+                          Just (conf1, info)
+                      Nothing ->
+                          nextW (iters-1) conf1
+      else
+          Just (conf0, "<loop>")
 
                           
-
-----------------------------------------------------------------------------------
--- showing configurations 
-----------------------------------------------------------------------------------
-                  
-prettyConf : Conf ->  Maybe String
-prettyConf (heap, control, stack)
-   = case (control, stack) of
-         (E expr, _) ->
-             Just <| prettyCont heap stack expr
-         _ ->
-             Nothing
-             
-
+                          
 -- justification for a transition step 
 justification : Conf -> Maybe String
 justification (heap, control, stack)
@@ -380,31 +374,7 @@ justification (heap, control, stack)
          _ ->
              Nothing
                  
-                 
--- convert a continuation stack into a string
-prettyCont : Heap -> Stack -> Expr -> String
-prettyCont heap stack acc
-    = case stack of
-          [] ->
-              Pretty.prettyExpr heap acc
-          (Update _::rest) ->
-              prettyCont heap rest acc
-          (PushArg arg::rest) ->
-              prettyCont heap rest (App acc arg)
-          (RetPrim1 op e2::rest) ->
-              prettyCont heap rest (InfixOp op acc e2)
-          (RetPrim2 op v::rest) ->
-              prettyCont heap rest (InfixOp op (Number v) acc)
-          MatchEnd::rest ->
-              prettyCont heap rest acc
-          DeepEval expr ctx::rest ->
-              prettyCont heap rest (ctx.set acc expr)
-          (_::rest) ->
-              "... " ++ Pretty.prettyExpr heap acc
-
-
-
-               
+            
                   
 --------------------------------------------------------------------
 -- examples for debugging 

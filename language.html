@@ -11,11 +11,11 @@
 
 Integers, variables, arithmetic operations (`+, -, *, div, mod`),
 comparisons between integers (`==`, `<=`, etc.), tuples, list enumerations
-(e.g. `[1..10]`) lambda-expressions and if-then-else.
+(e.g. `[1..10]`) and lambda-expressions.
 
 <h2>Function definitions</h2>
 
-Pattern matching over integers, lists and tuples; recursive
+Pattern matching over integers lists and tuples; boolean guards; recursive
 definitions are allowed.
 
 
@@ -39,10 +39,12 @@ take, drop :: Int -> [a] -> [a]
 concat :: [[a]] -> [a]
 repeat :: a -> [a]
 cycle :: [a] -> [a]
+iterate :: (a -> a) -> a -> [a]
 map :: (a -> b) -> [a] -> [b]
 filter :: (a -> Bool) -> [a] -> [a]
 foldr :: (a -> b -> b) -> b -> [a] -> b
 foldl :: (a -> b -> a) -> a -> [b] -> a
+foldl' :: (a -> b -> a) -> a -> [b] -> a
 zip :: [a] -> [b] -> [(a,b)]
 zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
 takeWhile, dropWhile :: (a -> Bool) -> [a] -> [a]
@@ -54,14 +56,13 @@ any, all :: (a -> Bool) -> [a] -> Bool
 The following Haskell 98 features are <em>not</em> implemented:
 
 <ul>
-<li><strike>static type checking</strike> type classes
+<li>type classes
 <li>the numeric tower (Float, Integer, Double, etc.)
 <li>let and case expressions
-<li>guards
 <li>list compreensions
 <li>caracters and strings
 <li>user-defined algebraic data types
 </ul>
 
 <hr>
-Pedro Vasconcelos, 2022
+Pedro Vasconcelos, 2023

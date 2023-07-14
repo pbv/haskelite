@@ -1,5 +1,5 @@
 {-
-  Evaluation contexts for weak head normal forms  
+  Evaluation contexts for evaluating to full normal forms
   Pedro Vasconcelos, 2021-23
 -} 
 module Context exposing (..)

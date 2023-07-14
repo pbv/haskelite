@@ -1,7 +1,7 @@
 {-
   A monad for type checking and inference
-  A combination of state (fresh variable generation and 
-  current unifier) and failure (for type errors).
+  A combination of state (fresh variable generation and  current unifier)
+  and failure (type errors).
 
   Pedro Vasconcelos, 2022-23
 -}
@@ -15,7 +15,6 @@ import Types exposing (Name, Type(..), TySubst, applyTySubst)
 import State exposing (State)
 import Unify
 import Tuple
-
 
 type Tc a
     = Tc (State TcState (Result String a))

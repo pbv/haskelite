@@ -1,6 +1,6 @@
 {-
   Haskelite, a single-step interpreter for a subset of Haskell.
-  Main module exporting an interactive HTML entity
+  Main module exporting the interactive HTML element
   Pedro Vasconcelos, 2021-23
 -}
 module Haskelite exposing (..)
@@ -38,11 +38,16 @@ type alias EditModel
       , prelude : List Bind             -- prelude bindings
       }
 
+-- a labelled transition step: the machine configuration
+-- plus a justification the previous transition
+type alias Step
+    = (Machine.Conf, Info)   
+           
 type alias ReduceModel
-    = { current : Machine.Conf           -- current configuration
-      , previous : List Machine.Conf     -- list of previous configs
-      , next : Maybe Machine.Conf        -- optional next configuration
-      , inputs : Inputs                  -- saved inputs (to go back to editing)
+    = { current : Step             -- current configuration
+      , previous : List Step       -- list of previous steps
+      , next : Maybe Step          -- optional next step
+      , inputs : Inputs            -- saved inputs (to go back to editing)
       }
 
     
@@ -54,8 +59,7 @@ type Msg
     | EvalMode           -- go into evaluation mode
     | Edit Inputs        -- modify inputs
 
-      
-
+     
 -- the main entry point for the app
 main =
     Browser.element
@@ -156,18 +160,28 @@ reduceView model =
                            , disabled (model.next == Nothing)
                            , onClick Next] [text "Next >"]
                   ]
+        -- fill the lines div in reverse order;
+        -- the CSS enabled a custom flow direction to ensure the
+        -- current line always visible when scrolling is needed
         , div [class "lines"]
-             <| List.map lineView (List.reverse model.previous) ++
-                 [ div [class "current"]
-                          [ renderConf model.current ]
+             <|  [ div [class "current"]
+                          [ renderStep model.current ]
                  ]
+                 ++
+                 List.map renderStep model.previous
         ]
 
          
-lineView : Machine.Conf -> Html Msg
-lineView conf =
-    renderConf conf 
-
+renderStep  : Step -> Html Msg
+renderStep (conf, info)
+    = case Machine.prettyConf conf of
+          Just txt ->
+              div [class "line"]
+                  [ text txt,
+                    div [class "info"] [text info]
+                  ]
+          Nothing ->
+              span [] []
 
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -186,10 +200,10 @@ reduceUpdate msg model =
     case msg of
         Previous ->
             case model.previous of
-                (first :: rest) ->
+                (last :: rest) ->
                     Reducing
                     { model
-                        | current = first
+                        | current = last
                         , next = Just model.current
                         , previous = rest
                     }
@@ -202,7 +216,7 @@ reduceUpdate msg model =
                     Reducing
                     { model
                         | current = new
-                        , next = Machine.next new
+                        , next = Machine.next (Tuple.first new)
                         , previous = model.current :: model.previous
                     }
                 Nothing ->
@@ -210,11 +224,11 @@ reduceUpdate msg model =
                         
         Reset ->
             case List.last model.previous of
-                Just first ->
+                Just start ->
                     Reducing
                     { model
-                        | current = first
-                        , next = Machine.next first 
+                        | current = start
+                        , next = Machine.next (Tuple.first start)
                         , previous = []
                     }
                 Nothing ->
@@ -246,7 +260,7 @@ editUpdate msg model =
                         heap0 = Heap.fromBinds (model.prelude ++ binds)
                         conf0 = Machine.start heap0 expr
                     in Reducing
-                        { current = conf0
+                        { current = (conf0, "initial expression")
                         , next = Machine.next conf0
                         , previous = []
                         , inputs = model.inputs
@@ -260,20 +274,6 @@ subscriptions : Model -> Sub msg
 subscriptions _ = Sub.none
 
 
--- render a configuration to HTML
-renderConf : Machine.Conf -> Html msg
-renderConf conf
-    = case Machine.prettyConf conf of
-          Just txt ->
-              div [class "line"]
-                  [ text txt
-                  , case Machine.justification conf of
-                        Just info ->
-                            div [class "info"] [text info]
-                        Nothing ->
-                            span [] []
-                  ]
-          Nothing ->
-              span [] []
 
 
+                  

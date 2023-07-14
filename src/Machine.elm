@@ -1,6 +1,7 @@
 {- 
- A Lazy abstract machine based on the PMC calculus
- Pedro Vasconcelos, 2023
+  A Lazy abstract machine based on the PMC calculus
+
+  Pedro Vasconcelos, 2023
 -}
 module Machine exposing (..)
 
@@ -18,8 +19,6 @@ import Pretty
 import Heap exposing (Heap)
 import Context exposing (ExprCtx)
 import Monocle.Optional as Monocle
-import Debug
-
 
 type alias Conf
     = (Heap, Control, Stack)
@@ -46,7 +45,6 @@ type Cont
       -- for full normal form evaluation
     | DeepEval Expr ExprCtx
       
-           
 
       
 isWhnf : Expr -> Bool
@@ -82,7 +80,7 @@ getStack (_, _, stack) = stack
 
                          
 --                
--- a single step transition of the machine
+-- a small-step transition of the machine
 --
 transition : Conf -> Maybe Conf
 transition conf
@@ -196,10 +194,13 @@ transition conf
           (heap, M (Return expr info) args, (PushAlt _ _)::stack) ->
               Just (heap, M (Return expr info) args, stack)
 
-          -- failing match
+          -- failing matches
           (heap, M Fail _, (PushAlt args m)::stack) ->
               Just (heap, M m args, stack)
 
+          (heap, M Fail _, MatchEnd::stack) ->
+              Just (heap, E Error, stack)
+                  
           -- deal with alternatives
           (heap, M (Alt m1 m2) args, stack) ->
               Just (heap, M m1 args, PushAlt args m2::stack)
@@ -266,121 +267,6 @@ applyPrimitive op v1 v2
 compareOp : Bool -> Expr
 compareOp c = if c then AST.trueCons else AST.falseCons
 
-
--------------------------------------------------------------------------
--- a heap with lambda matchings for primitive operations
--- to allow partial applications
--------------------------------------------------------------------------
-heap0 : Heap
-heap0
-    = Dict.fromList <|
-      List.map  (\op -> (op, Lam (Just op)
-                             (Match (VarP "x")
-                              (Match (VarP "y")
-                               (Return (InfixOp op (Var "x") (Var "y"))
-                                    ("apply primitive " ++ op)
-                               ))))) <|
-      [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]
-          
-
-              
----
--- starting configuration
-start : Heap -> Expr -> Conf
-start heap expr
-    = let
-        heap1 = Dict.union heap0 heap
-      in
-        (heap1, E expr, [DeepEval expr Context.empty])
-                   
--- a "bigger step" transition
--- ignoring steps that are not very informative
-next : Conf -> Maybe Conf
-next conf
-    = case transition conf of
-          Nothing ->
-              Nothing
-          Just conf1 ->
-              if observe conf1 then
-                  Just conf1
-              else
-                  next conf1
-
-                          
--- check whether a configuration should be shown not be skipped
-observe : Conf -> Bool
-observe (heap, control, stack)
-    = case (control,stack) of
-          (E (Number _), RetPrim2 _ _::_) ->
-              True
-          (E Error, _) ->
-              True
-          (E w, []) ->
-              isWhnf w
-          (E e, (PushPat _ _ _::_)) ->
-              not (isWhnf e)
-          (E _, _) ->
-              False
-          -- observe only the final steps of matching
-          (M (Return _ _) [], (MatchEnd::_)) ->
-              True
-          (M Fail _, (MatchEnd::_)) ->
-              True
-          (M _ _, _) ->
-              False
-
--------------------------------------------------------------------------------------
--- showing configurations 
--------------------------------------------------------------------------------------
-                  
-prettyConf : Conf ->  Maybe String
-prettyConf (heap, control, stack)
-   = case (control, stack) of
-         (E expr, _) ->
-             Just <| prettyCont heap stack expr
-         (M (Return expr info) [], MatchEnd::_) ->
-             Just <| prettyCont heap stack expr
-         (M Fail [], MatchEnd::_) ->
-             Just "pattern match failure"
-         _ ->
-             Nothing
-             
-
--- justification for a transition step 
-justification : Conf -> Maybe String
-justification (heap, control, stack)
-    = case (control, stack) of
-         (E (Number v1), (RetPrim2 op v2::_)) ->
-             Just ("primitive " ++ op)
-         (M (Return expr info) [], MatchEnd::_) ->
-             Just info
-         _ ->
-             Nothing
-                 
-                 
--- convert a continuation stack into a string
-prettyCont : Heap -> Stack -> Expr -> String
-prettyCont heap stack acc
-    = case stack of
-          [] ->
-              Pretty.prettyExpr heap acc
-          (Update _::rest) ->
-              prettyCont heap rest acc
-          (PushArg arg::rest) ->
-              prettyCont heap rest (App acc arg)
-          (RetPrim1 op e2::rest) ->
-              prettyCont heap rest (InfixOp op acc e2)
-          (RetPrim2 op v::rest) ->
-              prettyCont heap rest (InfixOp op (Number v) acc)
-          MatchEnd::rest ->
-              prettyCont heap rest acc
-          DeepEval expr ctx::rest ->
-              prettyCont heap rest (ctx.set acc expr)
-          (_::rest) ->
-              "... " ++ Pretty.prettyExpr heap acc
-
-
-
 -----------------------------------------------------------------------
 -- reduction to full normal form
 -----------------------------------------------------------------------
@@ -423,12 +309,107 @@ outermostRedexArgs tag i args
                   
 
 
+
+-------------------------------------------------------------------------
+-- a heap with lambda matchings for primitive operations
+-- to allow partial applications
+-------------------------------------------------------------------------
+heap0 : Heap
+heap0
+    = Dict.fromList <|
+      List.map  (\op -> (op, Lam (Just op)
+                             (Match (VarP "x")
+                              (Match (VarP "y")
+                               (Return (InfixOp op (Var "x") (Var "y"))
+                                    ("apply primitive " ++ op)
+                               ))))) <|
+      [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]
+          
+
+              
+--
+-- the  start configuration for fully evaluating an expression
+--
+start : Heap -> Expr -> Conf
+start heap expr
+    = let
+        heap1 = Dict.union heap0 heap
+      in
+        (heap1, E expr, [DeepEval expr Context.empty])
+
+--            
+-- a labelled transition step ignoring silent transitions
+--
+next : Conf -> Maybe (Conf, Info)
+next conf0
+    = case transition conf0 of
+          Nothing ->
+              Nothing
+          Just conf1 ->
+              case justification conf0 of
+                  Just info ->
+                      Just (conf1, info)
+                  Nothing ->
+                      next conf1
+
+                          
+
+----------------------------------------------------------------------------------
+-- showing configurations 
+----------------------------------------------------------------------------------
+                  
+prettyConf : Conf ->  Maybe String
+prettyConf (heap, control, stack)
+   = case (control, stack) of
+         (E expr, _) ->
+             Just <| prettyCont heap stack expr
+         _ ->
+             Nothing
+             
+
+-- justification for a transition step 
+justification : Conf -> Maybe String
+justification (heap, control, stack)
+    = case (control, stack) of
+         (E (Number v1), (RetPrim2 op v2::_)) ->
+             Just ("primitive " ++ op)
+         (M (Return expr info) [], MatchEnd::_) ->
+             Just info
+         (M Fail [], MatchEnd::_) ->
+             Just "pattern match failure"
+         _ ->
+             Nothing
+                 
+                 
+-- convert a continuation stack into a string
+prettyCont : Heap -> Stack -> Expr -> String
+prettyCont heap stack acc
+    = case stack of
+          [] ->
+              Pretty.prettyExpr heap acc
+          (Update _::rest) ->
+              prettyCont heap rest acc
+          (PushArg arg::rest) ->
+              prettyCont heap rest (App acc arg)
+          (RetPrim1 op e2::rest) ->
+              prettyCont heap rest (InfixOp op acc e2)
+          (RetPrim2 op v::rest) ->
+              prettyCont heap rest (InfixOp op (Number v) acc)
+          MatchEnd::rest ->
+              prettyCont heap rest acc
+          DeepEval expr ctx::rest ->
+              prettyCont heap rest (ctx.set acc expr)
+          (_::rest) ->
+              "... " ++ Pretty.prettyExpr heap acc
+
+
+
                
                   
 --------------------------------------------------------------------
 -- examples for debugging 
 -------------------------------------------------------------------
-
+{-
 -- debugging function
 transitions : Conf -> ()
 transitions conf = transitions_ 0 conf
@@ -441,9 +422,8 @@ transitions_ n conf
        case next conf of
            Nothing ->
                ()
-           Just conf1 ->
+           Just (conf1,_) ->
                transitions_ (n+1) conf1
-
 
 example0 : Conf
 example0 = (heap0, E (InfixOp "*" (Number 1) (Number 2)), [])
@@ -578,3 +558,4 @@ example10
           expr = (App (Var "double") (AST.listLit [Number 1, Number 2, Number 3]))
       in
           (heap, E expr, [DeepEval expr Context.empty])
+-}

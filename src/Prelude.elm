@@ -1,9 +1,10 @@
 {-
   Standard definitions for Haskelite
   This is a subset of the Haskell 98 prelude
-  Pedro Vasconcelos
+
+  Pedro Vasconcelos, 2021-23
 -}
-module Prelude exposing (preludeResult, prelude)
+module Prelude exposing (preludeResult)
 
 import AST exposing (Bind)
 import HsParser
@@ -103,6 +104,9 @@ repeat x = x:repeat x
 cycle :: [a] -> [a]
 cycle xs = xs ++ cycle xs
 
+iterate :: (a -> a) -> a -> [a]
+iterate f x = x : iterate f (f x)
+
 any :: (a -> Bool) -> [a] -> Bool
 any f [] = False
 any f (x:xs) = f x || any f xs
@@ -158,4 +162,11 @@ enumFrom !n = n : enumFrom (n+1)
 enumFromTo :: Int -> Int -> [Int]
 enumFromTo i j | i<=j = i : enumFromTo (i+1) j
                | otherwise = []
+
+enumFromThen :: Int -> Int -> [Int]
+enumFromThen !n0 !n1 = n0 : enumFromThen n1 (2*n1-n0) 
+
+enumFromThenTo :: Int -> Int -> Int -> [Int]
+enumFromThenTo n0 n1 k | n0<=k = n0 : enumFromThenTo n1 (2*n1-n0) k
+                       | otherwise = []
 """

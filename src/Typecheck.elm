@@ -27,15 +27,20 @@ tcProgram prelude (Letrec binds expr)
      in
          Tc.eval <|
          (tcRecBind env binds |>
-          andThen (\env1 -> tcExpr env1 expr |>
+          andThen (\env1 -> tcExpr_ env1 expr |>
                    andThen (\_ -> pure ())))
-      
 
+-- wrapper function that documents the expression being typechecked             
+tcExpr_ : TyEnv -> Expr -> Tc Type
+tcExpr_ env expr
+    = explain ("in expression " ++ Pretty.prettyExpr Heap.empty expr ++ ": ") <|
+      tcExpr env expr
+
+             
 -- typecheck a single expression      
 tcExpr : TyEnv -> Expr -> Tc Type
 tcExpr env expr
-    = -- explain ("in expression " ++ Pretty.prettyExpr expr ++ ": ") <|
-      case expr of
+    = case expr of
           Number _ ->
               pure TyInt
           Var v ->

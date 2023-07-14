@@ -1,5 +1,5 @@
 {-
-  Type Syntax and helper functions
+  Syntax for types and helper functions
   Pedro Vasconcelos, 2023
 -}
 

@@ -1,5 +1,5 @@
 {- 
-  Hindley Milner Type unification algorithm
+  Hindley Milner type unification algorithm
   Pedro Vasconcelos, 2021-23
 -}
 module Unify exposing (..)

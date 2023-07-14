@@ -239,7 +239,7 @@ makeGuardMatching patts prefix alts
 makeGuard : Expr -> Expr -> String -> Matching
 makeGuard guard expr info
     = case guard of
-          -- shortcircuit redudant conditions
+          -- shortcircuit redundant conditions
           Var "otherwise" ->
               Return expr info
           Cons "True" [] ->

@@ -141,7 +141,15 @@ transition conf
                       Just (heap, E result, stack)
                   _ ->
                       Just (heap, E Error, stack)
-                  
+
+          -- if-then-else
+          (heap, E (IfThenElse e1 e2 e3), stack) ->
+              let match = (Arg e1 (Alt (Match (ConsP "True" [])
+                                            (Return e2 (Just "if-then")))
+                                       (Return e3 (Just "if-else"))))
+              in Just (heap, M match [], MatchEnd::stack)
+                          
+                          
           -- update variable
           (heap, E w, Update y::stack) ->
               if isWhnf w then
@@ -316,15 +324,24 @@ outermostRedexArgs tag i args
 heap0 : Heap
 heap0
     = Dict.fromList <|
-      List.map  (\op -> (op, Lam (Just op)
+      cons ":" ::
+      List.map  binop [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ] 
+          
+
+binop op = (op, Lam Nothing
                              (Match (VarP "x")
                               (Match (VarP "y")
                                (Return (InfixOp op (Var "x") (Var "y"))
-                                    ("apply primitive " ++ op)
-                               ))))) <|
-      [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]
-          
+                                    Nothing)
+                               )))
 
+cons tag = (tag, Lam Nothing
+                             (Match (VarP "x")
+                              (Match (VarP "y")
+                               (Return (Cons tag [Var "x",Var "y"])
+                                    Nothing)
+                               )))
+          
               
 --
 -- the  start configuration for fully evaluating an expression
@@ -362,13 +379,13 @@ nextW iters conf0
                           
                           
 -- justification for a transition step 
-justification : Conf -> Maybe String
+justification : Conf -> Maybe Info
 justification (heap, control, stack)
     = case (control, stack) of
          (E (Number v1), (RetPrim2 op v2::_)) ->
              Just ("primitive " ++ op)
          (M (Return expr info) [], MatchEnd::_) ->
-             Just info
+             info
          (M Fail [], MatchEnd::_) ->
              Just "pattern match failure"
          _ ->

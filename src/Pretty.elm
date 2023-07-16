@@ -83,11 +83,38 @@ prettyExpr_ heap prec e =
                     (DList.append (DList.singleton (formatOperator op))
                                        (prettyExpr_ heap 1 e2))
 
+{-
+        App (Var "enumFrom") e1 ->
+            bracket "[" "..]" <|  prettyExpr_ heap 0 e1 
+
+        App (App (Var "enumFromThen") e1) e2 ->
+            bracket "[" "..]" <|
+                DList.append (prettyExpr_ heap 0 e1)
+                    (DList.cons "," (prettyExpr_ heap 0 e2))
+                
+        App (App (Var "enumFromTo") e1) e2 ->
+            bracket "[" "]" <|
+                DList.append
+                    (prettyExpr_ heap 0 e1)
+                    (DList.cons ".." (prettyExpr_ heap 0 e2))
+
+        App (App (App (Var "enumFromThenTo") e1) e2) e3 ->
+            bracket "[" "]" <|
+                DList.append 
+                  (prettyExpr_ heap 0 e1)
+                  (DList.cons ","
+                       (DList.append                      
+                            (prettyExpr_ heap 0 e2)
+                            (DList.cons ".."
+                                 (prettyExpr_ heap 0 e3))))
+-}
+              
+
         App (App (Var op) e1) e2 ->
             if AST.isOperator op then
                 paren (prec>0) <|
                     DList.append (prettyExpr_ heap 1 e1)
-                        (DList.cons (" " ++ op ++ " ")
+                        (DList.cons op
                              (prettyExpr_ heap 1 e2))
             else
                 paren (prec>0) <|
@@ -110,34 +137,20 @@ prettyExpr_ heap prec e =
                     in 
                         prettyExpr_ heap prec expr1
                     
+        IfThenElse e1 e2 e3 ->
+            paren (prec>0)
+                <|  DList.cons "if "
+                    (DList.append (prettyExpr_ heap 0 e1)
+                         (DList.cons " then "
+                              (DList.append
+                                   (prettyExpr_ heap 0 e2)
+                                   (DList.cons " else "
+                                        (prettyExpr_ heap 0 e3)))))
+
 
         Error ->
             DList.singleton "<runtime error>"
 
-        _ ->
-            DList.singleton "<unimplemented>"
-
-{-                
-        App (Var "enumFrom") e1 ->
-            "[" ++ prettyExpr_ 1 e1 ++ "..]"
-
-        App (App (Var "enumFromThen") e1) e2 ->
-            "[" ++ prettyExpr_ 1 e1 ++ "," ++ prettyExpr_ 1 e2 ++ "..]"
-                
-        App (App (Var "enumFromTo") e1) e2 ->
-            "[" ++ prettyExpr_ 1 e1 ++ ".." ++ prettyExpr_ 1 e2 ++ "]"
-
-        App (App (App (Var "enumFromThenTo") e1) e2) e3 ->
-            "[" ++ prettyExpr_ 1 e1 ++ "," ++ prettyExpr_ 1 e2 ++ ".."
-                ++ prettyExpr_ 1 e3 ++ "]"
-
-              
-        IfThenElse e1 e2 e3 ->
-            paren (prec>0)
-                <|  "if " ++ prettyExpr e1 ++ " then " ++
-                    prettyExpr e2 ++ " else " ++ prettyExpr e3
-
--}
 
 collectArgs : Matching -> List Expr -> (Matching, List Expr)
 collectArgs m args

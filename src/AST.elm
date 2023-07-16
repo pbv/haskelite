@@ -35,7 +35,7 @@ type Expr
       
 -- * matchings
 type Matching 
-    = Return Expr Info              -- matching succedeed
+    = Return Expr (Maybe Info)      -- matching succedeed
     | Fail                          -- matching failed
     | Match Pattern Matching        -- match a pattern
     | Arg Expr Matching             -- argument supply
@@ -102,11 +102,6 @@ applySubst s e
 
           _ ->
               e
-
-{-                   
-          Ctx e1 ->
-              Ctx (applySubst s e1)
--}
 
                   
 applyMatchSubst : Subst -> Matching -> Matching

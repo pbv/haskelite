@@ -19,6 +19,12 @@ preludeResult
 prelude : String
 prelude =
     """
+id :: a -> a
+id x = x
+
+flip :: (a -> b -> c) -> b -> a -> c
+flip f x y = f y x
+
 otherwise :: Bool
 otherwise = True
 

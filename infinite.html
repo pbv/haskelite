@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="screen.css">
+  </head>
+
+  <body>
+    <h1>Infinite lists</h1>
+    <p>Lazy evaluation allows producing and consuming a
+      infinite data structures such as lists.
+      Here is an example that all squares that are
+      less than 50.      
+      <a href="index.html">Back</a></p>
+    <div id="haskelite"></div>
+    <script src="haskelite-min.js"></script>
+    <script>
+      var decls = "square x = x*x\n";
+      var app = Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression: "sum (takeWhile (\\x -> x<50) (map square [1..]))",
+		   declarations: decls }
+      });
+    </script>
+    <hr>
+    Pedro Vasconcelos, 2023.
+  </body>
+</html>

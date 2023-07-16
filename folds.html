@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="screen.css">
+  </head>
+
+  <body>
+    <h1>Right and left folds</h1>
+    <p><em>Foldr</em> and <em>foldl</em> are two higher-order functions
+      that transform lists using a combination operator.
+      When the operator is associative then the two are
+      equivalent.  Compare the two by exploring the evaluation of
+      list sum.
+      <a href="index.html">Back</a></p>
+    <div id="haskelite"></div>
+    <script src="haskelite-min.js"></script>
+    <script>
+      var decls =
+	  "-- compute the sum of a list associating to the right\n"+
+	  "example1 = foldr (+) 0 [1,2,3,4,5]\n\n"+
+	  "-- compute the sum of a list associating to the left\n"+
+	  "example2 = foldl (+) 0 [1,2,3,4,5]\n\n"+
+	  "-- Data.List exports a functin foldl' that performs as foldl\n"+
+	  "-- but applies the operation strictly for efficiency\n"+
+	  "example3 = foldl' (+) 0 [1,2,3,4,5]\n"
+      var app = Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression:"example1", declarations: decls }
+      });
+    </script>
+    <hr>
+    Pedro Vasconcelos, 2023.
+  </body>
+</html>

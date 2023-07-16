@@ -65,7 +65,7 @@ checkBind bind
                       succeed ()
                   Nothing ->
                       problem ("equations for " ++ bind.name ++
-                               " have inconsistent number of arguments")
+                               " have different number of arguments")
           _ ->
               succeed ()
                               
@@ -153,7 +153,7 @@ infixEquation
 infixEquationAux : Parser (String -> Decl)
 infixEquationAux                   
     = succeed (\p1 id p2 e info ->
-                   Equation id (Match p1 (Match p2 (Return e info))))
+                   Equation id (Match p1 (Match p2 (Return e (Just info)))))
          |= pattern
          |. spaces
          |= infixOperator
@@ -216,12 +216,13 @@ makeGuardEquation id match
           Just _ ->
               succeed (Equation id match)
           Nothing ->
-              problem "equations with different number arguments"
+              problem ("equations for " ++ id ++
+                           " with different number arguments")
              
 
 makeSimpleMatching : List Pattern -> Expr -> String -> Matching
 makeSimpleMatching patts expr info
-    = makeMatching patts (Return expr info)
+    = makeMatching patts (Return expr (Just info))
 
 makeGuardMatching : List Pattern
                   -> String
@@ -241,13 +242,13 @@ makeGuard guard expr info
     = case guard of
           -- shortcircuit redundant conditions
           Var "otherwise" ->
-              Return expr info
+              Return expr (Just info)
           Cons "True" [] ->
-              Return expr info
+              Return expr (Just info)
           Cons "False" [] ->
               Fail
           _ ->
-              Arg guard (Match (ConsP "True" []) (Return expr info))
+              Arg guard (Match (ConsP "True" []) (Return expr (Just info)))
               
 
 -- join many matchings into an alternative
@@ -670,7 +671,7 @@ lambdaExpr
 lambdaExprAux : Parser (String -> Expr)  
 lambdaExprAux
     = succeed (\patts expr info ->
-                   Lam Nothing (makeMatching patts (Return expr info)))
+                   Lam Nothing (makeMatching patts (Return expr (Just info))))
          |. symbol "\\"
          |. spaces
          |= patternList
@@ -824,8 +825,10 @@ problemToString prob
           Parser.Problem s -> s
           _ -> "?"
       
------------------------------------------------------
 
+-----------------------------------------------------
+-- examples for debugging 
+{-
 example1 : String
 example1 =
     """
@@ -861,3 +864,4 @@ example5 = """
 enumFrom :: Int -> [Int]
 enumFrom !n = n : enumFrom (n+1)
 """   
+-}

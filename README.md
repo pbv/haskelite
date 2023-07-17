@@ -63,9 +63,10 @@ any, all :: (a -> Bool) -> [a] -> Bool
 
 The following Haskell 98 features are *not* implemented:
 
+* modules
 * type classes 
 * the numeric tower (Float, Integer, Double, etc.)
-* let and case expressions
+* case expressions
 * list compreensions
 * caracters and strings
 * user-defined algebraic data types

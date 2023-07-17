@@ -26,10 +26,13 @@ type Expr
     | Lam (Maybe Name) Matching  
       -- a lambda is Just name if it was defined through a binding;
       -- otherwise the name field is Nothing
+    | Let (List Bind) Expr
+    | Case Expr (List (Pattern, Expr))
     | Var Name
     | Number Int
     | Cons Tag (List Expr)
-    | InfixOp Name Expr Expr           --  primitive operators +, * etc
+    | InfixOp Name Expr Expr           --  primitive binary operators +, * etc
+    | PrefixOp Name Expr               -- primitive unary operators (-)
     | IfThenElse Expr Expr Expr
     | Error                            -- runtime errors
       
@@ -88,12 +91,25 @@ applySubst s e
                              
           Lam optname m ->
               Lam optname (applyMatchSubst s m)
+
+          Let binds e0 ->
+              let s1 = restrictSubst (List.map .name binds) s
+                  binds1 = applyBindsSubst s1 binds
+                  e1 = applySubst s1 e0
+              in
+                  Let binds1 e1
+
+          Case e0 alts ->
+              let e1 = applySubst s e0
+              in Case e1 (applyAltsSubst s alts)
                       
           App e1 e2 ->
               App (applySubst s e1)(applySubst s e2)
                   
           InfixOp op e1 e2 ->
               InfixOp op (applySubst s e1) (applySubst s e2)
+          PrefixOp op e1 ->
+              PrefixOp op (applySubst s e1) 
           Cons c args ->
               Cons c (List.map (applySubst s) args)
 
@@ -125,6 +141,19 @@ applyMatchSubst s m
           Alt m1 m2 ->
               Alt (applyMatchSubst s m1) (applyMatchSubst s m2)
               
+applyAltsSubst : Subst -> List (Pattern,Expr) -> List (Pattern,Expr)
+applyAltsSubst s 
+    = List.map (\(patt,expr) -> let s1 = restrictSubst (patternVars patt) s
+                                in (patt, applySubst s1 expr))
+                  
+
+applyBindsSubst : Subst -> List Bind -> List Bind
+applyBindsSubst s 
+    = List.map (\b -> { b | expr = applySubst s b.expr }) 
+                  
+restrictSubst : List Name -> Subst -> Subst
+restrictSubst names s
+    = List.foldr Dict.remove s names
                   
 
 -- list variables bound by a pattern

@@ -4,7 +4,7 @@
 -}
 module Heap exposing (..)
 
-import AST exposing (Expr, Name, Bind)
+import AST exposing (Expr(..), Name, Bind, Subst)
 import Dict exposing (Dict)
 
 type alias Heap 
@@ -37,3 +37,19 @@ newIndirection heap expr
         loc = String.append "$" (String.fromInt size)
       in
           (loc, Dict.insert loc expr heap)         
+
+
+-- allocate a new possibly-recursive set of bindings
+newBindings : Heap -> List Bind -> (Subst, Heap)
+newBindings heap0 binds
+    = let
+        names = List.map .name binds
+        exprs = List.map .expr binds
+        size = String.fromInt (Dict.size heap0)
+        locs =  List.map (\x -> x ++ "_" ++ size) names
+        subst = Dict.fromList <|
+                List.map2 (\name loc -> (name,Var loc)) names locs
+        heap1 = Dict.fromList <|
+                List.map2 (\loc expr -> (loc, AST.applySubst subst expr)) locs exprs
+      in
+          (subst, Dict.union heap0 heap1)

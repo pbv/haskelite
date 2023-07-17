@@ -10,7 +10,7 @@
       that transform lists using a combination operator.
       When the operator is associative then the two are
       equivalent.  Compare the two by exploring the evaluation of
-      list sum.
+      a list sum using folds.
       <a href="index.html">Back</a></p>
     <div id="haskelite"></div>
     <script src="haskelite-min.js"></script>
@@ -20,7 +20,7 @@
 	  "example1 = foldr (+) 0 [1,2,3,4,5]\n\n"+
 	  "-- compute the sum of a list associating to the left\n"+
 	  "example2 = foldl (+) 0 [1,2,3,4,5]\n\n"+
-	  "-- Data.List exports a functin foldl' that performs as foldl\n"+
+	  "-- Data.List exports a function foldl' that performs as foldl\n"+
 	  "-- but applies the operation strictly for efficiency\n"+
 	  "example3 = foldl' (+) 0 [1,2,3,4,5]\n"
       var app = Elm.Haskelite.init({

@@ -41,6 +41,7 @@ type Cont
       -- continuations for primitive operations
     | RetPrim1 Name Expr
     | RetPrim2 Name Int
+    | RetPrim3 Name
       -- for full normal form evaluation
     | DeepEval Expr ExprCtx
       
@@ -96,7 +97,7 @@ transition conf
                           -- check if we neeed to update the
                           -- result of evaluation
                           if isVar e1 || isWhnf e1 then
-                              -- no update
+                              -- no indirection needed
                               Just (heap, E (Lam optname (Arg e1 m)), rest)
                           else
                               -- create new indirection to the expression
@@ -111,6 +112,14 @@ transition conf
                               Just (heap1, E (Lam optname m), rest)
                       _ ->
                           Nothing
+
+          -- local bindings
+          (heap, E (Let binds e1), stack) ->
+              let
+                  (s, heap1) = Heap.newBindings heap binds 
+              in
+                  Just (heap1, E (AST.applySubst s e1), stack)
+                               
 
           (heap, E (Var y), stack) ->
               case Heap.get y heap of
@@ -131,6 +140,7 @@ transition conf
           -- primitive operations
           (heap, E (InfixOp op e1 e2), stack) ->
               Just (heap, E e1, (RetPrim1 op e2)::stack)
+
                   
           (heap, E (Number v1), (RetPrim1 op e2)::stack) ->
               Just (heap, E e2, (RetPrim2 op v1)::stack)
@@ -142,6 +152,16 @@ transition conf
                   _ ->
                       Just (heap, E Error, stack)
 
+          (heap, E (PrefixOp op e1), stack) ->
+              Just (heap, E e1, (RetPrim3 op)::stack)
+                  
+          (heap, E (Number v), (RetPrim3 op)::stack) ->
+              case applyPrefix op v of
+                  Just result ->
+                      Just (heap, E result, stack)
+                  _ ->
+                      Just (heap, E Error, stack)
+                  
           -- if-then-else
           (heap, E (IfThenElse e1 e2 e3), stack) ->
               let match = (Arg e1 (Alt (Match (ConsP "True" [])
@@ -260,6 +280,8 @@ applyPrimitive op v1 v2
                         Error)
           "==" ->
               Just (compareOp (v1 == v2))
+          "/=" ->
+              Just (compareOp (v1 /= v2))              
           ">" ->
               Just (compareOp (v1 > v2))
           ">=" ->
@@ -271,6 +293,13 @@ applyPrimitive op v1 v2
           _ ->
               Nothing
 
+applyPrefix : Name -> Int -> Maybe Expr
+applyPrefix op v
+    = case op of
+          "negate" -> Just (Number (-v))
+          _  -> Nothing
+
+                
 compareOp : Bool -> Expr
 compareOp c = if c then AST.trueCons else AST.falseCons
 
@@ -324,23 +353,25 @@ outermostRedexArgs tag i args
 heap0 : Heap
 heap0
     = Dict.fromList <|
-      cons ":" ::
-      List.map  binop [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ] 
+      List.map  binop [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]  ++
+      [ ("undefined", Lam Nothing Fail)
+      , (":", Lam Nothing (Match (VarP "x")
+                             (Match (VarP "y")
+                               (Return (Cons ":" [Var "x",Var "y"])
+                                    Nothing)
+                               )))
+      , ("negate", Lam Nothing (Match (VarP "x")
+                                    (Return (PrefixOp "negate" (Var "x")) Nothing)))
+      ]
           
 
 binop op = (op, Lam Nothing
-                             (Match (VarP "x")
-                              (Match (VarP "y")
-                               (Return (InfixOp op (Var "x") (Var "y"))
-                                    Nothing)
-                               )))
+                   (Match (VarP "x")
+                       (Match (VarP "y")
+                           (Return (InfixOp op (Var "x") (Var "y"))
+                                 Nothing)
+                        )))
 
-cons tag = (tag, Lam Nothing
-                             (Match (VarP "x")
-                              (Match (VarP "y")
-                               (Return (Cons tag [Var "x",Var "y"])
-                                    Nothing)
-                               )))
           
               
 --
@@ -358,23 +389,28 @@ start heap expr
 --
 next : Conf -> Maybe (Conf, Info)
 next conf0
-    = nextW 100 conf0
+    = nextW False 100 conf0
 
 -- worker function with an iteration limit
-nextW : Int -> Conf -> Maybe (Conf, Info)
-nextW iters conf0
+-- the first argument is used to check for silent transitions
+-- before the normal form
+nextW : Bool -> Int -> Conf -> Maybe (Conf, Info)
+nextW flag iters conf0
     = if iters > 0 then
           case transition conf0 of
               Nothing ->
-                  Nothing
+                  if flag then
+                      Just (conf0, "normal form")
+                  else
+                      Nothing
               Just conf1 ->
                   case justification conf0 of
                       Just info ->
                           Just (conf1, info)
                       Nothing ->
-                          nextW (iters-1) conf1
+                          nextW True (iters-1) conf1
       else
-          Just (conf0, "<loop>")
+          Just (conf0, "cyclic definition?")
 
                           
                           
@@ -383,6 +419,8 @@ justification : Conf -> Maybe Info
 justification (heap, control, stack)
     = case (control, stack) of
          (E (Number v1), (RetPrim2 op v2::_)) ->
+             Just ("primitive " ++ op)
+         (E (Number v1), (RetPrim3 op::_)) ->
              Just ("primitive " ++ op)
          (M (Return expr info) [], MatchEnd::_) ->
              info
@@ -545,4 +583,12 @@ example10
           expr = (App (Var "double") (AST.listLit [Number 1, Number 2, Number 3]))
       in
           (heap, E expr, [DeepEval expr Context.empty])
+-}
+{-
+-- extra debugging stuff                 
+observe : a -> b -> b
+observe x y
+    = let
+        _ = Debug.log ">>>" x
+      in  y
 -}

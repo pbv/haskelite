@@ -172,7 +172,7 @@ reduceView model =
                  List.map renderStep model.previous
         ]
 
-         
+
 renderStep  : Step -> Html Msg
 renderStep (conf, info)
     = case Pretty.prettyConf conf of
@@ -276,5 +276,10 @@ subscriptions _ = Sub.none
 
 
 
+-- extra debugging stuff                 
+observe : a -> b -> b
+observe x y
+    = let
+        _ = Debug.log ">>>" x
+      in  y
 
-                  

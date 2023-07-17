@@ -40,7 +40,7 @@ parseProgram inputExpr inputDecls
 
 declarations : Parser (List Bind)
 declarations 
-    = (succeed collectBinds
+    = (succeed (collectBinds True)
           |= declList
           |. Parser.end) |>
       andThen (\binds ->  checkBinds binds |>
@@ -69,27 +69,27 @@ checkBind bind
           _ ->
               succeed ()
                               
-                
-
           
 -- collect declarations by identifier and make single bindings
-collectBinds : List Decl -> List Bind
-collectBinds decls
-    = List.map makeBind <|
+-- first argument is True if we want to record the name for
+-- each binding in the lambda 
+collectBinds : Bool -> List Decl -> List Bind
+collectBinds named decls
+    = List.map (makeBind named) <|
       List.groupWhile (\d1 d2 -> AST.declName d1 == AST.declName d2) decls
 
-makeBind : (Decl, List Decl) -> Bind
-makeBind pair =
+makeBind : Bool -> (Decl, List Decl) -> Bind
+makeBind named pair =
     case pair of
         (TypeSig id ty, rest) ->
             { name = id,
               typeSig = Just ty,
-              expr = Lam (Just id) (collectAlts rest)
+              expr = Lam (if named then Just id else Nothing) (collectAlts rest)
             }
         (Equation id match, rest) ->
             { name = id,
               typeSig = Nothing,
-              expr = Lam (Just id) (collectAlts (Equation id match::rest))
+              expr = Lam (if named then Just id else Nothing) (collectAlts (Equation id match::rest))
             }
 
 collectAlts : List Decl -> Matching
@@ -530,6 +530,7 @@ infixRightCont operand table x
 applicativeExpr : Parser Expr
 applicativeExpr
     = oneOf [ if_then_else,
+                  letExpr,
                   lambdaExpr,
                   prefixNeg,
                   backtrackable infixApp,
@@ -683,8 +684,27 @@ lambdaExprAux
 makeMatching : List Pattern -> Matching -> Matching
 makeMatching ps end
     = List.foldr Match end ps
-           
-                        
+
+
+letExpr : Parser Expr
+letExpr
+    = succeed Let
+         |. keyword "let"
+         |. spaces
+         |= lazy (\_ -> bindings)
+         |. spaces
+         |. keyword "in"
+         |. spaces
+         |= lazy (\_ -> topExpr)  
+
+
+bindings : Parser (List Bind)
+bindings
+    = (succeed (collectBinds False)
+         |= declList) |>
+      andThen (\binds -> checkBinds binds |>
+      andThen (\_ -> succeed binds))                   
+
             
 if_then_else : Parser Expr                
 if_then_else
@@ -828,7 +848,7 @@ problemToString prob
 
 -----------------------------------------------------
 -- examples for debugging 
-{-
+
 example1 : String
 example1 =
     """
@@ -864,4 +884,8 @@ example5 = """
 enumFrom :: Int -> [Int]
 enumFrom !n = n : enumFrom (n+1)
 """   
--}
+
+example6 = """
+x = 1:x
+"""
+   

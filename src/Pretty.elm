@@ -5,7 +5,7 @@
 -}
 module Pretty exposing (..)
 
-import AST exposing (Expr(..), Matching(..), Pattern(..), Name)
+import AST exposing (Expr(..), Matching(..), Bind, Pattern(..), Name)
 import Types exposing (Type(..))
 import Heap exposing (Heap)
 import Machine exposing (Conf, Stack, Control(..), Cont(..))
@@ -80,8 +80,11 @@ prettyExpr_ heap prec e =
         InfixOp op e1 e2 ->
             paren (prec>0)
                 <| DList.append (prettyExpr_ heap 1 e1)
-                    (DList.append (DList.singleton (formatOperator op))
-                                       (prettyExpr_ heap 1 e2))
+                    (DList.cons (formatOperator op) (prettyExpr_ heap 1 e2))
+
+        PrefixOp op e1 ->
+            paren (prec>0) <|
+                DList.cons op (prettyExpr_ heap 1 e1)
 
 {-
         App (Var "enumFrom") e1 ->
@@ -136,6 +139,14 @@ prettyExpr_ heap prec e =
                         expr1 = List.foldl (\x y->App y x) (Lam optid match1)  args1
                     in 
                         prettyExpr_ heap prec expr1
+
+        Let binds e1 ->
+             DList.cons "let "
+                (DList.append (prettyBinds heap binds)
+                     (DList.cons " in " (prettyExpr_ heap 0 e1)))
+        Case expr alts ->
+            DList.singleton "<unimplemented>"
+                 
                     
         IfThenElse e1 e2 e3 ->
             paren (prec>0)
@@ -191,6 +202,24 @@ prettyMatch heap m =
         _ ->
             DList.singleton "<unimplemented>"
 
+
+-- pretty print a list of bindings
+prettyBinds : Heap -> List Bind -> StringBuilder
+prettyBinds heap binds
+    = case binds of
+          [] ->
+              DList.empty
+          [first] ->
+              prettyBind heap first
+          (first::rest) ->
+              DList.append (prettyBind heap first)
+                  (DList.cons "; " (prettyBinds heap rest))
+
+prettyBind : Heap -> Bind -> StringBuilder
+prettyBind heap bind
+    = DList.cons (bind.name ++ " = ") (prettyExpr_ heap 0 bind.expr)
+
+                
 -- format an infix operator, sometimes with spaces either side
 formatOperator : Name -> String
 formatOperator op

@@ -105,10 +105,11 @@ concat [] = []
 concat (xs:xss) = xs ++ concat xss
 
 repeat :: a -> [a]
-repeat x = x:repeat x
+repeat x = let xs = x:xs in xs
 
 cycle :: [a] -> [a]
-cycle xs = xs ++ cycle xs
+cycle [] = undefined
+cycle xs = let xs' = xs++xs' in xs'
 
 iterate :: (a -> a) -> a -> [a]
 iterate f x = x : iterate f (f x)

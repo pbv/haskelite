@@ -67,7 +67,14 @@ tcExpr env expr
               andThen (\ty -> tcMatching env match ty |>
               andThen (\_ -> pure ty))
                            
+          Let binds e1 ->
+              tcRecBind env binds |>
+              andThen (\env1 -> tcExpr env1 e1)
 
+          Case e1 alts ->
+              Tc.fail "not implemented"
+                  
+              
           IfThenElse e0 e1 e2 ->
               tcExpr env e0 |>
               andThen (\t0 -> Tc.unify t0 TyBool |>
@@ -78,6 +85,8 @@ tcExpr env expr
 
           InfixOp op e1 e2 ->
               tcExpr env (App (App (Var op) e1) e2)
+          PrefixOp op e1 ->
+              tcExpr env (App (Var op) e1)
 
           Error ->
               Tc.freshVar 
@@ -241,7 +250,8 @@ tcRecGen tyenv lst
               Tc.simplify ty |>
               andThen (\ty1 ->
                            let
-                               tyinfer = Types.generalize Set.empty ty1
+                               ftvs = freeTyEnvVars tyenv
+                               tyinfer = Types.generalize ftvs ty1
                            in
                                checkTypSig bind tyinfer |>
                                andThen (\_ ->
@@ -307,7 +317,7 @@ primitiveEnv
         cmpOp = TyFun TyInt (TyFun TyInt TyBool)
       in
       Dict.fromList
-      [ ("+", intOp), ("*", intOp), ("-", intOp), ("//", intOp),
+      [ ("+", intOp), ("*", intOp), ("-", intOp), 
         ("mod", intOp), ("div", intOp), ("negate", TyFun TyInt TyInt)
       , ("==", cmpOp), ("/=", cmpOp), ("<=", cmpOp)
       , (">=", cmpOp), ("<", cmpOp), (">", cmpOp)

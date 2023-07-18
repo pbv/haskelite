@@ -145,8 +145,11 @@ prettyExpr_ heap prec e =
                 (DList.append (prettyBinds heap binds)
                      (DList.cons " in " (prettyExpr_ heap 0 e1)))
         Case expr alts ->
-            DList.singleton "<unimplemented>"
-                 
+            DList.cons "case "
+                (DList.append
+                     (prettyExpr_ heap 0 expr)
+                     (DList.cons " of "
+                          (prettyAlts heap alts)))
                     
         IfThenElse e1 e2 e3 ->
             paren (prec>0)
@@ -170,6 +173,26 @@ collectArgs m args
               collectArgs m1 (e1::args)
           _ ->
               (m, args)
+
+-- pretty print case alternatives
+prettyAlts : Heap -> List (Pattern,Expr) -> StringBuilder
+prettyAlts heap alts
+    = case alts of
+          [] -> DList.empty
+          [first] ->
+              prettyAlt heap first
+          (first::second::rest) ->
+              DList.append (prettyAlt heap first)
+                  (DList.cons " | "
+                       (prettyAlts heap (second::rest)))
+                  
+
+prettyAlt : Heap -> (Pattern,Expr) -> StringBuilder
+prettyAlt heap (patt,expr)
+    = DList.append (prettyPattern patt)
+             (DList.cons " -> " (prettyExpr_ heap 1 expr))
+                  
+
 
 
 -- pretty print a lambda
@@ -319,7 +342,9 @@ prettyCont heap stack acc
               prettyCont heap rest (InfixOp op (Number v) acc)
           MatchEnd::rest ->
               prettyCont heap rest acc
-          DeepEval expr ctx::rest ->
+          DeepEval::rest ->
+              prettyCont heap rest acc
+          Continue expr ctx::rest ->
               prettyCont heap rest (ctx.set acc expr)
           (_::rest) ->
               "... " ++ prettyExpr heap acc

@@ -256,7 +256,7 @@ editUpdate msg model =
         
         EvalMode ->
             case parseAndTypecheck model.prelude model.inputs of
-                Ok (Letrec binds expr) ->
+                Ok (LetProg binds expr) ->
                     let
                         heap0 = Heap.fromBinds (model.prelude ++ binds)
                         conf0 = Machine.start heap0 expr
@@ -275,7 +275,7 @@ subscriptions : Model -> Sub msg
 subscriptions _ = Sub.none
 
 
-
+{-
 -- extra debugging stuff                 
 observe : a -> b -> b
 observe x y
@@ -283,3 +283,4 @@ observe x y
         _ = Debug.log ">>>" x
       in  y
 
+-}

@@ -21,7 +21,7 @@ type alias TyEnv
 
 
 tcProgram : List Bind -> Program -> Result String ()
-tcProgram prelude (Letrec binds expr)
+tcProgram prelude (LetProg binds expr)
     = let
         env = Dict.union primitiveEnv (makeEnv prelude)
      in
@@ -71,9 +71,11 @@ tcExpr env expr
               tcRecBind env binds |>
               andThen (\env1 -> tcExpr env1 e1)
 
-          Case e1 alts ->
-              Tc.fail "not implemented"
-                  
+          Case e0 alts ->
+              Tc.freshVar |>
+              andThen (\ty -> tcMatching env (AST.translateCase e0 alts) ty |>
+              andThen (\_ -> pure ty))
+                 
               
           IfThenElse e0 e1 e2 ->
               tcExpr env e0 |>

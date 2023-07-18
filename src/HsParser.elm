@@ -30,7 +30,7 @@ parseProgram inputExpr inputDecls
              Result.andThen (\expr ->
                                  Parser.run declarations inputDecls |>
                                  Result.andThen (\binds ->
-                                                     Ok (Letrec binds expr))))
+                                                     Ok (LetProg binds expr))))
 
 
 
@@ -531,6 +531,7 @@ applicativeExpr : Parser Expr
 applicativeExpr
     = oneOf [ if_then_else,
                   letExpr,
+                  caseExpr,
                   lambdaExpr,
                   prefixNeg,
                   backtrackable infixApp,
@@ -698,6 +699,39 @@ letExpr
          |= lazy (\_ -> topExpr)  
 
 
+caseExpr : Parser Expr
+caseExpr
+    = succeed Case
+         |. keyword "case"
+         |. spaces
+         |= lazy (\_ -> topExpr)
+         |. spaces
+         |. keyword "of"
+         |. whitespace
+         |= caseAlts   
+           
+caseAlts : Parser (List (Pattern,Expr))
+caseAlts
+    = Parser.sequence
+      { start = ""
+      , separator = ""
+      , end = ""
+      , spaces = whitespaceOrComment
+      , item  = caseAlt
+      , trailing = Parser.Forbidden
+      }
+
+caseAlt : Parser (Pattern, Expr)
+caseAlt
+    = succeed Tuple.pair
+         |= pattern
+         |. spaces   
+         |. symbol "->"
+         |. spaces
+         |= lazy (\_ -> topExpr)
+            
+    
+            
 bindings : Parser (List Bind)
 bindings
     = (succeed (collectBinds False)
@@ -885,7 +919,8 @@ enumFrom :: Int -> [Int]
 enumFrom !n = n : enumFrom (n+1)
 """   
 
-example6 = """
-x = 1:x
+example6 = """case xs of
+ [] -> 1
+ (a:b) -> 2
 """
    

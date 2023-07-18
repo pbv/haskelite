@@ -43,7 +43,8 @@ type Cont
     | RetPrim2 Name Int
     | RetPrim3 Name
       -- for full normal form evaluation
-    | DeepEval Expr ExprCtx
+    | DeepEval
+    | Continue Expr ExprCtx
       
 
       
@@ -119,7 +120,14 @@ transition conf
                   (s, heap1) = Heap.newBindings heap binds 
               in
                   Just (heap1, E (AST.applySubst s e1), stack)
-                               
+
+          -- case expressions
+          (heap, E (Case e1 alts), stack) ->
+              Just (heap, M (AST.translateCase e1 alts) [], MatchEnd::stack)
+                      
+          -- if-then-else
+          (heap, E (IfThenElse e1 e2 e3), stack) ->
+              Just (heap, M (AST.translateIfThenElse e1 e2 e3) [], MatchEnd::stack)
 
           (heap, E (Var y), stack) ->
               case Heap.get y heap of
@@ -162,12 +170,6 @@ transition conf
                   _ ->
                       Just (heap, E Error, stack)
                   
-          -- if-then-else
-          (heap, E (IfThenElse e1 e2 e3), stack) ->
-              let match = (Alt (Arg e1 (Match (ConsP "True" [])
-                                            (Return e2 (Just "if-then"))))
-                              (Return e3 (Just "if-else")))
-              in Just (heap, M match [], MatchEnd::stack)
                           
                           
           -- update variable
@@ -237,10 +239,16 @@ transition conf
               Just (heap, M m1 (e::args), stack)
 
           -- deep evaluation
-          -- TODO: this does not preserve sharing
-          (heap, E w, (DeepEval expr ctx)::stack) ->
+          (heap, E w, [DeepEval]) ->
               if isWhnf w then
-                  deepEval heap (ctx.set w expr) stack
+                  deepEval heap w 
+              else
+                  Nothing
+                  
+          -- TODO: this does not preserve sharing
+          (heap, E w, [Continue expr ctx]) ->
+              if isWhnf w then
+                  deepEval heap (ctx.set w expr) 
               else
                   Nothing
           _ ->
@@ -304,19 +312,22 @@ applyPrefix op v
 compareOp : Bool -> Expr
 compareOp c = if c then AST.trueCons else AST.falseCons
 
+
+               
+              
 -----------------------------------------------------------------------
 -- reduction to full normal form
+-- TODO: this can destroy sharing in normal forms
 -----------------------------------------------------------------------
-deepEval : Heap -> Expr -> Stack -> Maybe Conf
-deepEval heap expr stack
-    = case outermostRedex expr of
-          Just ctx ->
+deepEval : Heap -> Expr -> Maybe Conf
+deepEval heap expr 
+    =  outermostRedex expr |>
+       Maybe.andThen
+           (\ctx ->
               ctx.getOption expr |>
               Maybe.andThen
                   (\expr1 ->
-                       Just (heap, E expr1, DeepEval expr ctx::stack))
-          Nothing ->
-              Just (heap, E expr, stack)
+                       Just (heap, E expr1, [Continue expr ctx])))
 
 
                   
@@ -383,33 +394,30 @@ start heap expr
     = let
         heap1 = Dict.union heap0 heap
       in
-        (heap1, E expr, [DeepEval expr Context.empty])
+        (heap1, E expr, [DeepEval])
 
 --            
 -- a labelled transition step ignoring silent transitions
 --
 next : Conf -> Maybe (Conf, Info)
 next conf0
-    = nextW False 100 conf0
+    = nextAux 100 conf0
 
 -- worker function with an iteration limit
 -- the first argument is used to check for silent transitions
 -- before the normal form
-nextW : Bool -> Int -> Conf -> Maybe (Conf, Info)
-nextW flag iters conf0
+nextAux :  Int -> Conf -> Maybe (Conf, Info)
+nextAux iters conf0
     = if iters > 0 then
           case transition conf0 of
               Nothing ->
-                  if flag then
-                      Just (conf0, "normal form")
-                  else
-                      Nothing
+                  Nothing
               Just conf1 ->
                   case justification conf0 of
                       Just info ->
                           Just (conf1, info)
                       Nothing ->
-                          nextW True (iters-1) conf1
+                          nextAux (iters-1) conf1
       else
           Just (conf0, "cyclic definition?")
 
@@ -422,7 +430,14 @@ justification (heap, control, stack)
          (E (Number v1), (RetPrim2 op v2::_)) ->
              Just ("primitive " ++ op)
          (E (Number v1), (RetPrim3 op::_)) ->
-             Just ("primitive " ++ op)
+             Just ("primitive " ++ op)                 
+{-
+         (E w, Update x::_) ->
+             if isWhnf w then 
+                 Just ("updated " ++ x)
+             else
+                 Nothing
+-}
          (M (Return expr info) [], MatchEnd::_) ->
              info
          (M Fail [], MatchEnd::_) ->

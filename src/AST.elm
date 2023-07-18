@@ -24,9 +24,9 @@ type alias Info
 type Expr 
     = App Expr Expr
     | Lam (Maybe Name) Matching  
-      -- a lambda is Just name if it was defined through a binding;
+      -- a lambda has `Just name` if it was defined through a binding;
       -- otherwise the name field is Nothing
-    | Let (List Bind) Expr
+    | Let (List Bind) Expr              -- local bindings; can be recursive
     | Case Expr (List (Pattern, Expr))
     | Var Name
     | Number Int
@@ -65,7 +65,7 @@ type alias Bind
     
 -- * programs
 type Program
-    = Letrec (List Bind) Expr
+    = LetProg (List Bind) Expr
      
 -- term substitutions
 type alias Subst
@@ -260,3 +260,22 @@ tuplePat ps
 -- smart constructor for multi-arity applications
 applyMany : Expr -> List Expr -> Expr
 applyMany = List.foldl (\x y->App y x) 
+
+
+            --
+-- syntax translations
+--
+translateIfThenElse : Expr -> Expr -> Expr -> Matching
+translateIfThenElse e1 e2 e3
+    = Alt (Arg e1 (Match (ConsP "True" [])
+                       (Return e2 (Just "if-then"))))
+           (Return e3 (Just "if-else"))
+
+translateCase : Expr -> List (Pattern,Expr) -> Matching
+translateCase e0 alts
+    = let
+        body = List.foldr
+                 (\(patt,expr) rest ->
+                      Alt (Match patt (Return expr Nothing)) rest)
+                   Fail alts
+      in Arg e0 body

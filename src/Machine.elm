@@ -164,9 +164,9 @@ transition conf
                   
           -- if-then-else
           (heap, E (IfThenElse e1 e2 e3), stack) ->
-              let match = (Arg e1 (Alt (Match (ConsP "True" [])
-                                            (Return e2 (Just "if-then")))
-                                       (Return e3 (Just "if-else"))))
+              let match = (Alt (Arg e1 (Match (ConsP "True" [])
+                                            (Return e2 (Just "if-then"))))
+                              (Return e3 (Just "if-else")))
               in Just (heap, M match [], MatchEnd::stack)
                           
                           
@@ -237,6 +237,7 @@ transition conf
               Just (heap, M m1 (e::args), stack)
 
           -- deep evaluation
+          -- TODO: this does not preserve sharing
           (heap, E w, (DeepEval expr ctx)::stack) ->
               if isWhnf w then
                   deepEval heap (ctx.set w expr) stack

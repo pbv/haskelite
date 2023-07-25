@@ -90,7 +90,7 @@ tcExpr env expr
           PrefixOp op e1 ->
               tcExpr env (App (Var op) e1)
 
-          Error ->
+          Error _ ->
               Tc.freshVar 
 
 extend : Name -> Type -> TyEnv -> TyEnv
@@ -323,7 +323,8 @@ primitiveEnv
         ("mod", intOp), ("div", intOp), ("negate", TyFun TyInt TyInt)
       , ("==", cmpOp), ("/=", cmpOp), ("<=", cmpOp)
       , (">=", cmpOp), ("<", cmpOp), (">", cmpOp)
-      , ("True", TyBool), ("False", TyBool)   
+      , ("True", TyBool), ("False", TyBool)
+      , ("undefined", TyGen 0)
       , (":", TyFun (TyGen 0) (TyFun (TyList (TyGen 0)) (TyList (TyGen 0))))
       , ("[]", TyList (TyGen 0))
       -- TODO: generalize this for more tuple sizes

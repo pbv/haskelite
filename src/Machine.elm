@@ -158,7 +158,7 @@ transition conf
                   Just result ->
                       Just (heap, E result, stack)
                   _ ->
-                      Just (heap, E Error, stack)
+                      Nothing
 
           (heap, E (PrefixOp op e1), stack) ->
               Just (heap, E e1, (RetPrim3 op)::stack)
@@ -168,7 +168,7 @@ transition conf
                   Just result ->
                       Just (heap, E result, stack)
                   _ ->
-                      Just (heap, E Error, stack)
+                      Nothing
                   
                           
                           
@@ -228,7 +228,7 @@ transition conf
               Just (heap, M m args, stack)
 
           (heap, M Fail _, MatchEnd::stack) ->
-              Just (heap, E Error, stack)
+              Just (heap, E (Error "non-exaustive patterns"), stack)
                   
           -- deal with alternatives
           (heap, M (Alt m1 m2) args, stack) ->
@@ -239,14 +239,14 @@ transition conf
               Just (heap, M m1 (e::args), stack)
 
           -- deep evaluation
-          (heap, E w, [DeepEval]) ->
+          (heap, E w, (DeepEval)::_) ->
               if isWhnf w then
                   deepEval heap w 
               else
                   Nothing
                   
           -- TODO: this does not preserve sharing
-          (heap, E w, [Continue expr ctx]) ->
+          (heap, E w, (Continue expr ctx)::_) ->
               if isWhnf w then
                   deepEval heap (ctx.set w expr) 
               else
@@ -281,12 +281,12 @@ applyPrimitive op v1 v2
               Just (if v2 /= 0 then
                         Number (v1 // v2)
                     else
-                        Error)
+                        Error "zero division")
           "mod" ->
               Just (if v2 /= 0 then
                         Number (modBy v2 v1)
                     else
-                        Error)
+                        Error "zero division")
           "==" ->
               Just (compareOp (v1 == v2))
           "/=" ->
@@ -310,7 +310,8 @@ applyPrefix op v
 
                 
 compareOp : Bool -> Expr
-compareOp c = if c then AST.trueCons else AST.falseCons
+compareOp c
+    = if c then AST.trueCons else AST.falseCons
 
 
                

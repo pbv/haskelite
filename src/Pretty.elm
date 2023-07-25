@@ -162,8 +162,8 @@ prettyExpr_ heap prec e =
                                         (prettyExpr_ heap 0 e3)))))
 
 
-        Error ->
-            DList.singleton "<runtime error>"
+        Error msg ->
+            DList.singleton ("error: " ++ msg)
 
 
 collectArgs : Matching -> List Expr -> (Matching, List Expr)
@@ -181,10 +181,9 @@ prettyAlts heap alts
           [] -> DList.empty
           [first] ->
               prettyAlt heap first
-          (first::second::rest) ->
+          (first::rest) ->
               DList.append (prettyAlt heap first)
-                  (DList.cons " | "
-                       (prettyAlts heap (second::rest)))
+                  (DList.cons " | " (prettyAlts heap rest))
                   
 
 prettyAlt : Heap -> (Pattern,Expr) -> StringBuilder

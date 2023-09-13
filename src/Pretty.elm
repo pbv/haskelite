@@ -19,7 +19,7 @@ type alias Options
       }
 
 defaultOpts : Options
-defaultOpts = { prettyLists = True, prettyEnums = True }
+defaultOpts = { prettyLists = True, prettyEnums = False }
 
 type alias Prec                -- precedence for placing parethesis
     = Int
@@ -451,5 +451,4 @@ prettyCont opts heap stack acc
 -- TODO: escape special characters
 prettyChar : Char -> String
 prettyChar c
-    = String.cons '\''
-      (String.append (String.fromChar c)  (String.fromChar '\''))
+    = String.fromList ['\'', c, '\'']

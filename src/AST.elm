@@ -262,7 +262,7 @@ applyMany : Expr -> List Expr -> Expr
 applyMany = List.foldl (\x y->App y x) 
 
 
-            --
+--
 -- syntax translations
 --
 translateIfThenElse : Expr -> Expr -> Expr -> Matching
@@ -276,6 +276,6 @@ translateCase e0 alts
     = let
         body = List.foldr
                  (\(patt,expr) rest ->
-                      Alt (Match patt (Return expr Nothing)) rest)
+                      Alt (Match patt (Return expr (Just "case"))) rest)
                    Fail alts
       in Arg e0 body

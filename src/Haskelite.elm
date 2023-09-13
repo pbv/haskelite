@@ -165,8 +165,8 @@ reduceView model =
                            , onClick Next] [text "Next >"]
                   , checkbox model.options.prettyLists
                       (Toggle toggleLists) "Pretty-print lists"
-                  , checkbox model.options.prettyEnums
-                      (Toggle toggleEnums) "Pretty-print enums"
+    --              , checkbox model.options.prettyEnums
+    --                   (Toggle toggleEnums) "Pretty-print enumerations"
                   ]
         -- fill the lines div in reverse order;
         -- the CSS enabled a custom flow direction to ensure the
@@ -290,10 +290,7 @@ editUpdate msg model =
                         , next = Machine.next conf0
                         , previous = []
                         , inputs = model.inputs
-                        , options =
-                              { prettyLists = True
-                              , prettyEnums = True
-                              }
+                        , options = Pretty.defaultOpts
                         }
                 Err msg1 ->
                     Editing {model | parsed = Err msg1}

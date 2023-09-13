@@ -323,6 +323,14 @@ applyPrimitive op e1 e2
               Just (compareOp (v1 < v2))
           ("<=",Number v1,Number v2) ->
               Just (compareOp (v1 <= v2))
+          (">",Char v1,Char v2) ->
+              Just (compareOp (v1 > v2))
+          (">=",Char v1,Char v2) ->
+              Just (compareOp (v1 >= v2))
+          ("<",Char v1,Char v2) ->
+              Just (compareOp (v1 < v2))
+          ("<=",Char v1,Char v2) ->
+              Just (compareOp (v1 <= v2))
           _ ->
               Nothing
 

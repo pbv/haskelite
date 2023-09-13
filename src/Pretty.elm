@@ -14,12 +14,12 @@ import DList exposing (DList)
 
     
 type alias Options
-    = { prettyStrings : Bool   -- should we prettify strings?
+    = { prettyLists : Bool   -- should we prettify strings?
       , prettyEnums : Bool     -- should we prettify Prelude enum functions?
       }
 
 defaultOpts : Options
-defaultOpts = { prettyStrings = True, prettyEnums = True }
+defaultOpts = { prettyLists = True, prettyEnums = True }
 
 type alias Prec                -- precedence for placing parethesis
     = Int
@@ -90,11 +90,16 @@ prettyExpr_ ctx e =
 
 
         Cons ":" [e1, e2] ->
-            if ctx.options.prettyStrings then
-                case checkString e1 e2 of
-                    Just s ->
-                        DList.singleton (String.append "\""
-                                             (String.append s "\""))
+            if ctx.options.prettyLists then
+                case checkSpine e2 of
+                    Just l ->
+                        case checkChars (e1::l) of
+                            Just s ->
+                                DList.singleton (String.append "\""
+                                                     (String.append s "\""))
+                            Nothing ->
+                                prettyList ctx (e1::l)
+                                
                     Nothing ->
                         paren (ctx.prec>0)
                             (DList.append (prettyExpr_ {ctx|prec=1} e1)
@@ -207,6 +212,15 @@ prettyExpr_ ctx e =
         Error msg ->
             DList.singleton ("error: " ++ msg)
 
+prettyList : PrettyCtx -> List Expr -> StringBuilder
+prettyList ctx exprs
+    = DList.concat <|
+      (DList.singleton "[") ::
+          ((List.intersperse (DList.singleton ",") <|
+               List.map (prettyExpr_ {ctx|prec=0}) exprs)
+               ++
+               [DList.singleton "]"])
+                
 
 -- pretty print a generic application
 prettyApp : PrettyCtx -> Expr -> Expr -> StringBuilder
@@ -215,22 +229,41 @@ prettyApp ctx e0 e1
       DList.append (prettyExpr_ {ctx|prec=0} e0)
           (DList.append (DList.singleton " ") (prettyExpr_ {ctx|prec=1} e1))
 
--- auxiliary function to check if a list of expressions is a string
-checkString : Expr -> Expr -> Maybe String
-checkString e1 e2
-    = case e1 of
-          (Char c) ->
-              case e2 of
-                  Cons "[]" [] ->
-                      Just (String.fromChar c)
-                  Cons ":" [r1,r2] ->
-                      checkString r1 r2
-                      |> Maybe.andThen (\s -> Just (String.cons c s))
-                  _ ->
-                      Nothing
+
+-- check if an cons expression has an evaluated spine
+-- in that case return the list of expressions
+checkSpine : Expr -> Maybe (List Expr)
+checkSpine e
+    = case e of
+          Cons "[]" [] ->
+              Just []
+          Cons ":" [hd,tl] ->
+                      checkSpine tl
+                      |> Maybe.andThen (\l -> Just (hd::l))
           _ ->
               Nothing
-                
+
+-- check if a list of expressions consists only of characters
+checkChars : List Expr -> Maybe String
+checkChars es =
+    if List.all isChar es then
+        Just (String.fromList (List.map getChar es))
+    else
+        Nothing
+
+isChar : Expr -> Bool
+isChar e =
+    case e of
+        Char _ -> True
+        _ -> False
+            
+getChar : Expr -> Char
+getChar e =
+    case e of
+        Char c -> c
+        _ -> '?'   -- this never happens!
+
+             
 -- auxiliary function to collect arguments to a matching
 collectArgs : Matching -> List Expr -> (Matching, List Expr)
 collectArgs m args
@@ -401,8 +434,8 @@ prettyCont opts heap stack acc
               prettyCont opts heap rest (App acc arg)
           (RetPrim1 op e2::rest) ->
               prettyCont opts heap rest (InfixOp op acc e2)
-          (RetPrim2 op v::rest) ->
-              prettyCont opts heap rest (InfixOp op (Number v) acc)
+          (RetPrim2 op e2::rest) ->
+              prettyCont opts heap rest (InfixOp op e2 acc)
           MatchEnd::rest ->
               prettyCont opts heap rest acc
           DeepEval::rest ->

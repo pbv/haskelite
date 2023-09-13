@@ -177,8 +177,7 @@ enumFromThenTo :: Int -> Int -> Int -> [Int]
 enumFromThenTo n0 n1 k | n0<=k = n0 : enumFromThenTo n1 (2*n1-n0) k
                        | otherwise = []
 
-
--- these are from Data.List
+-- from Data.List
 inits :: [a] -> [[a]]
 inits [] = [[]]
 inits (x:xs) = [] : map (\\ys->x:ys) (inits xs)

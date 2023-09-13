@@ -40,7 +40,7 @@ type Cont
     | PushPat ArgStack Pattern Matching
       -- continuations for primitive operations
     | RetPrim1 Name Expr
-    | RetPrim2 Name Int
+    | RetPrim2 Name Expr
     | RetPrim3 Name
       -- for full normal form evaluation
     | DeepEval
@@ -150,17 +150,25 @@ transition conf
           -- primitive operations
           (heap, E (InfixOp op e1 e2), stack) ->
               Just (heap, E e1, (RetPrim1 op e2)::stack)
-
                   
-          (heap, E (Number v1), (RetPrim1 op e2)::stack) ->
-              Just (heap, E e2, (RetPrim2 op v1)::stack)
+          (heap, E (Number v), (RetPrim1 op e2)::stack) ->
+              Just (heap, E e2, (RetPrim2 op (Number v))::stack)
+          (heap, E (Char c), (RetPrim1 op e2)::stack) ->
+              Just (heap, E e2, (RetPrim2 op (Char c))::stack)
+                  
+          (heap, E (Number v2), (RetPrim2 op e1)::stack) ->
+              case applyPrimitive op e1 (Number v2) of
+                      Just result ->
+                          Just (heap, E result, stack)
+                      _ ->
+                          Nothing
+          (heap, E (Char c2), (RetPrim2 op e1)::stack) ->
+              case applyPrimitive op e1 (Char c2) of
+                      Just result ->
+                          Just (heap, E result, stack)
+                      _ ->
+                          Nothing
 
-          (heap, E (Number v2), (RetPrim2 op v1)::stack) ->
-              case applyPrimitive op v1 v2 of
-                  Just result ->
-                      Just (heap, E result, stack)
-                  _ ->
-                      Nothing
 
           (heap, E (PrefixOp op e1), stack) ->
               Just (heap, E e1, (RetPrim3 op)::stack)
@@ -172,7 +180,6 @@ transition conf
                   _ ->
                       Nothing
                   
-                          
                           
           -- update variable
           (heap, E w, Update y::stack) ->
@@ -212,8 +219,16 @@ transition conf
               in
                   Just (heap, M m2 args, stack)                          
 
+          -- match numbers
           (heap, E (Number n), (PushPat args (NumberP k) m1)::stack) ->
               if n == k then
+                  Just (heap, M m1 args, stack)
+              else
+                  Just (heap, M Fail [], stack)
+
+          -- match characters
+          (heap, E (Char c), (PushPat args (CharP k) m1)::stack) ->
+              if c == k then
                   Just (heap, M m1 args, stack)
               else
                   Just (heap, M Fail [], stack)
@@ -240,6 +255,8 @@ transition conf
           (heap, M (Arg e m1) args, stack) ->
               Just (heap, M m1 (e::args), stack)
 
+
+                  
           -- deep evaluation
           (heap, E w, (DeepEval)::_) ->
               if isWhnf w then
@@ -253,6 +270,8 @@ transition conf
                   deepEval heap (ctx.set w expr) 
               else
                   Nothing
+
+                          
           _ ->
               Nothing
 
@@ -273,33 +292,36 @@ applyArgs expr args =
             applyArgs (App expr arg1) rest
               
 
-applyPrimitive : Name -> Int -> Int -> Maybe Expr
-applyPrimitive op v1 v2
-    = case op of
-          "+" -> Just (Number (v1 + v2))
-          "-" -> Just (Number (v1 - v2))
-          "*" -> Just (Number (v1 * v2))
-          "div" ->
+applyPrimitive : Name -> Expr -> Expr -> Maybe Expr
+applyPrimitive op e1 e2
+    = case (op, e1, e2) of
+          ("+", Number v1, Number v2) ->
+              Just (Number (v1 + v2))
+          ("-", Number v1, Number v2) ->
+              Just (Number (v1 - v2))
+          ("*", Number v1, Number v2) ->
+              Just (Number (v1 * v2))
+          ("div", Number v1, Number v2) ->
               Just (if v2 /= 0 then
                         Number (v1 // v2)
                     else
                         Error "zero division")
-          "mod" ->
+          ("mod", Number v1, Number v2) ->
               Just (if v2 /= 0 then
                         Number (modBy v2 v1)
                     else
                         Error "zero division")
-          "==" ->
-              Just (compareOp (v1 == v2))
-          "/=" ->
-              Just (compareOp (v1 /= v2))              
-          ">" ->
+          ("==", _, _) ->
+              Just (compareOp (e1 == e2))
+          ("/=", _, _) ->
+              Just (compareOp (e1 /= e2))              
+          (">",Number v1,Number v2) ->
               Just (compareOp (v1 > v2))
-          ">=" ->
+          (">=",Number v1,Number v2) ->
               Just (compareOp (v1 >= v2))
-          "<" ->
+          ("<",Number v1,Number v2) ->
               Just (compareOp (v1 < v2))
-          "<=" ->
+          ("<=",Number v1,Number v2) ->
               Just (compareOp (v1 <= v2))
           _ ->
               Nothing
@@ -430,10 +452,16 @@ nextAux iters conf0
 justification : Conf -> Maybe Info
 justification (heap, control, stack)
     = case (control, stack) of
-         (E (Number v1), (RetPrim2 op v2::_)) ->
-             Just ("primitive " ++ op)
-         (E (Number v1), (RetPrim3 op::_)) ->
-             Just ("primitive " ++ op)
+         (E w1, (RetPrim2 op v2::_)) ->
+             if isWhnf w1 then 
+                 Just ("primitive " ++ op)
+             else
+                 Nothing
+         (E w1, (RetPrim3 op::_)) ->
+             if isWhnf w1 then 
+                 Just ("primitive " ++ op)
+             else
+                 Nothing
 {-
          (E w, Update x::rest) ->
              if isWhnf w then 

@@ -163,8 +163,8 @@ reduceView model =
                   , button [ class "navbar"
                            , disabled (model.next == Nothing)
                            , onClick Next] [text "Next >"]
-                  , checkbox model.options.prettyStrings
-                      (Toggle toggleStrings) "Pretty-print strings"
+                  , checkbox model.options.prettyLists
+                      (Toggle toggleLists) "Pretty-print lists"
                   , checkbox model.options.prettyEnums
                       (Toggle toggleEnums) "Pretty-print enums"
                   ]
@@ -188,8 +188,8 @@ checkbox b msg name =
         , text name
         ]
         
-toggleStrings : Pretty.Options -> Pretty.Options
-toggleStrings opts = { opts | prettyStrings = not (opts.prettyStrings) }
+toggleLists : Pretty.Options -> Pretty.Options
+toggleLists opts = { opts | prettyLists = not (opts.prettyLists) }
 
 toggleEnums : Pretty.Options -> Pretty.Options
 toggleEnums opts = { opts | prettyEnums = not (opts.prettyEnums) }
@@ -291,7 +291,7 @@ editUpdate msg model =
                         , previous = []
                         , inputs = model.inputs
                         , options =
-                              { prettyStrings = True
+                              { prettyLists = True
                               , prettyEnums = True
                               }
                         }

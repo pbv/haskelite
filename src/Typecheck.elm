@@ -321,8 +321,10 @@ addTypeSig bind tyenv
 primitiveEnv : TyEnv
 primitiveEnv
     = let
+        a = TyGen 0
+        b = TyGen 1
         intOp = TyFun tyInt (TyFun tyInt tyInt)
-        cmpOp = TyFun tyInt (TyFun tyInt tyBool)
+        cmpOp = TyFun a (TyFun a tyBool)
       in
       Dict.fromList
       [ ("+", intOp), ("*", intOp), ("-", intOp), 
@@ -330,11 +332,11 @@ primitiveEnv
       , ("==", cmpOp), ("/=", cmpOp), ("<=", cmpOp)
       , (">=", cmpOp), ("<", cmpOp), (">", cmpOp)
       , ("True", tyBool), ("False", tyBool)
-      , ("undefined", TyGen 0)
-      , (":", TyFun (TyGen 0) (TyFun (TyList (TyGen 0)) (TyList (TyGen 0))))
-      , ("[]", TyList (TyGen 0))
-      -- TODO: generalize this for more tuple sizes
-      , (",", TyFun (TyGen 0) (TyFun (TyGen 1) (TyTuple [TyGen 0, TyGen 1])))
+      , ("undefined", a)
+      , (":", TyFun a (TyFun (TyList a) (TyList a)))
+      , ("[]", TyList a)
+      -- TODO: generalize this for more tuples 
+      , (",", TyFun a (TyFun b (TyTuple [a, b])))
       , ("enumFrom", TyFun tyInt (TyList tyInt))
       , ("enumFromTo", TyFun tyInt (TyFun tyInt (TyList tyInt)))
       , ("enumFromThen", TyFun tyInt (TyFun tyInt (TyList tyInt)))

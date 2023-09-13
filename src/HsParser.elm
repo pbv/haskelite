@@ -381,7 +381,9 @@ pattern =
     , succeed (ConsP "False" [])
            |. keyword "False"
     , succeed NumberP
-           |= integer 
+           |= integer
+    , succeed CharP
+           |= litCharacter
     , succeed AST.listPat
          |= Parser.sequence
             { start = "["

@@ -15,8 +15,8 @@ import Pretty
 import Prelude
 
 import Html exposing (..)
-import Html.Attributes exposing (value, class, placeholder, disabled,
-                                     size, rows, cols, spellcheck)
+import Html.Attributes exposing (type_, class, value, style, placeholder, checked,
+                                     disabled, size, rows, cols, spellcheck)
 import Html.Events exposing (on, onClick, onInput)
 import Platform.Cmd as Cmd
 import Platform.Sub as Sub
@@ -40,7 +40,7 @@ type alias EditModel
       }
 
 -- a labelled transition step: the machine configuration
--- plus a justification the previous transition
+-- plus a justification the last transition
 type alias Step
     = (Machine.Conf, Info)   
            
@@ -49,8 +49,10 @@ type alias ReduceModel
       , previous : List Step       -- list of previous steps
       , next : Maybe Step          -- optional next step
       , inputs : Inputs            -- saved inputs (to go back to editing)
+      , options : Pretty.Options          -- displaying options
       }
 
+   
     
 type Msg
     = Previous           -- undo one evaluation step
@@ -59,6 +61,7 @@ type Msg
     | EditMode           -- go into editing mode
     | EvalMode           -- go into evaluation mode
     | Edit Inputs        -- modify inputs
+    | Toggle (Pretty.Options -> Pretty.Options) -- modify options
 
      
 -- the main entry point for the app
@@ -160,22 +163,41 @@ reduceView model =
                   , button [ class "navbar"
                            , disabled (model.next == Nothing)
                            , onClick Next] [text "Next >"]
+                  , checkbox model.options.prettyStrings
+                      (Toggle toggleStrings) "Pretty-print strings"
+                  , checkbox model.options.prettyEnums
+                      (Toggle toggleEnums) "Pretty-print enums"
                   ]
         -- fill the lines div in reverse order;
         -- the CSS enabled a custom flow direction to ensure the
         -- current line always visible when scrolling is needed
         , div [class "lines"]
              <|  [ div [class "current"]
-                          [ renderStep model.current ]
+                          [ renderStep model.options  model.current ]
                  ]
                  ++
-                 List.map renderStep model.previous
+                 List.map (renderStep model.options) model.previous
         ]
 
 
-renderStep  : Step -> Html Msg
-renderStep (conf, info)
-    = case Pretty.prettyConf conf of
+checkbox : Bool -> msg -> String -> Html msg
+checkbox b msg name =
+    label
+        [ style "padding" "20px" ]
+        [ input [ type_ "checkbox", onClick msg, checked b ] []
+        , text name
+        ]
+        
+toggleStrings : Pretty.Options -> Pretty.Options
+toggleStrings opts = { opts | prettyStrings = not (opts.prettyStrings) }
+
+toggleEnums : Pretty.Options -> Pretty.Options
+toggleEnums opts = { opts | prettyEnums = not (opts.prettyEnums) }
+                
+
+renderStep  : Pretty.Options -> Step -> Html Msg
+renderStep opts (conf, info)
+    = case Pretty.prettyConf opts conf of
           Just txt ->
               div [class "line"]
                   [ text txt,
@@ -237,6 +259,9 @@ reduceUpdate msg model =
         EditMode ->
             initModel model.inputs
             
+        Toggle f ->
+            Reducing { model | options = f model.options}
+
         _ ->
             Reducing model
                  
@@ -265,6 +290,10 @@ editUpdate msg model =
                         , next = Machine.next conf0
                         , previous = []
                         , inputs = model.inputs
+                        , options =
+                              { prettyStrings = True
+                              , prettyEnums = True
+                              }
                         }
                 Err msg1 ->
                     Editing {model | parsed = Err msg1}

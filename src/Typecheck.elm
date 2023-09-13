@@ -33,7 +33,7 @@ tcProgram prelude (LetProg binds expr)
 -- wrapper function that documents the expression being typechecked             
 tcExpr_ : TyEnv -> Expr -> Tc Type
 tcExpr_ env expr
-    = explain ("in expression " ++ Pretty.prettyExpr Heap.empty expr ++ ": ") <|
+    = explain ("in expression " ++ Pretty.prettyExpr Pretty.defaultOpts Heap.empty expr ++ ": ") <|
       tcExpr env expr
 
              
@@ -116,7 +116,7 @@ tcMatching env match ty
     = case match of
           Return expr _ ->
               explain ("in expression " ++
-                       Pretty.prettyExpr Heap.empty expr ++ ": ")
+                       Pretty.prettyExpr Pretty.defaultOpts Heap.empty expr ++ ": ")
               (tcExpr env expr |> andThen (Tc.unify ty))
           Fail ->
               pure ()

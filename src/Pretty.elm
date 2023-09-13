@@ -12,6 +12,24 @@ import Machine exposing (Conf, Stack, Control(..), Cont(..))
 import Dict
 import DList exposing (DList)
 
+    
+type alias Options
+    = { prettyStrings : Bool   -- should we prettify strings?
+      , prettyEnums : Bool     -- should we prettify Prelude enum functions?
+      }
+
+defaultOpts : Options
+defaultOpts = { prettyStrings = True, prettyEnums = True }
+
+type alias Prec                -- precedence for placing parethesis
+    = Int
+              
+type alias PrettyCtx
+    = { prec : Prec              -- precedence level (0, 1, ..)
+      , heap : Heap              -- current heap (for shortcircuiting indirections)
+      , options : Options
+      }
+    
 -- a type for strings with efficient concatenation
 -- i.e. difference lists of strings
 type alias StringBuilder
@@ -37,25 +55,30 @@ bracket start end sb
 
 
 -- toplevel function for pretty printing expressions 
-prettyExpr : Heap -> Expr -> String
-prettyExpr h e = toString (prettyExpr_ h 0 e)
+prettyExpr : Options -> Heap -> Expr -> String
+prettyExpr opts h e
+    = let ctx = { prec = 0, heap = h, options = opts }
+      in 
+          toString (prettyExpr_ ctx e)
 
-prettyExpr_ : Heap -> Int ->  Expr -> StringBuilder
-prettyExpr_ heap prec e =
-    case e of
+-- worker function                 
+prettyExpr_ : PrettyCtx -> Expr -> StringBuilder
+prettyExpr_ ctx e =
+    case e of 
         Number n ->
-            paren (prec>0 && n<0) <| DList.singleton (String.fromInt n)
+            paren (ctx.prec>0 && n<0) <| DList.singleton (String.fromInt n)
 
         Char c ->
             DList.singleton (prettyChar c)
 
         Var x ->
             if Heap.isIndirection x then
-                case Dict.get x heap of
+                case Dict.get x ctx.heap of
                     Just e1 ->
-                        prettyExpr_ heap prec e1
+                        prettyExpr_ ctx e1
                     Nothing ->
-                        DList.singleton x -- this should not happen!
+                        DList.singleton x
+                        -- dangling pointer; this should never happen!
             else
                 paren (AST.isOperator x) (DList.singleton x)
 
@@ -63,112 +86,152 @@ prettyExpr_ heap prec e =
             bracket "(" ")" <|
                  (DList.intersperse
                       (DList.singleton ",")                      
-                      (List.map (prettyExpr_ heap 0) args))
+                      (List.map (prettyExpr_ {ctx|prec=0}) args))
 
 
         Cons ":" [e1, e2] ->
-            paren (prec>0)
-                (DList.append (prettyExpr_ heap 1 e1)
-                     (DList.cons ":" (prettyExpr_ heap 1 e2)))
+            if ctx.options.prettyStrings then
+                case checkString e1 e2 of
+                    Just s ->
+                        DList.singleton (String.append "\""
+                                             (String.append s "\""))
+                    Nothing ->
+                        paren (ctx.prec>0)
+                            (DList.append (prettyExpr_ {ctx|prec=1} e1)
+                                 (DList.cons ":" (prettyExpr_ {ctx|prec=1} e2))) 
+              else
+                paren (ctx.prec>0)
+                    (DList.append (prettyExpr_ {ctx|prec=1} e1)
+                         (DList.cons ":" (prettyExpr_ {ctx|prec=1} e2)))
 
         Cons tag [] ->
             DList.singleton tag
                     
         Cons tag args ->
-            paren (prec>0) <|
+            paren (ctx.prec>0) <|
                 (DList.intersperse (DList.singleton " ")
                          ((DList.singleton tag) ::
-                          (List.map (prettyExpr_ heap 1) args)))
+                          (List.map (prettyExpr_ {ctx|prec=1}) args)))
 
         InfixOp op e1 e2 ->
-            paren (prec>0)
-                <| DList.append (prettyExpr_ heap 1 e1)
-                    (DList.cons (formatOperator op) (prettyExpr_ heap 1 e2))
+            paren (ctx.prec>0)
+                <| DList.append (prettyExpr_ {ctx|prec=1} e1)
+                    (DList.cons (formatOperator op) (prettyExpr_ {ctx|prec=1} e2))
 
         PrefixOp op e1 ->
-            paren (prec>0) <|
-                DList.cons op (prettyExpr_ heap 1 e1)
+            paren (ctx.prec>0) <|
+                DList.cons op (prettyExpr_ {ctx|prec=1} e1)
 
-{-
         App (Var "enumFrom") e1 ->
-            bracket "[" "..]" <|  prettyExpr_ heap 0 e1 
+            if ctx.options.prettyEnums then 
+                bracket "[" "..]" <|  prettyExpr_ {ctx|prec=0} e1
+            else
+                prettyApp ctx (Var "enumFrom") e1
 
         App (App (Var "enumFromThen") e1) e2 ->
-            bracket "[" "..]" <|
-                DList.append (prettyExpr_ heap 0 e1)
-                    (DList.cons "," (prettyExpr_ heap 0 e2))
+            if ctx.options.prettyEnums then
+                bracket "[" "..]" <|
+                    DList.append (prettyExpr_ {ctx|prec=0} e1)
+                        (DList.cons "," (prettyExpr_ {ctx|prec=0} e2))
+            else
+               prettyApp ctx (App (Var "enumFromThen") e1) e2 
                 
         App (App (Var "enumFromTo") e1) e2 ->
-            bracket "[" "]" <|
-                DList.append
-                    (prettyExpr_ heap 0 e1)
-                    (DList.cons ".." (prettyExpr_ heap 0 e2))
-
+            if ctx.options.prettyEnums then 
+                bracket "[" "]" <|
+                    DList.append
+                        (prettyExpr_ {ctx|prec=0} e1)
+                        (DList.cons ".." (prettyExpr_ {ctx|prec=1} e2))
+            else
+                prettyApp ctx (App (Var "enumFromTo") e1) e2
+                            
         App (App (App (Var "enumFromThenTo") e1) e2) e3 ->
-            bracket "[" "]" <|
-                DList.append 
-                  (prettyExpr_ heap 0 e1)
-                  (DList.cons ","
-                       (DList.append                      
-                            (prettyExpr_ heap 0 e2)
-                            (DList.cons ".."
-                                 (prettyExpr_ heap 0 e3))))
--}
-              
+            if ctx.options.prettyEnums then
+                bracket "[" "]" <|
+                    DList.append 
+                        (prettyExpr_ {ctx|prec=0} e1)
+                        (DList.cons ","
+                             (DList.append                      
+                                  (prettyExpr_ {ctx|prec=0} e2)
+                                  (DList.cons ".."
+                                       (prettyExpr_ {ctx|prec=0} e3))))
+            else
+                prettyApp ctx  (App (App (Var "enumFromThenTo") e1) e2) e3 
+           
 
         App (App (Var op) e1) e2 ->
             if AST.isOperator op then
-                paren (prec>0) <|
-                    DList.append (prettyExpr_ heap 1 e1)
+                paren (ctx.prec>0) <|
+                    DList.append (prettyExpr_ {ctx|prec=1} e1)
                         (DList.cons op
-                             (prettyExpr_ heap 1 e2))
+                             (prettyExpr_ {ctx|prec=1} e2))
             else
-                paren (prec>0) <|
-                    DList.append (prettyExpr_ heap 0 (App (Var op) e1))
-                        (DList.append (DList.singleton " ") (prettyExpr_ heap 1 e2))
+                paren (ctx.prec>0) <|
+                    DList.append (prettyExpr_ {ctx|prec=0} (App (Var op) e1))
+                        (DList.append (DList.singleton " ") (prettyExpr_ {ctx|prec=1} e2))
                         
         App e0 e1 ->
-            paren (prec>0) <|
-            DList.append (prettyExpr_ heap 0 e0)
-                (DList.append (DList.singleton " ") (prettyExpr_ heap 1 e1))
-
+            prettyApp ctx e0 e1
 
         Lam optid match ->
             case collectArgs match [] of
                 (_, []) ->
-                    prettyLam heap prec optid match
+                    prettyLam ctx optid match
                 (match1, args1) ->
                     let
                         expr1 = List.foldl (\x y->App y x) (Lam optid match1)  args1
                     in 
-                        prettyExpr_ heap prec expr1
+                        prettyExpr_ ctx expr1
 
         Let binds e1 ->
              DList.cons "let "
-                (DList.append (prettyBinds heap binds)
-                     (DList.cons " in " (prettyExpr_ heap 0 e1)))
+                (DList.append (prettyBinds ctx binds)
+                     (DList.cons " in " (prettyExpr_ {ctx|prec=0} e1)))
         Case expr alts ->
             DList.cons "case "
                 (DList.append
-                     (prettyExpr_ heap 0 expr)
-                     (DList.cons " of "
-                          (prettyAlts heap alts)))
+                     (prettyExpr_ {ctx|prec=0} expr)
+                     (DList.cons " of " (prettyAlts {ctx|prec=0} alts)))
                     
         IfThenElse e1 e2 e3 ->
-            paren (prec>0)
+            paren (ctx.prec>0)
                 <|  DList.cons "if "
-                    (DList.append (prettyExpr_ heap 0 e1)
+                    (DList.append (prettyExpr_ {ctx|prec=0} e1)
                          (DList.cons " then "
                               (DList.append
-                                   (prettyExpr_ heap 0 e2)
+                                   (prettyExpr_ {ctx|prec=0} e2)
                                    (DList.cons " else "
-                                        (prettyExpr_ heap 0 e3)))))
+                                        (prettyExpr_ {ctx|prec=0} e3)))))
 
 
         Error msg ->
             DList.singleton ("error: " ++ msg)
 
 
+-- pretty print a generic application
+prettyApp : PrettyCtx -> Expr -> Expr -> StringBuilder
+prettyApp ctx e0 e1
+    = paren (ctx.prec>0) <|
+      DList.append (prettyExpr_ {ctx|prec=0} e0)
+          (DList.append (DList.singleton " ") (prettyExpr_ {ctx|prec=1} e1))
+
+-- auxiliary function to check if a list of expressions is a string
+checkString : Expr -> Expr -> Maybe String
+checkString e1 e2
+    = case e1 of
+          (Char c) ->
+              case e2 of
+                  Cons "[]" [] ->
+                      Just (String.fromChar c)
+                  Cons ":" [r1,r2] ->
+                      checkString r1 r2
+                      |> Maybe.andThen (\s -> Just (String.cons c s))
+                  _ ->
+                      Nothing
+          _ ->
+              Nothing
+                
+-- auxiliary function to collect arguments to a matching
 collectArgs : Matching -> List Expr -> (Matching, List Expr)
 collectArgs m args
     = case m of
@@ -178,72 +241,70 @@ collectArgs m args
               (m, args)
 
 -- pretty print case alternatives
-prettyAlts : Heap -> List (Pattern,Expr) -> StringBuilder
-prettyAlts heap alts
+prettyAlts : PrettyCtx -> List (Pattern,Expr) -> StringBuilder
+prettyAlts ctx alts
     = case alts of
           [] -> DList.empty
           [first] ->
-              prettyAlt heap first
+              prettyAlt ctx first
           (first::rest) ->
-              DList.append (prettyAlt heap first)
-                  (DList.cons " | " (prettyAlts heap rest))
+              DList.append (prettyAlt ctx first)
+                  (DList.cons " | " (prettyAlts ctx rest))
                   
 
-prettyAlt : Heap -> (Pattern,Expr) -> StringBuilder
-prettyAlt heap (patt,expr)
+prettyAlt : PrettyCtx -> (Pattern,Expr) -> StringBuilder
+prettyAlt ctx (patt,expr)
     = DList.append (prettyPattern patt)
-             (DList.cons " -> " (prettyExpr_ heap 1 expr))
-                  
-
+             (DList.cons " -> " (prettyExpr_ {ctx|prec=0} expr))
+                
 
 
 -- pretty print a lambda
-prettyLam : Heap -> Int -> Maybe Name -> Matching -> StringBuilder
-prettyLam heap prec optid m
+prettyLam : PrettyCtx -> Maybe Name -> Matching -> StringBuilder
+prettyLam ctx optid m
     = case optid of
+          -- just use the binding name if there is one
           Just id ->
-              -- just use the binding name if there is one
               DList.singleton id
           Nothing ->
               -- otherwise check if it has any arguments
               case m of
                   Match p m1 ->
-                      paren True <| DList.cons "\\" (prettyMatch heap m)
+                      paren True <| DList.cons "\\" (prettyMatch ctx m)
                   Return e _ ->
-                      prettyExpr_ heap prec e
+                      prettyExpr_ ctx e
                   _ ->
                       DList.singleton "<unimplemented>"
           
 -- pretty print a matching            
-prettyMatch : Heap -> Matching -> StringBuilder
-prettyMatch heap m =
+prettyMatch : PrettyCtx -> Matching -> StringBuilder
+prettyMatch ctx m =
     case m of
         (Match p m1) ->
             DList.append (prettyPattern p)
-                (DList.cons " " (prettyMatch heap m1))
+                (DList.cons " " (prettyMatch ctx m1))
         (Return e _) ->
-            DList.cons "-> " (prettyExpr_ heap 0 e)
+            DList.cons "-> " (prettyExpr_ {ctx|prec=0} e)
 
         _ ->
             DList.singleton "<unimplemented>"
 
 
 -- pretty print a list of bindings
-prettyBinds : Heap -> List Bind -> StringBuilder
-prettyBinds heap binds
+prettyBinds : PrettyCtx -> List Bind -> StringBuilder
+prettyBinds ctx binds
     = case binds of
           [] ->
               DList.empty
           [first] ->
-              prettyBind heap first
+              prettyBind ctx first
           (first::rest) ->
-              DList.append (prettyBind heap first)
-                  (DList.cons "; " (prettyBinds heap rest))
+              DList.append (prettyBind ctx first)
+                  (DList.cons "; " (prettyBinds ctx rest))
 
-prettyBind : Heap -> Bind -> StringBuilder
-prettyBind heap bind
-    = DList.cons (bind.name ++ " = ") (prettyExpr_ heap 0 bind.expr)
-
+prettyBind : PrettyCtx -> Bind -> StringBuilder
+prettyBind ctx bind
+    = DList.cons (bind.name ++ " = ") (prettyExpr_ {ctx|prec=0} bind.expr)
                 
 -- format an infix operator, sometimes with spaces either side
 formatOperator : Name -> String
@@ -318,38 +379,38 @@ showGenVar n
 -- showing configurations 
 ----------------------------------------------------------------------------------
                   
-prettyConf : Conf ->  Maybe String
-prettyConf (heap, control, stack)
+prettyConf : Options -> Conf ->  Maybe String
+prettyConf opts (heap, control, stack)
    = case (control, stack) of
          (E expr, _) ->
-             Just <| prettyCont heap stack expr
+             Just <| prettyCont opts heap stack expr
          _ ->
              Nothing
              
 
                  
 -- convert a continuation stack into a string
-prettyCont : Heap -> Stack -> Expr -> String
-prettyCont heap stack acc
+prettyCont : Options -> Heap -> Stack -> Expr -> String
+prettyCont opts heap stack acc
     = case stack of
           [] ->
-              prettyExpr heap acc
+              prettyExpr opts heap acc
           (Update _::rest) ->
-              prettyCont heap rest acc
+              prettyCont opts heap rest acc
           (PushArg arg::rest) ->
-              prettyCont heap rest (App acc arg)
+              prettyCont opts heap rest (App acc arg)
           (RetPrim1 op e2::rest) ->
-              prettyCont heap rest (InfixOp op acc e2)
+              prettyCont opts heap rest (InfixOp op acc e2)
           (RetPrim2 op v::rest) ->
-              prettyCont heap rest (InfixOp op (Number v) acc)
+              prettyCont opts heap rest (InfixOp op (Number v) acc)
           MatchEnd::rest ->
-              prettyCont heap rest acc
+              prettyCont opts heap rest acc
           DeepEval::rest ->
-              prettyCont heap rest acc
+              prettyCont opts heap rest acc
           Continue expr ctx::rest ->
-              prettyCont heap rest (ctx.set acc expr)
+              prettyCont opts heap rest (ctx.set acc expr)
           (_::rest) ->
-              "... " ++ prettyExpr heap acc
+              "... " ++ prettyExpr opts heap acc
 
 
 

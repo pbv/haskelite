@@ -55,6 +55,8 @@ isWhnf expr =
             AST.matchingArity m > 0
         Number _ ->
             True
+        Char _ ->
+            True
         Cons _ _ ->
             True
         _ ->
@@ -431,9 +433,9 @@ justification (heap, control, stack)
          (E (Number v1), (RetPrim2 op v2::_)) ->
              Just ("primitive " ++ op)
          (E (Number v1), (RetPrim3 op::_)) ->
-             Just ("primitive " ++ op)                 
+             Just ("primitive " ++ op)
 {-
-         (E w, Update x::_) ->
+         (E w, Update x::rest) ->
              if isWhnf w then 
                  Just ("updated " ++ x)
              else
@@ -445,8 +447,7 @@ justification (heap, control, stack)
              Just "pattern match failure"
          _ ->
              Nothing
-                 
-            
+
                   
 --------------------------------------------------------------------
 -- examples for debugging 

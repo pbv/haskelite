@@ -34,12 +34,12 @@ unifyAux s t1 t2 eqs
               else
                   unifyEqs (extend x t2 s) eqs
                         
-          (TyInt, TyInt) ->
-              unifyEqs s eqs
-                  
-          (TyBool, TyBool) ->
-              unifyEqs s eqs
-                  
+          (TyConst c1, TyConst c2) ->
+              if c1 == c2 then
+                  unifyEqs s eqs
+              else
+                  mismatch t1 t2
+                                    
           (TyList t3, TyList t4) ->
               unifyAux s t3 t4 eqs
              

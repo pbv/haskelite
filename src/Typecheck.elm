@@ -10,7 +10,7 @@ import Set exposing (Set)
 import Set
 import AST exposing (Expr(..), Matching(..), Pattern(..),
                          Program(..), Bind, Name)
-import Types exposing (Type(..))
+import Types exposing (Type(..), tyBool, tyInt, tyChar)
 import Tc exposing (Tc, pure, andThen, explain, fail)
 import Pretty
 import Heap
@@ -42,7 +42,9 @@ tcExpr : TyEnv -> Expr -> Tc Type
 tcExpr env expr
     = case expr of
           Number _ ->
-              pure TyInt
+              pure tyInt
+          Char _ ->
+              pure tyChar
           Var v ->
               case Dict.get v env of
                   Just ty ->
@@ -79,7 +81,7 @@ tcExpr env expr
               
           IfThenElse e0 e1 e2 ->
               tcExpr env e0 |>
-              andThen (\t0 -> Tc.unify t0 TyBool |>
+              andThen (\t0 -> Tc.unify t0 tyBool |>
               andThen (\_ -> tcExpr env e1 |>
               andThen (\t1 -> tcExpr env e2 |>
               andThen (\t2 -> Tc.unify t1 t2 |>
@@ -163,7 +165,11 @@ tcPattern env patt ty
                       Tc.fail ("unknown constructor " ++ tag)
 
           (NumberP _) ->
-              Tc.unify ty TyInt |>
+              Tc.unify ty tyInt |>
+              andThen (\_ -> pure env)
+
+          (CharP _) ->
+              Tc.unify ty tyChar |>
               andThen (\_ -> pure env)
 
 
@@ -315,22 +321,22 @@ addTypeSig bind tyenv
 primitiveEnv : TyEnv
 primitiveEnv
     = let
-        intOp = TyFun TyInt (TyFun TyInt TyInt)
-        cmpOp = TyFun TyInt (TyFun TyInt TyBool)
+        intOp = TyFun tyInt (TyFun tyInt tyInt)
+        cmpOp = TyFun tyInt (TyFun tyInt tyBool)
       in
       Dict.fromList
       [ ("+", intOp), ("*", intOp), ("-", intOp), 
-        ("mod", intOp), ("div", intOp), ("negate", TyFun TyInt TyInt)
+        ("mod", intOp), ("div", intOp), ("negate", TyFun tyInt tyInt)
       , ("==", cmpOp), ("/=", cmpOp), ("<=", cmpOp)
       , (">=", cmpOp), ("<", cmpOp), (">", cmpOp)
-      , ("True", TyBool), ("False", TyBool)
+      , ("True", tyBool), ("False", tyBool)
       , ("undefined", TyGen 0)
       , (":", TyFun (TyGen 0) (TyFun (TyList (TyGen 0)) (TyList (TyGen 0))))
       , ("[]", TyList (TyGen 0))
       -- TODO: generalize this for more tuple sizes
       , (",", TyFun (TyGen 0) (TyFun (TyGen 1) (TyTuple [TyGen 0, TyGen 1])))
-      , ("enumFrom", TyFun TyInt (TyList TyInt))
-      , ("enumFromTo", TyFun TyInt (TyFun TyInt (TyList TyInt)))
-      , ("enumFromThen", TyFun TyInt (TyFun TyInt (TyList TyInt)))
-      , ("enumFromThenTo", TyFun TyInt (TyFun TyInt (TyFun TyInt (TyList TyInt))))
+      , ("enumFrom", TyFun tyInt (TyList tyInt))
+      , ("enumFromTo", TyFun tyInt (TyFun tyInt (TyList tyInt)))
+      , ("enumFromThen", TyFun tyInt (TyFun tyInt (TyList tyInt)))
+      , ("enumFromThenTo", TyFun tyInt (TyFun tyInt (TyFun tyInt (TyList tyInt))))
       ]

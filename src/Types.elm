@@ -11,12 +11,16 @@ import Set exposing (Set)
 type alias Name
     = String
 
+type alias Tycon
+    = String
+      
 -- syntax of types
 type Type
     = TyVar Name         -- free type variable
     | TyGen Int          -- quantified (generic) type variable
-    | TyBool
-    | TyInt
+    -- | TyBool
+    -- | TyInt
+    | TyConst Tycon      -- Bool, Int, Char
     | TyTuple (List Type)
     | TyList Type
     | TyFun Type Type
@@ -25,6 +29,16 @@ type Type
 type alias TySubst
     = Dict Name Type
 
+tyBool : Type
+tyBool = TyConst "Bool"
+
+tyInt : Type         
+tyInt = TyConst "Int"
+
+tyChar : Type
+tyChar = TyConst "Char"
+
+      
 -- apply a type substitution
 applyTySubst : TySubst -> Type -> Type
 applyTySubst s ty

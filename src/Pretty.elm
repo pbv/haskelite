@@ -46,6 +46,9 @@ prettyExpr_ heap prec e =
         Number n ->
             paren (prec>0 && n<0) <| DList.singleton (String.fromInt n)
 
+        Char c ->
+            DList.singleton (prettyChar c)
+
         Var x ->
             if Heap.isIndirection x then
                 case Dict.get x heap of
@@ -261,6 +264,8 @@ prettyPattern p =
             DList.singleton ("!"++x)
         NumberP n ->
             DList.singleton (String.fromInt n)
+        CharP c ->
+            DList.singleton (prettyChar c)
                 
         ConsP "," ps ->
             bracket "(" ")" <|
@@ -287,10 +292,8 @@ prettyType ty = toString (prettyType_ 0 ty)
 prettyType_ : Int -> Type -> StringBuilder
 prettyType_ prec ty
     = case ty of
-          TyInt ->
-              DList.singleton "Int"
-          TyBool ->
-              DList.singleton "Bool"
+          TyConst c ->
+              DList.singleton c
           TyVar name ->
               DList.singleton name
           TyGen idx ->
@@ -348,3 +351,11 @@ prettyCont heap stack acc
           (_::rest) ->
               "... " ++ prettyExpr heap acc
 
+
+
+-- pretty print a character
+-- TODO: escape special characters
+prettyChar : Char -> String
+prettyChar c
+    = String.cons '\''
+      (String.append (String.fromChar c)  (String.fromChar '\''))

@@ -30,6 +30,7 @@ type Expr
     | Case Expr (List (Pattern, Expr))
     | Var Name
     | Number Int
+    | Char Char
     | Cons Tag (List Expr)
     | InfixOp Name Expr Expr           --  primitive binary operators +, * etc
     | PrefixOp Name Expr               -- primitive unary operators (-)
@@ -47,11 +48,12 @@ type Matching
 
 -- * patterns      
 type Pattern
-    = DefaultP               -- ignore (_)
-    | VarP Name
-    | BangP Name             -- bang pattern (for strict evaluation)
-    | NumberP Int
-    | ConsP Tag (List Pattern)
+    = DefaultP                  -- ignore (_)
+    | VarP Name                 -- variables
+    | BangP Name                -- bang pattern (for strict evaluation)
+    | NumberP Int               -- number pattern
+    | CharP Char                -- character pattern
+    | ConsP Tag (List Pattern)  -- constructors
 
       
 -- * declarations      
@@ -166,9 +168,7 @@ patternVars patt
               [x]
           ConsP c ps ->
               List.concatMap patternVars ps
-          NumberP _ ->
-              []
-          DefaultP ->
+          _ ->
               []
                       
 

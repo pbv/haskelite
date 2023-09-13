@@ -15,7 +15,7 @@ import AST exposing (Expr(..),
                      Decl(..),
                      Bind, Program(..),
                      Name, Info)
-import Types exposing (Type(..))
+import Types exposing (Type(..), tyInt, tyBool, tyChar)
 import Char
 import Set
 import Dict exposing (Dict)
@@ -303,10 +303,12 @@ typeExpr
 typeBase : Parser Type
 typeBase
     = oneOf
-      [ succeed TyInt
+      [ succeed tyInt
             |. keyword "Int"
-      , succeed TyBool
+      , succeed tyBool
             |. keyword "Bool"
+      , succeed tyChar
+            |. keyword "Char"
       , succeed TyVar        -- identifier are parsed as free type vars
             |= identifier    -- should be generalized if necessary
       , succeed TyList
@@ -549,6 +551,10 @@ delimited =
           |= identifier
     , succeed Number
           |= integer
+    , succeed Char
+          |= litCharacter
+    , succeed stringToList
+          |= litString
     , succeed (\tag -> Cons tag [])
           |= constructor
     , backtrackable <|
@@ -783,6 +789,32 @@ constructor
       , inner = \c -> Char.isAlphaNum c || c=='_' || c=='\''
       , reserved = Set.empty
       }
+
+-- TODO: handle escaped characters         
+litString : Parser String
+litString
+    = succeed identity
+         |. symbol "\""
+         |= Parser.getChompedString (Parser.chompWhile (\c->c/='\"'))
+         |. symbol "\""
+
+-- TODO: handle escaped characters         
+litCharacter : Parser Char
+litCharacter
+    = (succeed identity
+         |. symbol "'"
+         |= Parser.getChompedString (Parser.chompWhile (\c -> c /= '\''))
+         |. symbol "'")
+      |> Parser.andThen checkCharLiteral
+
+checkCharLiteral : String -> Parser Char
+checkCharLiteral s
+    = case String.uncons s of
+          Just (c, "")
+              -> succeed c
+          _ ->
+              problem "character literal"
+    
     
 reservedWords
     = Set.fromList [ "if", "then", "else", "let", "in", "case", "of", "where" ]
@@ -812,7 +844,11 @@ spaces
 ----------------------------------------------------------------------      
 -- helper functions
 ----------------------------------------------------------------------
-
+-- convert a string into an AST expression (list of chars)
+stringToList : String -> Expr
+stringToList s
+    = AST.listLit (List.map Char <| String.toList s)
+   
 -- combine a parser result with the chomped string
 getParseChomped : Parser (String -> a) -> Parser a
 getParseChomped parser

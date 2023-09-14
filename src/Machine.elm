@@ -19,6 +19,7 @@ import Heap exposing (Heap)
 import Context exposing (ExprCtx)
 import Monocle.Optional as Monocle
 
+
 type alias Conf
     = (Heap, Control, Stack)
 
@@ -157,13 +158,17 @@ transition conf
               Just (heap, E e2, (RetPrim2 op (Char c))::stack)
                   
           (heap, E (Number v2), (RetPrim2 op e1)::stack) ->
-              case applyPrimitive op e1 (Number v2) of
+              case applyBinPrimitive op e1 (Number v2) of
+                      Just (Error msg) ->
+                          Just (heap, E (Error msg), [])
                       Just result ->
                           Just (heap, E result, stack)
                       _ ->
                           Nothing
           (heap, E (Char c2), (RetPrim2 op e1)::stack) ->
-              case applyPrimitive op e1 (Char c2) of
+              case applyBinPrimitive op e1 (Char c2) of
+                      Just (Error msg) ->
+                          Just (heap, E (Error msg), [])
                       Just result ->
                           Just (heap, E result, stack)
                       _ ->
@@ -173,8 +178,10 @@ transition conf
           (heap, E (PrefixOp op e1), stack) ->
               Just (heap, E e1, (RetPrim3 op)::stack)
                   
-          (heap, E (Number v), (RetPrim3 op)::stack) ->
-              case applyPrefix op v of
+          (heap, E w, (RetPrim3 op)::stack) ->
+              case applyUnaryPrim op w of
+                  Just (Error msg) ->
+                      Just (heap, E (Error msg), [])
                   Just result ->
                       Just (heap, E result, stack)
                   _ ->
@@ -245,7 +252,7 @@ transition conf
               Just (heap, M m args, stack)
 
           (heap, M Fail _, MatchEnd::stack) ->
-              Just (heap, E (Error "non-exaustive patterns"), stack)
+              Just (heap, E (Error (AST.stringLit "non-exaustive patterns")), [])
                   
           -- deal with alternatives
           (heap, M (Alt m1 m2) args, stack) ->
@@ -255,23 +262,24 @@ transition conf
           (heap, M (Arg e m1) args, stack) ->
               Just (heap, M m1 (e::args), stack)
 
-
+          (heap, E (Error msg), _::_) ->
+              Just (heap, E (Error msg), [])
                   
           -- deep evaluation
+          -- NB: this does not preserve sharing
           (heap, E w, (DeepEval)::_) ->
               if isWhnf w then
                   deepEval heap w 
               else
                   Nothing
                   
-          -- TODO: this does not preserve sharing
+          -- NB: this does not preserve sharing
           (heap, E w, (Continue expr ctx)::_) ->
               if isWhnf w then
                   deepEval heap (ctx.set w expr) 
               else
                   Nothing
 
-                          
           _ ->
               Nothing
 
@@ -292,8 +300,9 @@ applyArgs expr args =
             applyArgs (App expr arg1) rest
               
 
-applyPrimitive : Name -> Expr -> Expr -> Maybe Expr
-applyPrimitive op e1 e2
+-- apply a binary primitive
+applyBinPrimitive : Name -> Expr -> Expr -> Maybe Expr
+applyBinPrimitive op e1 e2
     = case (op, e1, e2) of
           ("+", Number v1, Number v2) ->
               Just (Number (v1 + v2))
@@ -305,12 +314,12 @@ applyPrimitive op e1 e2
               Just (if v2 /= 0 then
                         Number (v1 // v2)
                     else
-                        Error "zero division")
+                        Error (AST.stringLit "division by zero"))
           ("mod", Number v1, Number v2) ->
               Just (if v2 /= 0 then
                         Number (modBy v2 v1)
                     else
-                        Error "zero division")
+                        Error (AST.stringLit "division by zero"))
           ("==", _, _) ->
               Just (compareOp (e1 == e2))
           ("/=", _, _) ->
@@ -334,11 +343,14 @@ applyPrimitive op e1 e2
           _ ->
               Nothing
 
-applyPrefix : Name -> Int -> Maybe Expr
-applyPrefix op v
-    = case op of
-          "negate" -> Just (Number (-v))
-          _  -> Nothing
+-- apply a unary primitive
+applyUnaryPrim : Name -> Expr -> Maybe Expr
+applyUnaryPrim op e
+    = case (op, e) of
+          ("negate", Number v) ->
+              Just (Number (-v))
+          _  ->
+              Nothing
 
                 
 compareOp : Bool -> Expr
@@ -346,7 +358,7 @@ compareOp c
     = if c then AST.trueCons else AST.falseCons
 
 
-               
+
               
 -----------------------------------------------------------------------
 -- reduction to full normal form
@@ -399,8 +411,7 @@ heap0 : Heap
 heap0
     = Dict.fromList <|
       List.map  binop [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]  ++
-      [ ("undefined", Lam Nothing Fail)
-      , (":", Lam Nothing (Match (VarP "x")
+      [ (":", Lam Nothing (Match (VarP "x")
                              (Match (VarP "y")
                                (Return (Cons ":" [Var "x",Var "y"])
                                     Nothing)
@@ -437,8 +448,7 @@ next conf0
     = nextAux 100 conf0
 
 -- worker function with an iteration limit
--- the first argument is used to check for silent transitions
--- before the normal form
+-- the first argument is limit counter for "silent" transitions
 nextAux :  Int -> Conf -> Maybe (Conf, Info)
 nextAux iters conf0
     = if iters > 0 then
@@ -462,12 +472,12 @@ justification (heap, control, stack)
     = case (control, stack) of
          (E w1, (RetPrim2 op v2::_)) ->
              if isWhnf w1 then 
-                 Just ("primitive " ++ op)
+                 Just op
              else
                  Nothing
          (E w1, (RetPrim3 op::_)) ->
              if isWhnf w1 then 
-                 Just ("primitive " ++ op)
+                 Just op
              else
                  Nothing
 {-
@@ -479,8 +489,12 @@ justification (heap, control, stack)
 -}
          (M (Return expr info) [], MatchEnd::_) ->
              info
-         (M Fail [], MatchEnd::_) ->
+         (E (Error msg), _) ->
+             Just "runtime error"
+
+         (M Fail _, MatchEnd::_) ->
              Just "pattern match failure"
+
          _ ->
              Nothing
 
@@ -498,12 +512,14 @@ transitions_ n conf
     = let
         _ = Debug.log (String.fromInt n) (getControl conf, getStack conf )
       in
-       case next conf of
+       case transition conf of
            Nothing ->
                ()
-           Just (conf1,_) ->
+           Just conf1 ->
                transitions_ (n+1) conf1
 
+-}
+{-
 example0 : Conf
 example0 = (heap0, E (InfixOp "*" (Number 1) (Number 2)), [])
 
@@ -638,6 +654,16 @@ example10
       in
           (heap, E expr, [DeepEval expr Context.empty])
 -}
+
+{-
+example11
+    = (Heap.empty,
+           E (Case (InfixOp "==" (Number 1) (Number 2))
+                  [(ConsP "True" [], Number 42)]),
+           
+                      [])
+-}
+              
 {-
 -- extra debugging stuff                 
 observe : a -> b -> b

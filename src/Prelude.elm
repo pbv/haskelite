@@ -19,6 +19,9 @@ preludeResult
 prelude : String
 prelude =
     """
+undefined :: a
+undefined = error "undefined"
+
 id :: a -> a
 id x = x
 
@@ -46,11 +49,12 @@ even x = x `mod` 2 == 0
 odd :: Int -> Bool
 odd x = x `mod` 2 == 1
 
-min :: Int -> Int -> Int
+-- NB: these are too polymorphic!
+min :: a -> a -> a
 min x y | x<=y = x
         | otherwise = y
 
-max :: Int -> Int -> Int
+max :: a -> a -> a
 max x y | x<=y = y
         | otherwise = x
 
@@ -65,9 +69,11 @@ null [] = True
 null (_:_) = False
 
 head :: [a] -> a
+head [] = error "head: empty list"
 head (x:_) = x
 
 tail :: [a] -> [a]
+tail [] = error "tail: empty list"
 tail (_:xs) = xs
 
 length :: [a] -> Int
@@ -90,6 +96,17 @@ product :: [Int] -> Int
 product [] = 1
 product (x:xs) = x * product xs
 
+-- NB: these are overly polymorphic!
+maximum :: [a] -> a
+maximum [] = error "maximum: empty list"
+maximum [x] = x
+maximum (x:xs) = max x (maximum xs)
+
+minimum :: [a] -> a
+minimum [] = error "minimum: empty list"
+minimum [x]= x
+minimum (x:xs) = min x (minimum xs) 
+
 take :: Int -> [a] -> [a]
 take 0 xs = []
 take n [] = []
@@ -108,7 +125,7 @@ repeat :: a -> [a]
 repeat x = let xs = x:xs in xs
 
 cycle :: [a] -> [a]
-cycle [] = undefined
+cycle [] = error "cycle: empty list"
 cycle xs = let xs' = xs++xs' in xs'
 
 iterate :: (a -> a) -> a -> [a]
@@ -178,12 +195,13 @@ enumFromThenTo n0 n1 k | n0<=k = n0 : enumFromThenTo n1 (2*n1-n0) k
                        | otherwise = []
 
 -- from Data.List
-inits :: [a] -> [[a]]
-inits [] = [[]]
-inits (x:xs) = [] : map (\\ys->x:ys) (inits xs)
+init :: [a] -> [a]
+init [] = error "init: empty list"
+init [_] = []
+init (x:xs) = x : init xs
 
-tails :: [a] -> [[a]]
-tails xs = case xs of
-          [] -> [[]]
-          (x:xs') -> xs : tails xs'
+last :: [a] -> a
+last [] = error "last: empty list"
+last [x] = x
+last (_:xs) = last xs
 """

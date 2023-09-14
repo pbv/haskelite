@@ -32,10 +32,11 @@ type Expr
     | Number Int
     | Char Char
     | Cons Tag (List Expr)
-    | InfixOp Name Expr Expr           --  primitive binary operators +, * etc
-    | PrefixOp Name Expr               -- primitive unary operators (-)
+    | InfixOp Name Expr Expr           -- primitive binary operators +, * etc
+    | PrefixOp Name Expr               -- primitive unary operations (-)
     | IfThenElse Expr Expr Expr
-    | Error String                     -- runtime errors
+    | Error Expr                     -- runtime errors
+
       
 -- * matchings
 type Matching 
@@ -219,12 +220,10 @@ matchingWellformed m
               Maybe.andThen (\a1 -> matchingWellformed m2 |>
               Maybe.andThen (\a2 -> if a1==a2 then Just a1 else Nothing))
               -- both arities should be equal
-          
-      
+               
                   
 isOperator : Name -> Bool
 isOperator = String.all operatorChar 
-
              
 operatorChar : Char -> Bool
 operatorChar c =
@@ -237,10 +236,14 @@ trueCons = Cons "True" []
 falseCons : Expr           
 falseCons = Cons "False" []           
 
--- smart constructors for literal lists and tuples
+           
+-- smart constructors for literal lists, strings and tuples
 listLit : List Expr -> Expr
 listLit = List.foldr (\x xs -> Cons ":" [x,xs]) (Cons "[]" [])
 
+stringLit : String -> Expr
+stringLit s = listLit (List.map Char <| String.toList s)
+          
 tupleLit : List Expr -> Expr
 tupleLit args
     = case args of

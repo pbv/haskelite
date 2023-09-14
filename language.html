@@ -9,23 +9,27 @@
 
 <h2>Expressions</h2>
 
-Integers, variables, arithmetic operations (`+, -, *, div, mod`),
-comparisons between integers (`==`, `<=`, etc.), tuples, list enumerations
-(e.g. `[1..10]`), lambda-expressions, let bindings.
+Integers, characters, strings (i.e. lists of characters),
+variables, arithmetic operations (`+, -, *, div, mod`),
+comparisons (`==`, `<=`, etc.), tuples, lists, enumerations
+(e.g. `[1..10]`), lambda-expressions, let bindings, case expressions.
 
 <h2>Function definitions</h2>
 
-Pattern matching over integers lists and tuples; boolean guards; recursive
-definitions are allowed.
+Pattern matching over integers, characters, lists and tuples; boolean
+guards; recursive definitions.
 
 
 <h2>Standard Prelude</h2>
 
-Definitions for the following functions from the Standard Prelude are provided.
+Definitions for the following functions from the Standard Prelude are
+provided.  Note that functions based on equality or orderning have an
+overly polymorphic type (they should really have a typeclass
+restriction) and thus can "get stuck" at runtime.
 
 <pre>
 even, odd :: Int -> Bool
-max, min :: Int -> Int -> Int
+max, min :: a -> a -> a        -- NB: too polymorphic!
 fst :: (a,b) -> a
 snd :: (a,b) -> b
 (&&), (||) :: Bool -> Bool
@@ -34,8 +38,11 @@ tail :: [a] -> [a]
 (++) :: [a] -> [a] -> [a]
 length :: [a] -> Int
 reverse :: [a] -> [a]
+init :: [a] -> [a]
+last :: [a] -> a  
 sum, product :: [Int] -> Int
 take, drop :: Int -> [a] -> [a]
+maximum, minimum :: [a] -> a   -- NB: too polymorphic!
 concat :: [[a]] -> [a]
 repeat :: a -> [a]
 cycle :: [a] -> [a]
@@ -59,9 +66,7 @@ The following Haskell 98 features are <em>not</em> implemented:
 <li>modules
 <li>type classes
 <li>the numeric tower (Float, Integer, Double, etc.)
-<li>case expressions
 <li>list compreensions
-<li>caracters and strings
 <li>user-defined algebraic data types
 </ul>
 

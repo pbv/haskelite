@@ -19,22 +19,26 @@ draft copy.
 
 ### Expressions
 
-Integers, variables, arithmetic operations (`+, -, *, div, mod`),
-comparisons between integers (`==`, `<=`, etc.), tuples, list enumerations
-(e.g. `[1..10]`) and lambda-expressions.
+Integers, characters, strings (lists of characters), variables,
+arithmetic operations (`+, -, *, div, mod`), comparisons (`==`, `<=`,
+etc.), tuples, lists, enumerations (e.g. `[1..10]`) and
+lambda-expressions.
 
 ### Function definitions
 
-Pattern matching over integers, lists and tuples; boolean guards; recursive
-definitions are allowed.
+Pattern matching over integers, characters, lists and tuples; boolean
+guards; recursive definitions.
 
 ## Standard Prelude
 
-Definitions for the following functions from the Standard Prelude are provided.
+Definitions for the following functions from the Standard Prelude are
+provided.  Note that functions based on equality or ordering have an
+overly polymorphic type (they should really have a typeclass
+restriction) and thus can "get stuck" at runtime.
 
 ~~~haskell
 even, odd :: Int -> Bool
-max, min :: Int -> Int -> Int
+max, min :: a -> a -> a         -- NB: too polymorphic!
 fst :: (a,b) -> a
 snd :: (a,b) -> b
 (&&), (||) :: Bool -> Bool
@@ -43,6 +47,9 @@ tail :: [a] -> [a]
 (++) :: [a] -> [a] -> [a]
 length :: [a] -> Int
 reverse :: [a] -> [a]
+init :: [a] -> [a]
+last :: [a] -> a
+maximum, minimum :: [a] -> a    -- NB: too polymorphic!
 sum, product :: [Int] -> Int
 take, drop :: Int -> [a] -> [a]
 concat :: [[a]] -> [a]
@@ -53,6 +60,7 @@ map :: (a -> b) -> [a] -> [b]
 filter :: (a -> Bool) -> [a] -> [a]
 foldr :: (a -> b -> b) -> b -> [a] -> b
 foldl :: (a -> b -> a) -> a -> [b] -> a
+foldl' :: (a -> b -> a) -> a -> [b] -> a
 zip :: [a] -> [b] -> [(a,b)]
 zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
 takeWhile, dropWhile :: (a -> Bool) -> [a] -> [a]
@@ -66,9 +74,7 @@ The following Haskell 98 features are *not* implemented:
 * modules
 * type classes 
 * the numeric tower (Float, Integer, Double, etc.)
-* case expressions
 * list compreensions
-* caracters and strings
 * user-defined algebraic data types
 
 ----

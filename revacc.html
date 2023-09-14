@@ -12,13 +12,13 @@
     <script>
       var decls =
 	  "reverse :: [a] -> [a]\n"+
-	  "reverse xs = revacc xs []\n\n"+
-	  "revacc :: [a] -> [a] -> [a]\n"+
-	  "revacc [] ys     = ys\n"+
-	  "revacc (x:xs) ys = revacc xs (x:ys)\n"
+	  "reverse xs = revAcc xs []\n\n"+
+	  "revAcc :: [a] -> [a] -> [a]\n"+
+	  "revAcc [] ys     = ys\n"+
+	  "revAcc (x:xs) ys = revAcc xs (x:ys)\n"
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
-	  flags: { expression:"reverse [1,2,3,4,5]", declarations: decls }
+	  flags: { expression:"reverse \"abracadabra\"", declarations: decls }
       });
     </script>
     <hr>

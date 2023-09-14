@@ -18,9 +18,7 @@ type alias Tycon
 type Type
     = TyVar Name         -- free type variable
     | TyGen Int          -- quantified (generic) type variable
-    -- | TyBool
-    -- | TyInt
-    | TyConst Tycon      -- Bool, Int, Char
+    | TyConst Tycon      -- Bool, Int, Char, etc.
     | TyTuple (List Type)
     | TyList Type
     | TyFun Type Type

@@ -279,8 +279,6 @@ typeSignature
          |. spaces
          |= typeExpr
 
-
-
 -- * type expressions
 typeExpr : Parser Type
 typeExpr
@@ -339,7 +337,11 @@ tyTuple ts
           [t] -> t
           _ -> TyTuple ts
               
-           
+
+------------------------------------------------------------------
+-- auxiliary parsers for expresssions
+-----------------------------------------------------------------
+               
 identifierOrOperator : Parser Name
 identifierOrOperator
     = oneOf [ identifier
@@ -630,11 +632,19 @@ literalTuple
             }
 
 
-makeApp : Expr -> List Expr -> Expr             
-makeApp e0 args =
+makeApp : Expr -> List Expr -> Expr
+makeApp e0 args
+    = case (e0, args) of
+          (Var "error", [msg]) ->
+              Error msg
+          _ ->
+              makeApp_ e0 args
+           
+makeApp_ : Expr -> List Expr -> Expr             
+makeApp_ e0 args =
     case args of
         [] -> e0
-        (e1::rest) -> makeApp (App e0 e1) rest
+        (e1::rest) -> makeApp_ (App e0 e1) rest
 
 
 prefixNeg : Parser Expr
@@ -722,7 +732,7 @@ caseAlts : Parser (List (Pattern,Expr))
 caseAlts
     = Parser.sequence
       { start = ""
-      , separator = ""
+      , separator = ";"
       , end = ""
       , spaces = whitespaceOrComment
       , item  = caseAlt
@@ -823,7 +833,7 @@ reservedWords
 
 
 
-
+-- consume whitespaces (including newlines) or comments
 whitespaceOrComment : Parser ()
 whitespaceOrComment
     = Parser.loop 0 <| ifProgress <|
@@ -831,8 +841,8 @@ whitespaceOrComment
           [ Parser.lineComment "--"
           , Parser.multiComment "{-" "-}" Parser.Nestable
           , whitespace
-          ]
-
+          ]           
+      
 -- whitespace, including newlines
 whitespace : Parser ()
 whitespace    
@@ -898,7 +908,7 @@ deadEndsToString deadEnds
           List.map (\(a,r) ->
                         "line " ++ String.fromInt a.row  ++ "," ++
                         "col " ++ String.fromInt a.col ++ ": " ++
-                        "expecting " ++
+                        "expecting " ++                        
                         (String.join ", " <|
                              Set.toList <|
                              Set.fromList <|
@@ -918,6 +928,7 @@ problemToString prob
           _ -> "?"
       
 
+{-
 -----------------------------------------------------
 -- examples for debugging 
 
@@ -961,4 +972,4 @@ example6 = """case xs of
  [] -> 1
  (a:b) -> 2
 """
-   
+-}   

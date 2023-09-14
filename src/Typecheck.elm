@@ -33,7 +33,8 @@ tcProgram prelude (LetProg binds expr)
 -- wrapper function that documents the expression being typechecked             
 tcExpr_ : TyEnv -> Expr -> Tc Type
 tcExpr_ env expr
-    = explain ("in expression " ++ Pretty.prettyExpr Pretty.defaultOpts Heap.empty expr ++ ": ") <|
+    = explain ("in expression " ++
+                   Pretty.prettyExpr Pretty.defaultOpts Heap.empty expr ++ ": ") <|
       tcExpr env expr
 
              
@@ -92,8 +93,9 @@ tcExpr env expr
           PrefixOp op e1 ->
               tcExpr env (App (Var op) e1)
 
-          Error _ ->
-              Tc.freshVar 
+          Error e1 ->
+              tcExpr env (App (Var "error") e1)
+
 
 extend : Name -> Type -> TyEnv -> TyEnv
 extend v t env
@@ -324,6 +326,7 @@ primitiveEnv
         a = TyGen 0
         b = TyGen 1
         intOp = TyFun tyInt (TyFun tyInt tyInt)
+        -- NB: no typeclasses so these functions are overly polymorphic!
         cmpOp = TyFun a (TyFun a tyBool)
       in
       Dict.fromList
@@ -331,8 +334,8 @@ primitiveEnv
         ("mod", intOp), ("div", intOp), ("negate", TyFun tyInt tyInt)
       , ("==", cmpOp), ("/=", cmpOp), ("<=", cmpOp)
       , (">=", cmpOp), ("<", cmpOp), (">", cmpOp)
+      , ("error", TyFun (TyList tyChar) a)
       , ("True", tyBool), ("False", tyBool)
-      , ("undefined", a)
       , (":", TyFun a (TyFun (TyList a) (TyList a)))
       , ("[]", TyList a)
       -- TODO: generalize this for more tuples 

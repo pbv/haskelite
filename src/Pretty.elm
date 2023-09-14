@@ -125,7 +125,7 @@ prettyExpr_ ctx e =
 
         PrefixOp op e1 ->
             paren (ctx.prec>0) <|
-                DList.cons op (prettyExpr_ {ctx|prec=1} e1)
+                DList.cons (String.append op " ") (prettyExpr_ {ctx|prec=1} e1)
 
         App (Var "enumFrom") e1 ->
             if ctx.options.prettyEnums then 
@@ -208,9 +208,8 @@ prettyExpr_ ctx e =
                                    (DList.cons " else "
                                         (prettyExpr_ {ctx|prec=0} e3)))))
 
-
-        Error msg ->
-            DList.singleton ("error: " ++ msg)
+        Error e1 ->
+            DList.cons "error " (prettyExpr_ ctx e1)
 
 prettyList : PrettyCtx -> List Expr -> StringBuilder
 prettyList ctx exprs
@@ -230,38 +229,6 @@ prettyApp ctx e0 e1
           (DList.append (DList.singleton " ") (prettyExpr_ {ctx|prec=1} e1))
 
 
--- check if an cons expression has an evaluated spine
--- in that case return the list of expressions
-checkSpine : Expr -> Maybe (List Expr)
-checkSpine e
-    = case e of
-          Cons "[]" [] ->
-              Just []
-          Cons ":" [hd,tl] ->
-                      checkSpine tl
-                      |> Maybe.andThen (\l -> Just (hd::l))
-          _ ->
-              Nothing
-
--- check if a list of expressions consists only of characters
-checkChars : List Expr -> Maybe String
-checkChars es =
-    if List.all isChar es then
-        Just (String.fromList (List.map getChar es))
-    else
-        Nothing
-
-isChar : Expr -> Bool
-isChar e =
-    case e of
-        Char _ -> True
-        _ -> False
-            
-getChar : Expr -> Char
-getChar e =
-    case e of
-        Char c -> c
-        _ -> '?'   -- this never happens!
 
              
 -- auxiliary function to collect arguments to a matching
@@ -282,7 +249,7 @@ prettyAlts ctx alts
               prettyAlt ctx first
           (first::rest) ->
               DList.append (prettyAlt ctx first)
-                  (DList.cons " | " (prettyAlts ctx rest))
+                  (DList.cons "; " (prettyAlts ctx rest))
                   
 
 prettyAlt : PrettyCtx -> (Pattern,Expr) -> StringBuilder
@@ -407,6 +374,43 @@ prettyType_ prec ty
 showGenVar : Int -> String
 showGenVar n
     = String.fromChar <| Char.fromCode <| Char.toCode 'a' + n
+
+
+-- check if an cons expression has an evaluated spine
+-- in that case return the list of expressions
+checkSpine : Expr -> Maybe (List Expr)
+checkSpine e
+    = case e of
+          Cons "[]" [] ->
+              Just []
+          Cons ":" [hd,tl] ->
+                      checkSpine tl
+                      |> Maybe.andThen (\l -> Just (hd::l))
+          _ ->
+              Nothing
+
+-- check if a list of expressions consists only of characters
+checkChars : List Expr -> Maybe String
+checkChars es =
+    if List.all isChar es then
+        Just (String.fromList (List.map getChar es))
+    else
+        Nothing
+
+
+isChar : Expr -> Bool
+isChar e =
+    case e of
+        Char _ -> True
+        _ -> False
+            
+getChar : Expr -> Char
+getChar e =
+    case e of
+        Char c -> c
+        _ -> '?'   -- this never happens!
+
+      
 
 ----------------------------------------------------------------------------------
 -- showing configurations 

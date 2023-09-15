@@ -15,7 +15,7 @@ import AST exposing (Expr(..),
                      Decl(..),
                      Bind, Program(..),
                      Name, Info)
-import Types exposing (Type(..), tyInt, tyBool, tyChar)
+import Types exposing (Type(..), Tycon, tyInt, tyBool, tyChar)
 import Char
 import Set
 import Dict exposing (Dict)
@@ -91,6 +91,7 @@ makeBind named pair =
               typeSig = Nothing,
               expr = Lam (if named then Just id else Nothing) (collectAlts (Equation id match::rest))
             }
+            
 
 collectAlts : List Decl -> Matching
 collectAlts = List.foldr joinDecl Fail
@@ -173,8 +174,11 @@ equationLHS
     = succeed Tuple.pair
          |= identifier
          |. spaces
-         |= patternList
-          
+         |= (patternList "" "" "" 
+            |> andThen
+               (ensure distinctPatterns
+                    "pattern variables should be distinct"))
+
 
 -- alternative
 -- i.e. list of guards and expressions (possibly empty)
@@ -283,30 +287,33 @@ typeSignature
 typeExpr : Parser Type
 typeExpr
     = succeed tyArrows
-        |= typeBase
+        |= typeApplication
         |. spaces
         |= oneOf [
             Parser.sequence
                 { start = "->"
                 , end = ""
                 , separator = "->"
-                , item = typeBase
+                , item = typeApplication
                 , spaces = spaces
                 , trailing = Parser.Forbidden
                 }
            , succeed []
            ]
 
-          
-typeBase : Parser Type
-typeBase
+
+-- self-delimited types
+delimitedType : Parser Type
+delimitedType
     = oneOf
-      [ succeed tyInt
-            |. keyword "Int"
+      [ succeed (\c -> TyConst c [])
+            |= upperIdentifier
+      {-
       , succeed tyBool
             |. keyword "Bool"
       , succeed tyChar
             |. keyword "Char"
+       -}
       , succeed TyVar        -- identifier are parsed as free type vars
             |= identifier    -- should be generalized if necessary
       , succeed TyList
@@ -338,6 +345,32 @@ tyTuple ts
           _ -> TyTuple ts
               
 
+typeApplication : Parser Type
+typeApplication
+    = oneOf
+      [ succeed makeTypeApp
+         |= upperIdentifier
+         |. spaces
+         |= delimitedTypeList
+      , delimitedType
+      ]
+            
+delimitedTypeList : Parser (List Type)
+delimitedTypeList
+    = Parser.sequence
+      { start = ""
+      , end = ""
+      , separator = ""
+      , spaces = spaces
+      , item = delimitedType
+      , trailing = Parser.Forbidden
+      }
+
+makeTypeApp : Tycon -> List Type -> Type
+makeTypeApp c ts
+    = TyConst c ts
+    
+               
 ------------------------------------------------------------------
 -- auxiliary parsers for expresssions
 -----------------------------------------------------------------
@@ -378,65 +411,42 @@ pattern =
     , succeed BangP
            |. symbol "!"
            |= identifier   
-    , succeed (ConsP "True" [])
-           |. keyword "True"
-    , succeed (ConsP "False" [])
-           |. keyword "False"
+    , succeed (\c ps -> ConsP c ps)
+           |= upperIdentifier
+           |. spaces
+           |= patternList "" "" ""
     , succeed NumberP
            |= integer
     , succeed CharP
            |= litCharacter
     , succeed AST.listPat
-         |= Parser.sequence
-            { start = "["
-            , end = "]"
-            , separator = ","
-            , spaces = spaces
-            , item = lazy (\_ -> pattern)
-            , trailing = Parser.Forbidden
-            }
+         |= patternList "[" "]" "," 
     , backtrackable
           <| succeed AST.tuplePat
-               |= Parser.sequence
-                  { start = "("
-                  , end = ")"
-                  , separator = ","
-                  , spaces = spaces
-                  , item = lazy (\_ -> pattern)
-                  , trailing = Parser.Forbidden
-                  }
-    , Parser.sequence
-          { start = "("
-          , end = ")"
-          , separator = ":"
-          , spaces = spaces
-          , item = lazy (\_ -> pattern)
-          , trailing = Parser.Forbidden
-          } |> andThen
-                 (\l -> case List.reverse l of
-                            [] -> problem "pattern"
-                            (p::ps) ->
-                                succeed (List.foldr
-                                         (\x y -> ConsP ":" [x,y])
+               |= patternList "(" ")" "," 
+    , patternList "(" ")" ":"
+      |> andThen
+         (\l -> case List.reverse l of
+                    [] -> problem "pattern"
+                    (p::ps) ->
+                        succeed (List.foldr
+                                     (\x y -> ConsP ":" [x,y])
                                          p
                                          (List.reverse ps)))
     ]
 
 
-
-patternList : Parser (List Pattern)    
-patternList =
+-- parse a list of patterns with a given separator
+patternList : String -> String -> String -> Parser (List Pattern)    
+patternList open close sep =
     Parser.sequence
-    { start = ""
-    , end =""
-    , separator= ""
-    , spaces=spaces
-    , item = pattern
+    { start = open
+    , end = close
+    , separator = sep
+    , spaces = spaces
+    , item = lazy (\_ -> pattern)
     , trailing = Parser.Forbidden
-    } |>
-    andThen
-    (ensure distinctPatterns "all pattern variables should be distinct")
-
+    }
 
 -- * check all pattern variables are distinct
 distinctPatterns : List Pattern -> Bool
@@ -560,7 +570,7 @@ delimited =
     , succeed stringToList
           |= litString
     , succeed (\tag -> Cons tag [])
-          |= constructor
+          |= upperIdentifier
     , backtrackable <|
         succeed Var
           |. symbol "("
@@ -631,15 +641,18 @@ literalTuple
             , trailing = Parser.Forbidden
             }
 
-
+-- build an application to a list of arguments
 makeApp : Expr -> List Expr -> Expr
 makeApp e0 args
     = case (e0, args) of
           (Var "error", [msg]) ->
               Error msg
+          (Cons tag args1, args2) ->
+              Cons tag (args1 ++ args2)
           _ ->
               makeApp_ e0 args
-           
+                  
+-- worker function           
 makeApp_ : Expr -> List Expr -> Expr             
 makeApp_ e0 args =
     case args of
@@ -692,11 +705,7 @@ lambdaExprAux : Parser (String -> Expr)
 lambdaExprAux
     = succeed (\patts expr info ->
                    Lam Nothing (makeMatching patts (Return expr (Just info))))
-         |. symbol "\\"
-         |. spaces
-         |= patternList
-         |. spaces
-         |. operator "->"
+         |= patternList "\\" "" "->"
          |. spaces
          |= lazy (\_ -> topExpr)
 
@@ -786,6 +795,7 @@ identifierList
       }
                    
 
+-- lower case identifiers    
 identifier : Parser String
 identifier
     = variable
@@ -794,13 +804,15 @@ identifier
       , reserved = reservedWords
       }
 
-constructor : Parser String
-constructor
+-- upper case identifiers    
+upperIdentifier : Parser String
+upperIdentifier
     = variable
       { start = \c -> Char.isUpper c
       , inner = \c -> Char.isAlphaNum c || c=='_' || c=='\''
       , reserved = Set.empty
       }
+
 
 -- TODO: handle escaped characters         
 litString : Parser String

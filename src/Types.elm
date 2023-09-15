@@ -16,10 +16,10 @@ type alias Tycon
       
 -- syntax of types
 type Type
-    = TyVar Name         -- free type variable
-    | TyGen Int          -- quantified (generic) type variable
-    | TyConst Tycon      -- Bool, Int, Char, etc.
-    | TyTuple (List Type)
+    = TyVar Name                 -- free type variable
+    | TyGen Int                  -- quantified (generic) type variable
+    | TyConst Tycon (List Type)  -- Type constructor applied to type arguments
+    | TyTuple (List Type)        -- special type constructors
     | TyList Type
     | TyFun Type Type
 
@@ -28,19 +28,20 @@ type alias TySubst
     = Dict Name Type
 
 tyBool : Type
-tyBool = TyConst "Bool"
+tyBool = TyConst "Bool" []
 
 tyInt : Type         
-tyInt = TyConst "Int"
+tyInt = TyConst "Int" []
 
 tyChar : Type
-tyChar = TyConst "Char"
-
+tyChar = TyConst "Char" []
       
 -- apply a type substitution
 applyTySubst : TySubst -> Type -> Type
 applyTySubst s ty
     = case ty of
+          TyGen _ ->
+              ty
           TyVar name ->
               case Dict.get name s of
                   Nothing -> ty
@@ -51,8 +52,8 @@ applyTySubst s ty
               -> TyTuple (List.map (applyTySubst s) ts)
           TyFun t1 t2
               -> TyFun (applyTySubst s t1) (applyTySubst s t2)
-          _
-              -> ty
+          TyConst c ts
+              -> TyConst c (List.map (applyTySubst s) ts)
       
 -- quantify free variable of a type
 -- first argument are the free variables in the type environment
@@ -67,6 +68,8 @@ generalize fvs ty
 freeTyVars : Type -> Set Name
 freeTyVars ty
     = case ty of
+          TyGen _ ->
+              Set.empty
           TyVar v ->
               Set.singleton v
           TyList t1 ->
@@ -75,13 +78,15 @@ freeTyVars ty
               List.foldl Set.union Set.empty <| List.map freeTyVars ts
           TyFun t1 t2 ->
               Set.union (freeTyVars t1) (freeTyVars t2)
-          _ ->
-              Set.empty
+          TyConst c ts ->
+              List.foldl Set.union Set.empty <| List.map freeTyVars ts
 
 -- set of all generic vars in a type
 genVars : Type -> Set Int
 genVars ty
     = case ty of
+          TyVar _ ->
+              Set.empty
           TyGen n ->
               Set.singleton n
           TyList t1 ->
@@ -90,7 +95,7 @@ genVars ty
               List.foldl Set.union Set.empty <| List.map genVars ts
           TyFun t1 t2 ->
               Set.union (genVars t1) (genVars t2)
-          _ ->
-              Set.empty
+          TyConst c ts ->
+              List.foldl Set.union Set.empty <| List.map genVars ts
       
 

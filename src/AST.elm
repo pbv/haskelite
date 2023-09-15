@@ -4,7 +4,7 @@
 -}
 module AST exposing (..)
 
-import Types exposing (Type)
+import Types exposing (Type, Tycon)
 import Dict exposing (Dict)
 import Maybe
 
@@ -61,7 +61,11 @@ type Pattern
 -- * declarations      
 type Decl
     = TypeSig Name Type
-    | Equation Name Matching      
+    | Equation Name Matching
+--    | Data Tycon (List Name) (List DataAlt)
+
+type alias DataAlt    -- alternatives for an algebraic data type
+    = (Tag, List Type)
 
 -- * bindings
 type alias Bind
@@ -81,6 +85,7 @@ declName decl
     = case decl of
           TypeSig name _ -> name
           Equation name _ -> name
+
 
 
               

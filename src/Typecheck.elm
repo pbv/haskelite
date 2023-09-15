@@ -59,7 +59,7 @@ tcExpr env expr
                       Tc.freshInst ty |>
                       andThen (\ty1 -> tcApplication env ty1 args)
                   Nothing ->
-                      Tc.fail ("unknown constructor "++tag)
+                      Tc.fail ("unknown constructor " ++ tag)
               
           App fun arg ->
               tcExpr env fun |>

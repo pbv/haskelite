@@ -34,21 +34,21 @@ unifyAux s t1 t2 eqs
               else
                   unifyEqs (extend x t2 s) eqs
                         
-          (TyConst c1, TyConst c2) ->
-              if c1 == c2 then
-                  unifyEqs s eqs
+          (TyConst c1 ts1, TyConst c2 ts2) ->
+              if c1 == c2 && List.length ts1 == List.length ts2 then
+                  unifyEqs s (List.map2 Tuple.pair ts1 ts2 ++ eqs)
               else
                   mismatch t1 t2
                                     
-          (TyList t3, TyList t4) ->
-              unifyAux s t3 t4 eqs
-             
           (TyTuple ts1, TyTuple ts2) ->
               if List.length ts1 == List.length ts2 then
                   unifyEqs s (List.map2 Tuple.pair ts1 ts2 ++ eqs)
               else
                   mismatch t1 t2
                   
+          (TyList t3, TyList t4) ->
+              unifyAux s t3 t4 eqs
+             
           (TyFun t1a t1b, TyFun t2a t2b) ->
               unifyAux s t1a t2a ((t1b,t2b)::eqs)
 

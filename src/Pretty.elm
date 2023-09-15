@@ -349,11 +349,15 @@ prettyPattern p =
 prettyType : Type -> String
 prettyType ty = toString (prettyType_ 0 ty)
 
-prettyType_ : Int -> Type -> StringBuilder
+prettyType_ : Prec -> Type -> StringBuilder
 prettyType_ prec ty
     = case ty of
-          TyConst c ->
+          TyConst c [] ->
               DList.singleton c
+          TyConst c ts ->
+              paren (prec>0) 
+                  (DList.intersperse (DList.singleton " ")
+                       (DList.singleton c :: List.map (prettyType_ 1) ts))
           TyVar name ->
               DList.singleton name
           TyGen idx ->

@@ -35,7 +35,8 @@ type Expr
     | InfixOp Name Expr Expr           -- primitive binary operators +, * etc
     | PrefixOp Name Expr               -- primitive unary operations (-)
     | IfThenElse Expr Expr Expr
-    | Error Expr                     -- runtime errors
+    | Error Expr                       -- runtime errors; the argument should
+                                       -- be an evaluated string
 
       
 -- * matchings

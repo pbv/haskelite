@@ -192,7 +192,7 @@ transition conf
           (heap, E w, Update y::stack) ->
               if isWhnf w then
                   let
-                      heap1 = Dict.insert y w heap
+                      heap1 = Heap.update y w heap
                   in
                       Just (heap1, E w, stack)
               else
@@ -404,12 +404,11 @@ outermostRedexArgs tag i args
 
 
 -------------------------------------------------------------------------
--- a heap with lambda matchings for primitive operations
--- to allow partial applications
+-- initialize a heap with bindings for primitive operations
 -------------------------------------------------------------------------
-heap0 : Heap
-heap0
-    = Dict.fromList <|
+initializeHeap : Heap -> Heap
+initializeHeap heap
+    = Heap.insertFromList heap <|
       List.map  binop [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]  ++
       [ (":", Lam Nothing (Match (VarP "x")
                              (Match (VarP "y")
@@ -434,11 +433,8 @@ binop op = (op, Lam Nothing
 -- the  start configuration for fully evaluating an expression
 --
 start : Heap -> Expr -> Conf
-start heap expr
-    = let
-        heap1 = Dict.union heap0 heap
-      in
-        (heap1, E expr, [DeepEval])
+start heap0 expr
+    = (initializeHeap heap0, E expr, [DeepEval])
 
 --            
 -- a labelled transition step ignoring silent transitions

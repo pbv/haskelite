@@ -9,7 +9,6 @@ import AST exposing (Expr(..), Matching(..), Bind, Pattern(..), Name)
 import Types exposing (Type(..))
 import Heap exposing (Heap)
 import Machine exposing (Conf, Stack, Control(..), Cont(..))
-import Dict
 import DList exposing (DList)
 
     
@@ -73,7 +72,7 @@ prettyExpr_ ctx e =
 
         Var x ->
             if Heap.isIndirection x then
-                case Dict.get x ctx.heap of
+                case Heap.get x ctx.heap of
                     Just e1 ->
                         prettyExpr_ ctx e1
                     Nothing ->

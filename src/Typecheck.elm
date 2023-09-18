@@ -9,7 +9,7 @@ import Dict exposing (Dict)
 import Set exposing (Set)
 import Set
 import AST exposing (Expr(..), Matching(..), Pattern(..),
-                         Program(..), Bind, Name)
+                         Program(..), Module, Bind, Data(..), Name)
 import Types exposing (Type(..), tyBool, tyInt, tyChar)
 import Tc exposing (Tc, pure, andThen, explain, fail)
 import Pretty
@@ -19,17 +19,19 @@ import Heap
 type alias TyEnv
     = Dict AST.Name Type
 
-
-tcProgram : List Bind -> Program -> Result String ()
-tcProgram prelude (LetProg binds expr)
+tcProgram : TyEnv -> Program  -> Result String ()
+tcProgram env0 (LetProg mod expr) 
     = let
-        env = Dict.union primitiveEnv (makeEnv prelude)
+        env1 = addModuleEnv mod env0
      in
          Tc.eval <|
-         (tcRecBind env binds |>
-          andThen (\env1 -> tcExpr_ env1 expr |>
+         (tcRecBind env1 mod.binds |>
+          andThen (\env2 -> tcExpr_ env2 expr |>
                    andThen (\_ -> pure ())))
 
+
+              
+             
 -- wrapper function that documents the expression being typechecked             
 tcExpr_ : TyEnv -> Expr -> Tc Type
 tcExpr_ env expr
@@ -65,7 +67,7 @@ tcExpr env expr
               tcExpr env fun |>
               andThen (\tyfun -> tcApplication env tyfun [arg])
 
-          Lam _ match ->
+          Lam _ _ match ->
               Tc.freshVar |>
               andThen (\ty -> tcMatching env match ty |>
               andThen (\_ -> pure ty))
@@ -303,12 +305,16 @@ freeTyEnvVars
                       
 
 ------------------------------------------------------------------------------
--- Prelude stuff
+-- Handling type environments
 ------------------------------------------------------------------------------
--- make a type environment from a list of bindings
-makeEnv : List Bind -> TyEnv
-makeEnv binds
-    = List.foldl addTypeSig Dict.empty binds
+addModuleEnv : Module -> TyEnv -> TyEnv
+addModuleEnv mod tyenv
+    = addBindings mod.binds (addDataDecls mod.dataDecls tyenv)
+
+-- extend a type environment with a list of bindings
+addBindings : List Bind -> TyEnv -> TyEnv
+addBindings binds tyenv
+    = List.foldl addTypeSig tyenv binds
                  
 addTypeSig : Bind -> TyEnv -> TyEnv
 addTypeSig bind tyenv
@@ -318,10 +324,30 @@ addTypeSig bind tyenv
           _ ->
               tyenv
 
+-- extend a type environment with a list of data declarations
+addDataDecls : List Data -> TyEnv -> TyEnv
+addDataDecls ddecls env
+    = case ddecls of
+          [] ->
+              env
+          (decl :: rest) ->
+              addDataDecls rest (addDataDecl decl env)
 
--- type environment for primitives
-primitiveEnv : TyEnv
-primitiveEnv
+addDataDecl : Data -> TyEnv -> TyEnv
+addDataDecl (Data _ alts) env
+    = let env1 =
+              Dict.fromList
+                  (List.map (\(con,ty) -> (con, Types.generalize Set.empty ty))
+                       alts)
+      in
+          Dict.union env env1
+
+
+------------------------------------------------------------------------------
+
+-- initial environment for primitives
+initialEnv : TyEnv
+initialEnv
     = let
         a = TyGen 0
         b = TyGen 1

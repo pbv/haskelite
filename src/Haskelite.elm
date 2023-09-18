@@ -5,14 +5,16 @@
 -}
 module Haskelite exposing (..)
 
-import AST exposing (Expr(..), Program(..), Bind, Info, Name)
+import AST exposing (Expr(..), Program(..), Module, Bind, Info, Name)
 import HsParser
 import Machine
 import Heap
-import Typecheck
+import Typecheck exposing (TyEnv)
 import Parser
 import Pretty
 import Prelude
+
+import Dict
 
 import Html exposing (..)
 import Html.Attributes exposing (type_, class, value, style, placeholder, checked,
@@ -34,9 +36,9 @@ type Model
     | Panic String                 -- when initialization failed
 
 type alias EditModel
-    = { inputs : Inputs                 -- user inputs
-      , parsed : Result String Program  -- result of parsing
-      , prelude : List Bind             -- prelude bindings
+    = { inputs : Inputs                  -- user inputs
+      , parsed : Result String Program   -- result of parsing
+      , prelude : Module                 -- prelude declarations
       }
 
 -- a labelled transition step: the machine configuration
@@ -83,7 +85,7 @@ initModel inputs
     = case Prelude.preludeResult of
           Err msg ->
               Panic msg
-          Ok prelude ->
+          Ok prelude ->  
               let
                   result = parseAndTypecheck prelude inputs
               in
@@ -94,13 +96,14 @@ initModel inputs
                   }
 
 -- parse and typecheck input expression and declararations
--- the first argument are the bindings for the prelude
-parseAndTypecheck : List Bind -> Inputs -> Result String Program
-parseAndTypecheck prelude inputs
-    = HsParser.parseProgram inputs.expression inputs.declarations |>
-      Result.andThen (\prog -> Typecheck.tcProgram prelude prog |>
-      Result.andThen (\_ -> Ok prog))
-
+-- the first argument is the prelude
+parseAndTypecheck : Module -> Inputs -> Result String Program
+parseAndTypecheck mod inputs
+    = let env0 = Typecheck.addModuleEnv mod Typecheck.initialEnv
+      in 
+          HsParser.parseProgram inputs.expression inputs.declarations |>
+          Result.andThen (\prog -> Typecheck.tcProgram env0 prog |>
+          Result.andThen (\_ -> Ok prog))
         
 view : Model -> Html Msg
 view model =
@@ -281,9 +284,9 @@ editUpdate msg model =
         
         EvalMode ->
             case parseAndTypecheck model.prelude model.inputs of
-                Ok (LetProg binds expr) ->
+                Ok (LetProg mod expr) ->
                     let
-                        heap0 = Heap.fromBinds (model.prelude ++ binds)
+                        heap0 = Heap.fromBinds (model.prelude.binds ++ mod.binds)
                         conf0 = Machine.start heap0 expr
                     in Reducing
                         { current = (conf0, "initial expression")

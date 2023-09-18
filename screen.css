@@ -1,5 +1,6 @@
 .error   {
     color: red;
+    font-family: monospace;
 }
 
 .editline {

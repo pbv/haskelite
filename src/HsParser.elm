@@ -12,8 +12,7 @@ import Parser exposing (Parser,
 import AST exposing (Expr(..),
                      Matching(..),
                      Pattern(..),
-                     Decl(..),
-                     Bind, Program(..),
+                     Decl(..), Data(..), Bind, Module, Program(..),
                      Name, Info)
 import Types exposing (Type(..), Tycon, tyInt, tyBool, tyChar)
 import Char
@@ -27,24 +26,25 @@ parseProgram : String -> String -> Result String Program
 parseProgram inputExpr inputDecls
     = Result.mapError deadEndsToString <|
         (Parser.run topExprEnd inputExpr |>
-             Result.andThen (\expr ->
-                                 Parser.run declarations inputDecls |>
-                                 Result.andThen (\binds ->
-                                                     Ok (LetProg binds expr))))
+          Result.andThen (\expr ->
+                            Parser.run toplevelModule inputDecls |>
+                            Result.andThen (\mod -> Ok (LetProg mod expr))))
 
 
 
 ----------------------------------------------------------------
--- declarations
+-- modules and declarations
 ----------------------------------------------------------------
 
-declarations : Parser (List Bind)
-declarations 
-    = (succeed (collectBinds True)
-          |= declList
-          |. Parser.end) |>
-      andThen (\binds ->  checkBinds binds |>
-      andThen (\_ -> succeed binds))
+toplevelModule : Parser Module
+toplevelModule
+    = dataDeclarations |>
+      andThen (\ddecls -> (succeed (collectBinds True)
+                             |= declList
+                             |. Parser.end) |>
+                             andThen (\binds ->  checkBinds binds |>
+                             andThen (\_ -> succeed { dataDecls = ddecls
+                                                    , binds = binds })))
 
 -- check arities of a list of bindings
 checkBinds : List Bind -> Parser ()
@@ -59,7 +59,7 @@ checkBinds binds
 checkBind : Bind -> Parser ()
 checkBind bind
     = case bind.expr of
-          Lam _ m ->
+          Lam _ _ m ->
               case AST.matchingWellformed m of
                   Just _ ->
                       succeed ()
@@ -82,14 +82,18 @@ makeBind : Bool -> (Decl, List Decl) -> Bind
 makeBind named pair =
     case pair of
         (TypeSig id ty, rest) ->
+            let m = collectAlts rest
+            in 
             { name = id,
               typeSig = Just ty,
-              expr = Lam (if named then Just id else Nothing) (collectAlts rest)
+              expr = AST.lambda (if named then Just id else Nothing) m
             }
         (Equation id match, rest) ->
+            let m = collectAlts (Equation id match::rest)
+            in 
             { name = id,
               typeSig = Nothing,
-              expr = Lam (if named then Just id else Nothing) (collectAlts (Equation id match::rest))
+              expr = AST.lambda (if named then Just id else Nothing) m
             }
             
 
@@ -128,7 +132,83 @@ declaration
       , prefixEquation
       ]  
 
+------------------------------------------------------------    
+-- data type declarations
+------------------------------------------------------------
+dataDeclarations : Parser (List Data)
+dataDeclarations
+    = Parser.sequence
+      { start = ""
+      , end = ""
+      , separator = ""
+      , spaces = whitespaceOrComment
+      , item  = dataDeclaration
+      , trailing = Parser.Forbidden
+      }
 
+
+dataDeclaration : Parser Data
+dataDeclaration
+    = succeed makeDataDecl
+         |. keyword "data"
+         |. spaces
+         |= dataLHS
+         |. spaces
+         |. operator "="
+         |. spaces
+         |= dataAlternatives
+
+makeDataDecl : Type -> List (Name, List Type) -> Data
+makeDataDecl tyresult alts
+    = let
+        tyalts = List.map (\(con, tyargs) -> (con, makeArrows tyresult tyargs)) alts
+      in
+          Data tyresult tyalts
+
+makeArrows : Type -> List Type -> Type
+makeArrows tyresult ts
+    = List.foldr TyFun tyresult ts
+            
+dataLHS : Parser Type
+dataLHS
+    = succeed (\c vs -> TyConst c (List.map TyVar vs))
+          |= upperIdentifier
+          |. spaces
+          |=  Parser.sequence
+              { start = ""
+              , end = ""
+              , separator = ""
+              , spaces = spaces
+              , item = identifier
+              , trailing = Parser.Forbidden
+              }
+       
+dataAlternatives : Parser (List (Name, List Type))
+dataAlternatives
+    = Parser.sequence
+      { start = ""
+      , end = ""
+      , separator = "|"
+      , spaces = whitespace
+      , item = dataAlternative
+      , trailing = Parser.Forbidden               
+      }
+
+dataAlternative : Parser (Name, List Type)
+dataAlternative
+    = succeed (\tag ts -> (tag,ts))
+          |= upperIdentifier
+          |. spaces
+          |= Parser.sequence
+             { start = ""
+             , end = ""
+             , separator = ""
+             , spaces = spaces
+             , item = delimitedType
+             , trailing = Parser.Forbidden                      
+             }
+
+---------------------------------------------------------------------
 
 prefixEquation : Parser Decl
 prefixEquation
@@ -174,7 +254,7 @@ equationLHS
     = succeed Tuple.pair
          |= identifier
          |. spaces
-         |= (patternList "" "" "" 
+         |= (patternSeq "" "" "" 
             |> andThen
                (ensure distinctPatterns
                     "pattern variables should be distinct"))
@@ -283,14 +363,14 @@ typeSignature
          |. spaces
          |= typeExpr
 
--- * type expressions
+-- principal non-terminal for type expressions
 typeExpr : Parser Type
 typeExpr
-    = succeed tyArrows
-        |= typeApplication
-        |. spaces
-        |= oneOf [
-            Parser.sequence
+    = succeed insertArrows
+           |= typeApplication
+           |. spaces
+           |= oneOf
+              [ Parser.sequence
                 { start = "->"
                 , end = ""
                 , separator = "->"
@@ -298,45 +378,75 @@ typeExpr
                 , spaces = spaces
                 , trailing = Parser.Forbidden
                 }
-           , succeed []
-           ]
+              , succeed []
+              ]
+                    
 
+-- insert arrows between a non-empty sequence of types
+-- (t0::ts)
+insertArrows : Type -> List Type -> Type
+insertArrows t0 ts
+    = case List.unconsLast ts of
+          Nothing -> t0
+          Just (t1, ts1) -> List.foldr TyFun t1 (t0::ts1)
 
+              
+typeApplication : Parser Type
+typeApplication
+    = oneOf
+      [succeed TyConst
+          |= upperIdentifier
+          |. spaces
+          |= Parser.sequence
+             { start = ""
+             , end = ""
+             , separator = ""
+             , item = delimitedType
+             , spaces = spaces
+             , trailing = Parser.Forbidden
+             }
+      , delimitedType
+      ]
+
+           
+          
 -- self-delimited types
 delimitedType : Parser Type
 delimitedType
     = oneOf
       [ succeed (\c -> TyConst c [])
             |= upperIdentifier
-      {-
-      , succeed tyBool
-            |. keyword "Bool"
-      , succeed tyChar
-            |. keyword "Char"
-       -}
-      , succeed TyVar        -- identifier are parsed as free type vars
+      , succeed TyVar        -- identifiers are parsed as free type vars
             |= identifier    -- should be generalized if necessary
       , succeed TyList
             |. symbol "["
             |= lazy (\_ -> typeExpr)
             |. symbol "]"
-      , succeed tyTuple
-              |= Parser.sequence
-                 { start = "("
-                 , end = ")"
-                 , separator = ","
-                 , item = lazy (\_ -> typeExpr)
-                 , spaces = spaces
-                 , trailing = Parser.Forbidden
-                 }
+      , backtrackable
+            <| succeed tyTuple
+                  |= Parser.sequence
+                     { start = "("
+                     , end = ")"
+                     , separator = ","
+                     , item = lazy (\_ -> typeExpr)
+                     , spaces = spaces
+                     , trailing = Parser.Forbidden
+                     }
+      , succeed TyConst
+             |. symbol "("
+             |= upperIdentifier
+             |. spaces   
+             |= Parser.sequence
+                { start = ""
+                , end = ""
+                , separator = ""
+                , spaces = spaces
+                , item = lazy (\_ -> typeExpr)
+                , trailing = Parser.Forbidden
+                }
       ]
 
 
-tyArrows : Type -> List Type -> Type
-tyArrows t0 ts
-    = case List.unconsLast ts of
-          Nothing -> t0
-          Just (t1, ts1) -> List.foldr TyFun t1 ([t0]++ts1)
           
 tyTuple : List Type -> Type
 tyTuple ts
@@ -345,31 +455,7 @@ tyTuple ts
           _ -> TyTuple ts
               
 
-typeApplication : Parser Type
-typeApplication
-    = oneOf
-      [ succeed makeTypeApp
-         |= upperIdentifier
-         |. spaces
-         |= delimitedTypeList
-      , delimitedType
-      ]
             
-delimitedTypeList : Parser (List Type)
-delimitedTypeList
-    = Parser.sequence
-      { start = ""
-      , end = ""
-      , separator = ""
-      , spaces = spaces
-      , item = delimitedType
-      , trailing = Parser.Forbidden
-      }
-
-makeTypeApp : Tycon -> List Type -> Type
-makeTypeApp c ts
-    = TyConst c ts
-    
                
 ------------------------------------------------------------------
 -- auxiliary parsers for expresssions
@@ -401,8 +487,9 @@ integer = Parser.chompWhile Char.isDigit
                                 Nothing -> problem "integer"
                                 Just n -> succeed n)
 
-        
--- patterns
+
+             
+-- delimited patterns
 pattern : Parser Pattern
 pattern =
     oneOf
@@ -410,35 +497,41 @@ pattern =
            |= identifier
     , succeed BangP
            |. symbol "!"
-           |= identifier   
-    , succeed (\c ps -> ConsP c ps)
+           |= identifier
+    , succeed (\c -> ConsP c [])
            |= upperIdentifier
-           |. spaces
-           |= patternList "" "" ""
     , succeed NumberP
            |= integer
     , succeed CharP
            |= litCharacter
-    , succeed AST.listPat
-         |= patternList "[" "]" "," 
+    , succeed AST.listPattern
+         |= patternSeq "[" "]" "," 
     , backtrackable
-          <| succeed AST.tuplePat
-               |= patternList "(" ")" "," 
-    , patternList "(" ")" ":"
-      |> andThen
-         (\l -> case List.reverse l of
-                    [] -> problem "pattern"
-                    (p::ps) ->
-                        succeed (List.foldr
-                                     (\x y -> ConsP ":" [x,y])
-                                         p
-                                         (List.reverse ps)))
+          <| succeed AST.tuplePattern
+               |= patternSeq "(" ")" "," 
+    , backtrackable
+          <| succeed consPattern
+               |= patternSeq "(" ")" ":"
+    , succeed ConsP
+            |. symbol "("
+            |= upperIdentifier
+            |. spaces
+            |= patternSeq "" "" ""
+            |. symbol ")"   
     ]
 
+consPattern : List Pattern -> Pattern
+consPattern l =
+    case List.unconsLast l of
+        Nothing ->
+            AST.tuplePattern []
+        Just (p,ps) ->
+            (List.foldr (\x y -> ConsP ":" [x,y]) p ps)
 
--- parse a list of patterns with a given separator
-patternList : String -> String -> String -> Parser (List Pattern)    
-patternList open close sep =
+
+-- parse a sequence of patterns with a given start, end and separator
+patternSeq : String -> String -> String -> Parser (List Pattern)    
+patternSeq open close sep =
     Parser.sequence
     { start = open
     , end = close
@@ -704,8 +797,11 @@ lambdaExpr
 lambdaExprAux : Parser (String -> Expr)  
 lambdaExprAux
     = succeed (\patts expr info ->
-                   Lam Nothing (makeMatching patts (Return expr (Just info))))
-         |= patternList "\\" "" "->"
+                   AST.lambda Nothing (makeMatching patts (Return expr (Just info))))
+         |. symbol "\\"
+         |. spaces
+         |= patternSeq "" "" ""
+         |. symbol "->"   
          |. spaces
          |= lazy (\_ -> topExpr)
 
@@ -984,4 +1080,11 @@ example6 = """case xs of
  [] -> 1
  (a:b) -> 2
 """
+
 -}   
+
+example7 = """
+data Maybe a = Nothing  | Just a
+
+data Either a b = Left a | Right b
+"""

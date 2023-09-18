@@ -177,13 +177,13 @@ prettyExpr_ ctx e =
         App e0 e1 ->
             prettyApp ctx e0 e1
 
-        Lam optid match ->
+        Lam _ optid match ->
             case collectArgs match [] of
                 (_, []) ->
                     prettyLam ctx optid match
                 (match1, args1) ->
                     let
-                        expr1 = List.foldl (\x y->App y x) (Lam optid match1)  args1
+                        expr1 = List.foldl (\x y->App y x) (AST.lambda optid match1)  args1
                     in 
                         prettyExpr_ ctx expr1
 

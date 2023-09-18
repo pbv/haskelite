@@ -130,8 +130,11 @@ freshInst_ r ty
           TyTuple ts ->
               TyTuple (List.map (freshInst_ r) ts)
 
-          _ ->
-            ty
+          TyConst c ts ->
+            TyConst c (List.map (freshInst_ r) ts)
+
+          TyVar _ ->
+              ty
 
 
           

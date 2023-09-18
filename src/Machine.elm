@@ -52,8 +52,10 @@ type Cont
 isWhnf : Expr -> Bool
 isWhnf expr =
     case expr of
-        Lam _ m ->
-            AST.matchingArity m > 0
+        Lam 0 _ m ->     --- AST.matchingArity m == 0
+            False
+        Lam _ _ m ->
+            True          ---  AST.matchingArity m > 0
         Number _ ->
             True
         Char _ ->
@@ -91,31 +93,27 @@ transition conf
     = case conf of
           (heap,  E (App e1 e2), stack) ->
               Just (heap, E e1, PushArg e2::stack)
-                  
-          (heap, E (Lam optname m), stack) ->
-              if AST.matchingArity m == 0 then
-                  Just (heap, M m [], MatchEnd::stack)
+
+          (heap, E (Cons c args), PushArg arg::stack) ->
+              Just (heap, E (Cons c (args ++ [arg])), stack)
+
+          -- saturated lambda: go into matching evaluation
+          (heap, E (Lam 0 optname m), stack) ->
+              Just (heap, M m [], MatchEnd::stack)
+
+          -- apply argument to non-saturated lambda
+          (heap, E (Lam _ optname m), PushArg e1::rest) ->
+              -- check if we neeed to update the
+              -- result of evaluation
+              if isVar e1 || isWhnf e1 then
+                  -- no indirection needed
+                  Just (heap, E (AST.lambda optname (Arg e1 m)), rest)
               else
-                  case stack of
-                      PushArg e1::rest ->
-                          -- check if we neeed to update the
-                          -- result of evaluation
-                          if isVar e1 || isWhnf e1 then
-                              -- no indirection needed
-                              Just (heap, E (Lam optname (Arg e1 m)), rest)
-                          else
-                              -- create new indirection to the expression
-                              let
-                                  (loc, heap1) = Heap.newIndirection heap e1
-                              in
-                                  Just (heap1, E (Lam optname (Arg (Var loc) m)), rest)
-                      Update y::rest ->
-                          let
-                              heap1 = Heap.update y (Lam optname m) heap
-                          in 
-                              Just (heap1, E (Lam optname m), rest)
-                      _ ->
-                          Nothing
+                  -- create a new indirection to the expression
+                  let
+                      (loc, heap1) = Heap.newIndirection heap e1
+                  in
+                      Just (heap1, E (AST.lambda optname (Arg (Var loc) m)), rest)  
 
           -- local bindings
           (heap, E (Let binds e1), stack) ->
@@ -365,7 +363,7 @@ compareOp c
 -- TODO: this can destroy sharing in normal forms
 -----------------------------------------------------------------------
 deepEval : Heap -> Expr -> Maybe Conf
-deepEval heap expr 
+deepEval heap expr
     =  outermostRedex expr |>
        Maybe.andThen
            (\ctx ->
@@ -409,18 +407,19 @@ outermostRedexArgs tag i args
 initializeHeap : Heap -> Heap
 initializeHeap heap
     = Heap.insertFromList heap <|
-      List.map  binop [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]  ++
-      [ (":", Lam Nothing (Match (VarP "x")
+      [ (":", AST.lambda Nothing (Match (VarP "x")
                              (Match (VarP "y")
                                (Return (Cons ":" [Var "x",Var "y"])
                                     Nothing)
-                               )))
-      , ("negate", Lam Nothing (Match (VarP "x")
+                               ))) 
+      , ("negate", AST.lambda Nothing (Match (VarP "x")
                                     (Return (PrefixOp "negate" (Var "x")) Nothing)))
-      ]
-          
+      ] ++
+      List.map binop [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]  
 
-binop op = (op, Lam Nothing
+          
+binop : Name -> (Name, Expr)
+binop op = (op, AST.lambda Nothing
                    (Match (VarP "x")
                        (Match (VarP "y")
                            (Return (InfixOp op (Var "x") (Var "y"))
@@ -513,8 +512,8 @@ transitions_ n conf
                ()
            Just conf1 ->
                transitions_ (n+1) conf1
-
 -}
+
 {-
 example0 : Conf
 example0 = (heap0, E (InfixOp "*" (Number 1) (Number 2)), [])
@@ -659,7 +658,7 @@ example11
            
                       [])
 -}
-              
+
 {-
 -- extra debugging stuff                 
 observe : a -> b -> b

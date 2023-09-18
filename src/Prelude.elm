@@ -6,19 +6,28 @@
 -}
 module Prelude exposing (preludeResult)
 
-import AST exposing (Bind)
-import HsParser
+import AST exposing (Module)
 import Parser
+import HsParser
 
 -- result of parsing the prelude text below
-preludeResult : Result String (List Bind)
+preludeResult : Result String Module
 preludeResult
     = Result.mapError HsParser.deadEndsToString <|
-      Parser.run HsParser.declarations prelude 
-                 
+      Parser.run HsParser.toplevelModule prelude 
+
+
 prelude : String
 prelude =
     """
+-- Prelude data types
+data Bool = True | False
+
+data Maybe a = Nothing | Just a
+
+data Either a b = Left a | Right b
+
+-- Prelude bindings
 undefined :: a
 undefined = error "undefined"
 

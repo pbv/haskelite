@@ -4,7 +4,7 @@
 -}
 module AST exposing (..)
 
-import Types exposing (Type, Tycon)
+import Types exposing (Type(..), Tycon)
 import Dict exposing (Dict)
 import Maybe
 
@@ -23,9 +23,10 @@ type alias Info
 -- * expressions 
 type Expr 
     = App Expr Expr
-    | Lam (Maybe Name) Matching  
-      -- a lambda has `Just name` if it was defined through a binding;
-      -- otherwise the name field is Nothing
+    | Lam Int (Maybe Name) Matching
+      -- the integer field is the matching arity
+      -- the maybe field is `Just name` if the lambda was defined through a binding;
+      -- otherwise it is Nothing
     | Let (List Bind) Expr              -- local bindings; can be recursive
     | Case Expr (List (Pattern, Expr))
     | Var Name
@@ -62,32 +63,34 @@ type Pattern
 type Decl
     = TypeSig Name Type
     | Equation Name Matching
---    | Data Tycon (List Name) (List DataAlt)
 
-type alias DataAlt    -- alternatives for an algebraic data type
-    = (Tag, List Type)
+type Data
+    = Data Type (List (Tag,Type))  -- alternatives in GADT-style
 
 -- * bindings
 type alias Bind
     = { name: Name, typeSig: Maybe Type, expr: Expr }
-    
+
+-- * modules
+type alias Module
+    = { dataDecls : List Data, binds : List Bind }
+      
 -- * programs
 type Program
-    = LetProg (List Bind) Expr
+    = LetProg Module Expr
      
 -- term substitutions
 type alias Subst
     = Dict Name Expr
       
--- get the name associated with a declaration      
+-- get the names of terms associated with a declaration      
 declName : Decl -> Name
 declName decl
     = case decl of
-          TypeSig name _ -> name
-          Equation name _ -> name
-
-
-
+          TypeSig name _ ->
+              name
+          Equation name _ ->
+              name
               
 -- apply substitution to an expression
 applySubst : Subst -> Expr -> Expr
@@ -98,8 +101,8 @@ applySubst s e
                   Nothing -> e
                   Just e1 -> e1
                              
-          Lam optname m ->
-              Lam optname (applyMatchSubst s m)
+          Lam arity optname m ->
+              Lam arity optname (applyMatchSubst s m)
 
           Let binds e0 ->
               let s1 = restrictSubst (List.map .name binds) s
@@ -236,13 +239,17 @@ operatorChar c =
      c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
          c==':' || c=='=' || c=='&' || c=='|' || c=='.' 
 
+-- AST constructors
 trueCons : Expr
 trueCons = Cons "True" []
 
 falseCons : Expr           
 falseCons = Cons "False" []           
 
-           
+lambda : Maybe Name -> Matching -> Expr
+lambda optname m
+    = Lam (matchingArity m) optname m
+            
 -- smart constructors for literal lists, strings and tuples
 listLit : List Expr -> Expr
 listLit = List.foldr (\x xs -> Cons ":" [x,xs]) (Cons "[]" [])
@@ -256,11 +263,12 @@ tupleLit args
           [e] -> e   -- no singleton tuple
           _ -> Cons "," args
 
-listPat : List Pattern -> Pattern
-listPat = List.foldr (\p ps -> ConsP ":" [p,ps]) (ConsP "[]" [])
+listPattern : List Pattern -> Pattern
+listPattern =
+    List.foldr (\p ps -> ConsP ":" [p,ps]) (ConsP "[]" [])
 
-tuplePat : List Pattern -> Pattern
-tuplePat ps
+tuplePattern : List Pattern -> Pattern
+tuplePattern ps
     = case ps of
           [p] -> p          -- no singleton tuple
           _ -> ConsP "," ps

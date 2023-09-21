@@ -19,6 +19,10 @@ are interested in a draft copy.
 Please check the supporte Haskell subset
 [here](https://pbv.github.io/haskelite/language.html).
 
+## Demo
+
+[Try Haskelite now!](https://pbv.github.io/haskelite)
+
 ----
 
 Pedro Vasconcelos, 2023.

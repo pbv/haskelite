@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="screen.css">
+  </head>
+
+  <body>
+    <h1>Insert into an ordered list</h1>
+    <p>Inserting a value into an ordered list of
+    integers. <a href="index.html">Back</a></p>
+    <div id="haskelite"></div>
+    <script src="haskelite-min.js"></script>
+    <script>
+      var decls =
+	  "-- insert a value into an ordered list\n"+
+	  "-- NB: this function if too polymorphic (no typeclass)\n"+
+	  "-- but will only actually work for integers and characters\n"+
+          "insert :: a -> [a] -> [a]\n"+
+	  "insert x [] = [x]\n"+
+	  "insert x (y:ys) | x<=y = y:x:ys\n"+
+	  "                | otherwise = y:insert x ys\n";
+      var app = Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression:"insert 3 [1,2,2,5,6]", declarations: decls }
+      });
+    </script>
+    <hr>
+    Pedro Vasconcelos, 2023.
+  </body>
+</html>

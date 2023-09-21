@@ -103,8 +103,7 @@ transition conf
 
           -- apply argument to non-saturated lambda
           (heap, E (Lam _ optname m), PushArg e1::rest) ->
-              -- check if we neeed to update the
-              -- result of evaluation
+              -- check if we neeed to update the result of evaluating `e1'
               if isVar e1 || isWhnf e1 then
                   -- no indirection needed
                   Just (heap, E (AST.lambda optname (Arg e1 m)), rest)
@@ -171,7 +170,6 @@ transition conf
                           Just (heap, E result, stack)
                       _ ->
                           Nothing
-
 
           (heap, E (PrefixOp op e1), stack) ->
               Just (heap, E e1, (RetPrim3 op)::stack)
@@ -277,7 +275,7 @@ transition conf
                   deepEval heap (ctx.set w expr) 
               else
                   Nothing
-
+                      
           _ ->
               Nothing
 
@@ -465,14 +463,14 @@ nextAux iters conf0
 justification : Conf -> Maybe Info
 justification (heap, control, stack)
     = case (control, stack) of
-         (E w1, (RetPrim2 op v2::_)) ->
-             if isWhnf w1 then 
-                 Just op
+         (E v1, (RetPrim2 op v2::_)) ->
+             if isWhnf v1 then 
+                 Just ("primitive " ++ showPrim2 op v2 v1)
              else
                  Nothing
-         (E w1, (RetPrim3 op::_)) ->
-             if isWhnf w1 then 
-                 Just op
+         (E v1, (RetPrim3 op::_)) ->
+             if isWhnf v1 then 
+                 Just ("primitive " ++ showPrim1 op v1)
              else
                  Nothing
 {-
@@ -493,7 +491,29 @@ justification (heap, control, stack)
          _ ->
              Nothing
 
+
+showPrim2 : Name -> Expr -> Expr -> String
+showPrim2 op v1 v2
+    = case (v1,v2) of
+          (Number x1, Number x2) ->
+              String.fromInt x1 ++ op ++ String.fromInt x2
+          (Char x1, Char x2) ->
+              String.fromChar x1 ++ op ++ String.fromChar x2
+          _ ->
+              "invalid primitive arguments"
+
+
+showPrim1 : Name -> Expr -> String
+showPrim1 op v1
+    = case  v1 of
+          Number x1 ->
+              op ++ " " ++ String.fromInt x1
+          Char x1 ->
+              op ++ " " ++ String.fromChar x1
+          _ ->
+              "invalid primitive arguments"
                   
+            
 --------------------------------------------------------------------
 -- examples for debugging 
 -------------------------------------------------------------------

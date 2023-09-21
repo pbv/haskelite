@@ -128,7 +128,11 @@ applySubst s e
           IfThenElse e1 e2 e3 ->
               IfThenElse (applySubst s e1) (applySubst s e2) (applySubst s e3)
 
-          _ ->
+          Number _ ->
+              e
+          Char _ ->
+              e
+          Error _ ->
               e
 
                   

@@ -13,7 +13,7 @@
     margin: 1em 1em;
     background: lightyellow;
     cursor: default;
-    height: 30em;
+    height: 20em;
     overflow-y: auto;
     flex-direction: column-reverse;
     display: flex;

@@ -20,7 +20,7 @@ preludeResult
 prelude : String
 prelude =
     """
--- Prelude data types
+-- basic algebraic data types
 data Bool = True | False
 
 data Maybe a = Nothing | Just a
@@ -202,6 +202,11 @@ enumFromThen !n0 !n1 = n0 : enumFromThen n1 (2*n1-n0)
 enumFromThenTo :: Int -> Int -> Int -> [Int]
 enumFromThenTo n0 n1 k | n0<=k = n0 : enumFromThenTo n1 (2*n1-n0) k
                        | otherwise = []
+
+lookup :: a -> [(a,b)] -> Maybe b
+lookup _ [] = Nothing
+lookup x ((y,v):rest) | x == y = Just v
+                      | otherwise = lookup x rest
 
 -- from Data.List
 init :: [a] -> [a]

@@ -361,7 +361,6 @@ initialEnv
       , ("==", cmpOp), ("/=", cmpOp), ("<=", cmpOp)
       , (">=", cmpOp), ("<", cmpOp), (">", cmpOp)
       , ("error", TyFun (TyList tyChar) a)
-      , ("True", tyBool), ("False", tyBool)
       , (":", TyFun a (TyFun (TyList a) (TyList a)))
       , ("[]", TyList a)
       -- TODO: generalize this for more tuples 

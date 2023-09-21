@@ -16,7 +16,7 @@ import AST exposing (Expr(..),
                      Name, Info)
 import Types exposing (Type(..), Tycon, tyInt, tyBool, tyChar)
 import Char
-import Set
+import Set exposing (Set)
 import Dict exposing (Dict)
 import List.Extra as List
 
@@ -174,14 +174,18 @@ dataLHS
     = succeed (\c vs -> TyConst c (List.map TyVar vs))
           |= upperIdentifier
           |. spaces
-          |=  Parser.sequence
+          |=  (Parser.sequence
               { start = ""
               , end = ""
               , separator = ""
               , spaces = spaces
               , item = identifier
               , trailing = Parser.Forbidden
-              }
+              } |> andThen (ensure List.allDifferent
+                               "type variables to be distinct"))
+
+
+            
        
 dataAlternatives : Parser (List (Name, List Type))
 dataAlternatives
@@ -935,9 +939,10 @@ checkCharLiteral s
           _ ->
               problem "character literal"
     
-    
+reservedWords : Set String    
 reservedWords
-    = Set.fromList [ "if", "then", "else", "let", "in", "case", "of", "where" ]
+    = Set.fromList [ "if", "then", "else",
+                     "let", "in", "case", "of", "where", "data" ]
 
 
 

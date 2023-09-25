@@ -223,7 +223,7 @@ tcTuplePatts env lst
 
 tcRecBind : TyEnv -> List Bind -> Tc TyEnv
 tcRecBind tyenv binds
-    = Tc.traverse tcRecType binds |>
+    = Tc.traverse (tcRecType (freeTyEnvVars tyenv)) binds |>
       andThen (\tys ->
                    let
                        names = List.map .name binds
@@ -273,13 +273,14 @@ tcRecGen tyenv lst
 
           
 -- get a type for a binding
-tcRecType : Bind -> Tc Type
-tcRecType bind
+tcRecType : Set Name -> Bind -> Tc Type
+tcRecType ftvs bind
     = case bind.typeSig of
           Nothing ->
               Tc.freshVar
           Just tysig ->
-              pure tysig
+              let tysig1 = Types.generalize ftvs tysig
+              in pure tysig1
 
 
 -- check annotated type signature against infered type

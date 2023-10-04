@@ -13,19 +13,19 @@ import DList exposing (DList)
 
     
 type alias Options
-    = { prettyLists : Bool   -- should we prettify strings?
+    = { prettyLists : Bool     -- should we prettify strings?
       , prettyEnums : Bool     -- should we prettify Prelude enum functions?
       }
 
 defaultOpts : Options
 defaultOpts = { prettyLists = True, prettyEnums = False }
 
-type alias Prec                -- precedence for placing parethesis
+type alias Prec                -- precedence for placing parenthesis
     = Int
               
 type alias PrettyCtx
-    = { prec : Prec              -- precedence level (0, 1, ..)
-      , heap : Heap              -- current heap (for shortcircuiting indirections)
+    = { prec : Prec            -- precedence level (0, 1, ..)
+      , heap : Heap            -- current heap (for short-circuiting indirections)
       , options : Options
       }
     

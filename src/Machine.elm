@@ -36,7 +36,7 @@ type alias Stack
 type Cont
     = PushArg Expr
     | Update Name
-    | MatchEnd
+    | MatchEnd 
     | PushAlt ArgStack Matching
     | PushPat ArgStack Pattern Matching
       -- continuations for primitive operations
@@ -263,18 +263,18 @@ transition conf
                   
           -- deep evaluation
           -- NB: this does not preserve sharing
-          (heap, E w, (DeepEval)::_) ->
-              if isWhnf w then
-                  deepEval heap w 
-              else
-                  Nothing
+          (heap, E w, DeepEval::stack) ->
+              -- if isWhnf w then
+              Just (deepEval w heap stack)
+              -- else
+              --    Nothing
                   
           -- NB: this does not preserve sharing
-          (heap, E w, (Continue expr ctx)::_) ->
-              if isWhnf w then
-                  deepEval heap (ctx.set w expr) 
-              else
-                  Nothing
+          (heap, E w, (Continue expr ctx)::stack) ->
+              -- if isWhnf w then
+              Just (deepEval (ctx.set w expr) heap stack)
+              -- else
+              --    Nothing
                       
           _ ->
               Nothing
@@ -336,6 +336,10 @@ applyBinPrimitive op e1 e2
               Just (compareOp (v1 < v2))
           ("<=",Char v1,Char v2) ->
               Just (compareOp (v1 <= v2))
+          ("compare", Number v1, Number v2) ->
+              Just (orderingOp (compare v1 v2))
+          ("compare", Char v1, Char v2) ->
+              Just (orderingOp (compare v1 v2))
           _ ->
               Nothing
 
@@ -353,25 +357,38 @@ compareOp : Bool -> Expr
 compareOp c
     = if c then AST.trueCons else AST.falseCons
 
+orderingOp : Order -> Expr
+orderingOp c
+    = case c of
+          LT -> AST.Cons "LT" []
+          EQ -> AST.Cons "EQ" []
+          GT -> AST.Cons "GT" []
+              
 
 
               
 -----------------------------------------------------------------------
 -- reduction to full normal form
--- TODO: this can destroy sharing in normal forms
+-- Note: this destroys sharing in normal forms
 -----------------------------------------------------------------------
-deepEval : Heap -> Expr -> Maybe Conf
-deepEval heap expr
-    =  outermostRedex expr |>
-       Maybe.andThen
-           (\ctx ->
-              ctx.getOption expr |>
-              Maybe.andThen
-                  (\expr1 ->
-                       Just (heap, E expr1, [Continue expr ctx])))
+deepEval : Expr -> Heap -> Stack -> Conf
+deepEval expr heap stack 
+    =  case outermostCont expr of
+           Just (ctx, expr1) ->
+               (heap, E expr1, Continue expr ctx::stack)
+           Nothing ->
+               (heap, E expr, stack)
+                 
 
+-- find the next outermost continuation for full evaluation
+-- i.e. a context and subexpression
+outermostCont : Expr -> Maybe (ExprCtx, Expr)
+outermostCont expr
+    = outermostRedex expr |>
+      Maybe.andThen (\ctx -> ctx.getOption expr |>
+                    Maybe.andThen (\expr1 -> Just (ctx, expr1)))
 
-                  
+                   
 -- determine the outermost reduction context
 outermostRedex : Expr -> Maybe ExprCtx
 outermostRedex expr
@@ -397,8 +414,6 @@ outermostRedexArgs tag i args
                   Just (Context.cons tag i)
                   
 
-
-
 -------------------------------------------------------------------------
 -- initialize a heap with bindings for primitive operations
 -------------------------------------------------------------------------
@@ -412,6 +427,9 @@ initializeHeap heap
                                ))) 
       , ("negate", AST.lambda Nothing (Match (VarP "x")
                                     (Return (PrefixOp "negate" (Var "x")) Nothing)))
+      , ("compare", AST.lambda Nothing (Match (VarP "x")
+                                            (Match (VarP "y")
+                                                 (Return (InfixOp "compare" (Var "x") (Var "y")) Nothing))))
       ] ++
       List.map binop [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]  
 

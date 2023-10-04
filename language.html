@@ -7,6 +7,9 @@
   <body>
     <h1>Haskelite language</h1>
 
+    <p> This page describes the subset of Haskell accepted by the Haskelite interpreter.</p>
+										  
+
 <h2>Expressions</h2>
 
 <p>Integers, characters, strings (i.e. lists of characters),
@@ -37,7 +40,8 @@ them to values of wrong types.
 
 <pre>
 even, odd :: Int -> Bool
-max, min :: a -> a -> a        -- NB: too polymorphic!
+max, min :: a -> a -> a        -- NB: these are too polymorphic
+compare :: a -> a -> Ordering  -- and may fail at runtime!
 fst :: (a,b) -> a
 snd :: (a,b) -> b
 (&&), (||) :: Bool -> Bool
@@ -45,7 +49,7 @@ head :: [a] -> a
 tail :: [a] -> [a]
 (++) :: [a] -> [a] -> [a]
 length :: [a] -> Int
-reverse :: [a] -> [a]          -- NB: naive reverse 
+reverse :: [a] -> [a]          -- NB: defined as naive reverse 
 init :: [a] -> [a]
 last :: [a] -> a  
 sum, product :: [Int] -> Int

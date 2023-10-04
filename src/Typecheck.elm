@@ -10,7 +10,7 @@ import Set exposing (Set)
 import Set
 import AST exposing (Expr(..), Matching(..), Pattern(..),
                          Program(..), Module, Bind, Data(..), Name)
-import Types exposing (Type(..), tyBool, tyInt, tyChar)
+import Types exposing (Type(..), tyBool, tyInt, tyChar, tyString, tyOrdering)
 import Tc exposing (Tc, pure, andThen, explain, fail)
 import Pretty
 import Heap
@@ -346,22 +346,24 @@ addDataDecl (Data _ alts) env
 
 ------------------------------------------------------------------------------
 
--- initial environment for primitives
+-- initial typing environment for primitives
 initialEnv : TyEnv
 initialEnv
     = let
+        intOp = TyFun tyInt (TyFun tyInt tyInt)
+        -- NB: no typeclasses so these types are overly polymorphic!
         a = TyGen 0
         b = TyGen 1
-        intOp = TyFun tyInt (TyFun tyInt tyInt)
-        -- NB: no typeclasses so these functions are overly polymorphic!
         cmpOp = TyFun a (TyFun a tyBool)
+        orderOp = TyFun a (TyFun a tyOrdering)
       in
       Dict.fromList
       [ ("+", intOp), ("*", intOp), ("-", intOp), 
         ("mod", intOp), ("div", intOp), ("negate", TyFun tyInt tyInt)
       , ("==", cmpOp), ("/=", cmpOp), ("<=", cmpOp)
       , (">=", cmpOp), ("<", cmpOp), (">", cmpOp)
-      , ("error", TyFun (TyList tyChar) a)
+      , ("compare", orderOp)
+      , ("error", TyFun tyString a)
       , (":", TyFun a (TyFun (TyList a) (TyList a)))
       , ("[]", TyList a)
       -- TODO: generalize this for more tuples 

@@ -35,6 +35,12 @@ tyInt = TyConst "Int" []
 
 tyChar : Type
 tyChar = TyConst "Char" []
+
+tyOrdering : Type
+tyOrdering = TyConst "Ordering" []
+
+tyString : Type
+tyString = TyList tyChar
       
 -- apply a type substitution
 applyTySubst : TySubst -> Type -> Type

@@ -20,12 +20,14 @@ preludeResult
 prelude : String
 prelude =
     """
--- basic algebraic data types
+-- Basic algebraic data types
 data Bool = True | False
 
 data Maybe a = Nothing | Just a
 
 data Either a b = Left a | Right b
+
+data Ordering = LT | EQ | GT
 
 -- Prelude bindings
 undefined :: a
@@ -175,6 +177,7 @@ foldl :: (a -> b -> a) -> a -> [b] -> a
 foldl f z [] = z
 foldl f z (x:xs) = foldl f (f z x) xs
 
+-- from Data.List
 foldl' :: (a -> b -> a) -> a -> [b] -> a
 foldl' f !z [] = z
 foldl' f !z (x:xs) = foldl' f (f z x) xs

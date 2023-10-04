@@ -17,7 +17,7 @@
 	  "-- but will only actually work for integers and characters\n"+
           "insert :: a -> [a] -> [a]\n"+
 	  "insert x [] = [x]\n"+
-	  "insert x (y:ys) | x<=y = y:x:ys\n"+
+	  "insert x (y:ys) | x<=y = x:y:ys\n"+
 	  "                | otherwise = y:insert x ys\n";
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),

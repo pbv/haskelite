@@ -103,6 +103,7 @@ transition conf
 
           -- apply argument to non-saturated lambda
           (heap, E (Lam _ optname m), PushArg e1::rest) ->
+              -- put into A-normal form if necessary:
               -- check if we neeed to update the result of evaluating `e1'
               if isVar e1 || isWhnf e1 then
                   -- no indirection needed
@@ -212,7 +213,9 @@ transition conf
           -- decompose a constructor 
           (heap, E (Cons c0 es), (PushPat args (ConsP c1 ps) m1)::stack) ->
               if c0 == c1 && List.length es == List.length ps then
-                  Just (heap, M (matchCons es ps m1) args, stack) 
+                  let (heap1, es1) = normalizeConsArgs heap es
+                  in 
+                  Just (heap1, M (matchCons es1 ps m1) args, stack) 
               else
                   Just (heap, M Fail [], stack)
 
@@ -363,8 +366,24 @@ orderingOp c
           LT -> AST.Cons "LT" []
           EQ -> AST.Cons "EQ" []
           GT -> AST.Cons "GT" []
-              
 
+--                
+-- normalize constructor arguments to A-normal form
+-- i.e., introduce indirections for arguments that are not whnfs or variables
+--
+normalizeConsArgs : Heap -> List Expr -> (Heap, List Expr)
+normalizeConsArgs heap args
+    = case args of
+          [] ->
+              (heap, [])
+          (arg1::rest) ->
+              if isVar arg1 || isWhnf arg1 then
+                  let (heap1, rest1) = normalizeConsArgs heap rest
+                  in (heap1, arg1::rest1)
+              else
+                  let (loc, heap1) = Heap.newIndirection heap arg1
+                      (heap2, rest1) = normalizeConsArgs heap1 rest
+                  in (heap2, Var loc::rest1)
 
               
 -----------------------------------------------------------------------

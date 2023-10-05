@@ -91,6 +91,11 @@ getStack (_, _, stack) = stack
 transition : Conf -> Maybe Conf
 transition conf
     = case conf of
+          -- short circuit errors
+          (heap, E (Error msg), _::_) ->
+              Just (heap, E (Error msg), [])
+
+          -- applications and constructors
           (heap,  E (App e1 e2), stack) ->
               Just (heap, E e1, PushArg e2::stack)
 
@@ -150,41 +155,19 @@ transition conf
           (heap, E (InfixOp op e1 e2), stack) ->
               Just (heap, E e1, (RetPrim1 op e2)::stack)
                   
-          (heap, E (Number v), (RetPrim1 op e2)::stack) ->
-              Just (heap, E e2, (RetPrim2 op (Number v))::stack)
-          (heap, E (Char c), (RetPrim1 op e2)::stack) ->
-              Just (heap, E e2, (RetPrim2 op (Char c))::stack)
-                  
-          (heap, E (Number v2), (RetPrim2 op e1)::stack) ->
-              case applyBinPrimitive op e1 (Number v2) of
-                      Just (Error msg) ->
-                          Just (heap, E (Error msg), [])
-                      Just result ->
-                          Just (heap, E result, stack)
-                      _ ->
-                          Nothing
-          (heap, E (Char c2), (RetPrim2 op e1)::stack) ->
-              case applyBinPrimitive op e1 (Char c2) of
-                      Just (Error msg) ->
-                          Just (heap, E (Error msg), [])
-                      Just result ->
-                          Just (heap, E result, stack)
-                      _ ->
-                          Nothing
-
           (heap, E (PrefixOp op e1), stack) ->
               Just (heap, E e1, (RetPrim3 op)::stack)
-                  
+
+          -- the remaining expression evaluation rules
+          -- should apply only to whnfs
+          (heap, E w1, (RetPrim1 op e2)::stack) ->
+              Just (heap, E e2, (RetPrim2 op w1)::stack)
+          (heap, E w2, (RetPrim2 op w1)::stack) ->
+              Just (heap, E (applyBinPrimitive op w1 w2), stack)
+
           (heap, E w, (RetPrim3 op)::stack) ->
-              case applyUnaryPrim op w of
-                  Just (Error msg) ->
-                      Just (heap, E (Error msg), [])
-                  Just result ->
-                      Just (heap, E result, stack)
-                  _ ->
-                      Nothing
+              Just (heap, E (applyUnaryPrim op w), stack)
                   
-                          
           -- update variable
           (heap, E w, Update y::stack) ->
               if isWhnf w then
@@ -261,8 +244,6 @@ transition conf
           (heap, M (Arg e m1) args, stack) ->
               Just (heap, M m1 (e::args), stack)
 
-          (heap, E (Error msg), _::_) ->
-              Just (heap, E (Error msg), [])
                   
           -- deep evaluation
           -- NB: this does not preserve sharing
@@ -299,73 +280,69 @@ applyArgs expr args =
             applyArgs (App expr arg1) rest
               
 
+--                
 -- apply a binary primitive
-applyBinPrimitive : Name -> Expr -> Expr -> Maybe Expr
+-- the arguments should be in whnf
+--
+applyBinPrimitive : Name -> Expr -> Expr -> Expr
 applyBinPrimitive op e1 e2
     = case (op, e1, e2) of
           ("+", Number v1, Number v2) ->
-              Just (Number (v1 + v2))
+              Number (v1 + v2)
           ("-", Number v1, Number v2) ->
-              Just (Number (v1 - v2))
+              Number (v1 - v2)
           ("*", Number v1, Number v2) ->
-              Just (Number (v1 * v2))
+              Number (v1 * v2)
           ("div", Number v1, Number v2) ->
-              Just (if v2 /= 0 then
-                        Number (v1 // v2)
-                    else
-                        Error (AST.stringLit "division by zero"))
+              if v2 /= 0 then
+                   Number (v1 // v2)
+               else
+                   Error (AST.stringLit "division by zero")
           ("mod", Number v1, Number v2) ->
-              Just (if v2 /= 0 then
-                        Number (modBy v2 v1)
-                    else
-                        Error (AST.stringLit "division by zero"))
+              if v2 /= 0 then
+                   Number (modBy v2 v1)
+               else
+                   Error (AST.stringLit "division by zero")
           ("==", _, _) ->
-              Just (compareOp (e1 == e2))
+              structuralEq e1 e2
           ("/=", _, _) ->
-              Just (compareOp (e1 /= e2))              
-          (">",Number v1,Number v2) ->
-              Just (compareOp (v1 > v2))
-          (">=",Number v1,Number v2) ->
-              Just (compareOp (v1 >= v2))
-          ("<",Number v1,Number v2) ->
-              Just (compareOp (v1 < v2))
-          ("<=",Number v1,Number v2) ->
-              Just (compareOp (v1 <= v2))
-          (">",Char v1,Char v2) ->
-              Just (compareOp (v1 > v2))
-          (">=",Char v1,Char v2) ->
-              Just (compareOp (v1 >= v2))
-          ("<",Char v1,Char v2) ->
-              Just (compareOp (v1 < v2))
-          ("<=",Char v1,Char v2) ->
-              Just (compareOp (v1 <= v2))
-          ("compare", Number v1, Number v2) ->
-              Just (orderingOp (compare v1 v2))
-          ("compare", Char v1, Char v2) ->
-              Just (orderingOp (compare v1 v2))
+              App (Var "not") (structuralEq e1 e2)
+          ("compare", _, _) ->
+              case (compareExpr e1 e2) of
+                  Ok rel -> orderingOp rel
+                  Err msg -> Error (AST.stringLit msg)
+          (">", _, _) ->
+              case compareExpr e1 e2 of
+                  Ok GT -> AST.trueCons
+                  Ok _ -> AST.falseCons
+                  Err msg -> Error (AST.stringLit msg)
+          (">=", _, _) ->
+              case compareExpr e1 e2 of
+                  Ok LT -> AST.falseCons
+                  Ok _ -> AST.trueCons
+                  Err msg -> Error (AST.stringLit msg)
+          ("<", _, _) ->
+              case compareExpr e1 e2 of
+                  Ok LT -> AST.trueCons
+                  Ok _ -> AST.falseCons
+                  Err msg -> Error (AST.stringLit msg)
+          ("<=", _, _) ->
+              case compareExpr e1 e2 of
+                  Ok GT -> AST.falseCons
+                  Ok _ -> AST.trueCons
+                  Err msg -> Error (AST.stringLit msg)
           _ ->
-              Nothing
+              Error (AST.stringLit "invalid primitive arguments")
 
 -- apply a unary primitive
-applyUnaryPrim : Name -> Expr -> Maybe Expr
+applyUnaryPrim : Name -> Expr -> Expr
 applyUnaryPrim op e
     = case (op, e) of
           ("negate", Number v) ->
-              Just (Number (-v))
+              Number (-v)
           _  ->
-              Nothing
+              Error (AST.stringLit "invalid primitive arguments")
 
-                
-compareOp : Bool -> Expr
-compareOp c
-    = if c then AST.trueCons else AST.falseCons
-
-orderingOp : Order -> Expr
-orderingOp c
-    = case c of
-          LT -> AST.Cons "LT" []
-          EQ -> AST.Cons "EQ" []
-          GT -> AST.Cons "GT" []
 
 --                
 -- normalize constructor arguments to A-normal form
@@ -385,7 +362,64 @@ normalizeConsArgs heap args
                       (heap2, rest1) = normalizeConsArgs heap1 rest
                   in (heap2, Var loc::rest1)
 
-              
+
+-- polymorphic structural equality
+-- assumes arguments are already in whnf
+-- but may produce a result that is not in whnf
+structuralEq :  Expr -> Expr -> Expr
+structuralEq e1 e2
+    = case (e1, e2) of
+          (Number v1, Number v2) ->
+              compareOp (v1 == v2)
+          (Char c1, Char c2) ->
+              compareOp (c1 == c2)
+          (Cons c1 args1, Cons c2 args2) ->
+              if c1 == c2 && List.length args1 == List.length args2 then
+                  structuralEqList (List.map2 Tuple.pair args1 args2)
+              else
+                  AST.falseCons
+          (Lam _ _ _, Lam _ _ _) ->
+              Error (AST.stringLit "can't compare functions")
+          _ ->
+              Error (AST.stringLit "invalid arguments to equality")
+
+structuralEqList : List (Expr,Expr) -> Expr
+structuralEqList args
+    = case args of
+          [] ->
+              AST.trueCons
+          [(e1,e2)] ->
+              InfixOp "==" e1 e2
+          ((e1,e2)::rest) ->
+              App (App (Var "&&") (InfixOp "==" e1 e2)) (structuralEqList rest)
+
+-- convert a boolean to an AST expression             
+compareOp : Bool -> Expr
+compareOp c
+    = if c then AST.trueCons else AST.falseCons
+
+      
+compareExpr : Expr -> Expr -> Result String Order
+compareExpr e1 e2
+    = case (e1, e2) of
+          (Number v1, Number v2) ->
+              Ok (compare v1 v2)
+          (Char v1, Char v2) ->
+              Ok (compare v1 v2)
+          (Cons _ _, Cons _ _) ->
+              Err "can't compare constructors"
+          (Lam _ _ _, Lam _ _ _) ->
+              Err "can't compare functions"
+          _ ->
+              Err "invalid arguments to comparison"
+                          
+orderingOp : Order -> Expr
+orderingOp c
+    = case c of
+          LT -> AST.Cons "LT" []
+          EQ -> AST.Cons "EQ" []
+          GT -> AST.Cons "GT" []
+                  
 -----------------------------------------------------------------------
 -- reduction to full normal form
 -- Note: this destroys sharing in normal forms
@@ -537,7 +571,7 @@ showPrim2 op v1 v2
           (Char x1, Char x2) ->
               String.fromChar x1 ++ op ++ String.fromChar x2
           _ ->
-              "invalid primitive arguments"
+              op
 
 
 showPrim1 : Name -> Expr -> String
@@ -548,7 +582,8 @@ showPrim1 op v1
           Char x1 ->
               op ++ " " ++ String.fromChar x1
           _ ->
-              "invalid primitive arguments"
+              op
+              
                   
             
 --------------------------------------------------------------------

@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="screen.css">
+  </head>
+
+  <body>
+    <h1>Expression evaluator</h1>
+    <p>A simple evaluator for arithmetic expressions represented as
+    abstract syntax trees (ASTs). <a href="index.html">Back</a></p>
+    <div id="haskelite"></div>
+    <script src="haskelite-min.js"></script>
+    <script>
+      var decls =
+	  "-- a recursive type for arithmetic expressions\n"+
+	  "data Expr = Var Char | Num Int | Binop Op Expr Expr\n\n"+
+	  "-- an enumeration for the 4 basic arithmetic operations\n"+
+	  "data Op = Plus | Times | Minus | Div\n\n"+
+	  "-- an example expression: 3+2*x\n"+
+	  "example = Binop Plus (Num 3) (Binop Times (Num 2) (Var 'x'))\n\n"+
+	  "-- evaluate an expression\n"+
+          "eval :: Expr -> [(Char,Int)] -> Int\n"+
+	  "eval (Var x) assocs = case lookup x assocs of\n"+
+	  "                           (Just v) -> v;\n"+
+	  "                           Nothing -> error \"unknown variable\"\n"+
+	  "eval (Num v) assocs = v\n"+
+	  "eval (Binop op e1 e2) assocs = apply op (eval e1 assocs) (eval e2 assocs)\n\n"+
+	  "apply :: Op -> Int -> Int -> Int\n"+
+	  "apply Plus = (+)\n"+
+	  "apply Minus = (-)\n"+
+	  "apply Times = (*)\n"+
+	  "apply Div = div\n";
+	  
+      var app = Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression:"eval example [('x',5)]", declarations: decls }
+      });
+    </script>
+    <hr>
+    Pedro Vasconcelos, 2023.
+  </body>
+</html>

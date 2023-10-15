@@ -90,9 +90,9 @@ tcExpr env expr
               andThen (\t2 -> Tc.unify t1 t2 |>
               andThen (\_ -> pure t1)))))
 
-          InfixOp op e1 e2 ->
+          BinaryOp op e1 e2 ->
               tcExpr env (App (App (Var op) e1) e2)
-          PrefixOp op e1 ->
+          UnaryOp op e1 ->
               tcExpr env (App (Var op) e1)
 
           Error e1 ->
@@ -372,4 +372,13 @@ initialEnv
       , ("enumFromTo", TyFun tyInt (TyFun tyInt (TyList tyInt)))
       , ("enumFromThen", TyFun tyInt (TyFun tyInt (TyList tyInt)))
       , ("enumFromThenTo", TyFun tyInt (TyFun tyInt (TyFun tyInt (TyList tyInt))))
+      , ("chr", TyFun tyInt tyChar)
+      , ("ord", TyFun tyChar tyInt)
+      , ("toUpper", TyFun tyChar tyChar)
+      , ("toLower", TyFun tyChar tyChar)
+      , ("isUpper", TyFun tyChar tyBool)
+      , ("isLower", TyFun tyChar tyBool)
+      , ("isDigit", TyFun tyChar tyBool)
+      , ("isAlpha", TyFun tyChar tyBool)
+      , ("isAlphaNum", TyFun tyChar tyBool)
       ]

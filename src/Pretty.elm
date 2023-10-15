@@ -117,12 +117,19 @@ prettyExpr_ ctx e =
                          ((DList.singleton tag) ::
                           (List.map (prettyExpr_ {ctx|prec=1}) args)))
 
-        InfixOp op e1 e2 ->
+        BinaryOp op e1 e2 ->
             paren (ctx.prec>0)
-                <| DList.append (prettyExpr_ {ctx|prec=1} e1)
-                    (DList.cons (formatOperator op) (prettyExpr_ {ctx|prec=1} e2))
+                <| if AST.isOperator op then
+                       DList.append (prettyExpr_ {ctx|prec=1} e1)
+                           (DList.cons op (prettyExpr_ {ctx|prec=1} e2))
+                   else
+                       DList.cons (op ++ " ")
+                           (DList.append
+                                (prettyExpr_ {ctx|prec=1} e1)
+                                (DList.cons " "
+                                     (prettyExpr_ {ctx|prec=1} e2)))
 
-        PrefixOp op e1 ->
+        UnaryOp op e1 ->
             paren (ctx.prec>0) <|
                 DList.cons (String.append op " ") (prettyExpr_ {ctx|prec=1} e1)
 
@@ -192,10 +199,11 @@ prettyExpr_ ctx e =
                 (DList.append (prettyBinds ctx binds)
                      (DList.cons " in " (prettyExpr_ {ctx|prec=0} e1)))
         Case expr alts ->
+            paren (ctx.prec>0) <|
             DList.cons "case "
                 (DList.append
-                     (prettyExpr_ {ctx|prec=0} expr)
-                     (DList.cons " of " (prettyAlts {ctx|prec=0} alts)))
+                     (prettyExpr_ {ctx|prec=1} expr)
+                     (DList.cons " of " (prettyAlts {ctx|prec=1} alts)))
                     
         IfThenElse e1 e2 e3 ->
             paren (ctx.prec>0)
@@ -305,13 +313,15 @@ prettyBind : PrettyCtx -> Bind -> StringBuilder
 prettyBind ctx bind
     = DList.cons (bind.name ++ " = ") (prettyExpr_ {ctx|prec=0} bind.expr)
                 
+{-
 -- format an infix operator, sometimes with spaces either side
 formatOperator : Name -> String
 formatOperator op
     = if op=="&&" || op == "||"
       then " " ++ op ++ " "
       else if AST.isOperator op then op else "`" ++ op ++ "`"
-              
+-}
+
 -- pretty print a pattern                   
 prettyPattern : Pattern -> StringBuilder
 prettyPattern p =
@@ -396,7 +406,7 @@ checkSpine e
 checkChars : List Expr -> Maybe String
 checkChars es =
     if List.all isChar es then
-        Just (String.fromList (List.map getChar es))
+        Just (String.concat (List.map (getChar >> escapeChar '"') es))
     else
         Nothing
 
@@ -411,7 +421,7 @@ getChar : Expr -> Char
 getChar e =
     case e of
         Char c -> c
-        _ -> '?'   -- this never happens!
+        _ -> '\0'   -- this never happens!
 
       
 
@@ -439,10 +449,12 @@ prettyCont opts heap stack acc
               prettyCont opts heap rest acc
           (PushArg arg::rest) ->
               prettyCont opts heap rest (App acc arg)
-          (RetPrim1 op e2::rest) ->
-              prettyCont opts heap rest (InfixOp op acc e2)
-          (RetPrim2 op e2::rest) ->
-              prettyCont opts heap rest (InfixOp op e2 acc)
+          (ContBinary op e2::rest) ->
+              prettyCont opts heap rest (BinaryOp op acc e2)
+          (RetBinary op e1::rest) ->
+              prettyCont opts heap rest (BinaryOp op e1 acc)
+          (RetUnary op::rest) ->
+              prettyCont opts heap rest (UnaryOp op acc)
           MatchEnd::rest ->
               prettyCont opts heap rest acc
           DeepEval::rest ->
@@ -455,7 +467,20 @@ prettyCont opts heap stack acc
 
 
 -- pretty print a character
--- TODO: escape special characters
 prettyChar : Char -> String
 prettyChar c
-    = String.fromList ['\'', c, '\'']
+    = "\'" ++ escapeChar '\'' c ++ "\'"
+
+escapeChar : Char -> Char -> String
+escapeChar delimiter c
+    = if c == delimiter then
+          "\\" ++ String.fromChar delimiter
+      else case c of
+          '\n' -> "\\n"
+          '\t' -> "\\t"
+          '\\' -> "\\\\"
+          _ -> let n = Char.toCode c
+               in if n>=32 && n<=127 then
+                      String.fromChar c
+                  else
+                      "\\" ++ String.fromInt n

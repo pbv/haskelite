@@ -41,7 +41,21 @@ tyOrdering = TyConst "Ordering" []
 
 tyString : Type
 tyString = TyList tyChar
-      
+
+-- smart constructor for type constants
+-- special case for Strings
+tyConst : Tycon -> List Type -> Type
+tyConst c ts
+    = case c of
+          "String" ->
+              if List.isEmpty ts then 
+                  tyString
+              else
+                  TyConst c ts
+          _ ->
+              TyConst c ts
+                     
+           
 -- apply a type substitution
 applyTySubst : TySubst -> Type -> Type
 applyTySubst s ty

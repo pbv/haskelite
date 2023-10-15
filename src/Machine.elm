@@ -40,12 +40,14 @@ type Cont
     | PushAlt ArgStack Matching
     | PushPat ArgStack Pattern Matching
       -- continuations for primitive operations
-    | RetPrim1 Name Expr
-    | RetPrim2 Name Expr
-    | RetPrim3 Name
+    | ContBinary Name Expr
+    | RetBinary Name Expr
+    | RetUnary Name
       -- for full normal form evaluation
     | DeepEval
     | Continue Expr ExprCtx
+
+
       
 
       
@@ -129,7 +131,17 @@ transition conf
 
           -- case expressions
           (heap, E (Case e1 alts), stack) ->
-              Just (heap, M (AST.translateCase e1 alts) [], MatchEnd::stack)
+              if isVar e1 || isWhnf e1 then
+                  -- no indirection needed
+                  Just (heap, M (AST.translateCase e1 alts) [], MatchEnd::stack)
+              else
+                  -- create an indirection
+                  let
+                      (loc, heap1) = Heap.newIndirection heap e1
+                  in
+                      Just (heap1, M (AST.translateCase (Var loc) alts) [],
+                                MatchEnd::stack)
+                               
                       
           -- if-then-else
           (heap, E (IfThenElse e1 e2 e3), stack) ->
@@ -152,21 +164,22 @@ transition conf
                       Nothing
 
           -- primitive operations
-          (heap, E (InfixOp op e1 e2), stack) ->
-              Just (heap, E e1, (RetPrim1 op e2)::stack)
+          (heap, E (BinaryOp op e1 e2), stack) ->
+              Just (heap, E e1, (ContBinary op e2)::stack)
                   
-          (heap, E (PrefixOp op e1), stack) ->
-              Just (heap, E e1, (RetPrim3 op)::stack)
+          (heap, E (UnaryOp op e1), stack) ->
+              Just (heap, E e1, (RetUnary op)::stack)
 
           -- the remaining expression evaluation rules
           -- should apply only to whnfs
-          (heap, E w1, (RetPrim1 op e2)::stack) ->
-              Just (heap, E e2, (RetPrim2 op w1)::stack)
-          (heap, E w2, (RetPrim2 op w1)::stack) ->
-              Just (heap, E (applyBinPrimitive op w1 w2), stack)
+          (heap, E w1, (ContBinary op e2)::stack) ->
+              Just (heap, E e2, (RetBinary op w1)::stack)
+                        
+          (heap, E w2, (RetBinary op w1)::stack) ->
+              Just (heap, E (applyPrimitive2 op w1 w2), stack)
 
-          (heap, E w, (RetPrim3 op)::stack) ->
-              Just (heap, E (applyUnaryPrim op w), stack)
+          (heap, E w, (RetUnary op)::stack) ->
+              Just (heap, E (applyPrimitive1 op w), stack)
                   
           -- update variable
           (heap, E w, Update y::stack) ->
@@ -248,18 +261,12 @@ transition conf
           -- deep evaluation
           -- NB: this does not preserve sharing
           (heap, E w, DeepEval::stack) ->
-              -- if isWhnf w then
               Just (deepEval w heap stack)
-              -- else
-              --    Nothing
                   
           -- NB: this does not preserve sharing
           (heap, E w, (Continue expr ctx)::stack) ->
-              -- if isWhnf w then
               Just (deepEval (ctx.set w expr) heap stack)
-              -- else
-              --    Nothing
-                      
+                    
           _ ->
               Nothing
 
@@ -284,8 +291,8 @@ applyArgs expr args =
 -- apply a binary primitive
 -- the arguments should be in whnf
 --
-applyBinPrimitive : Name -> Expr -> Expr -> Expr
-applyBinPrimitive op e1 e2
+applyPrimitive2 : Name -> Expr -> Expr -> Expr
+applyPrimitive2 op e1 e2
     = case (op, e1, e2) of
           ("+", Number v1, Number v2) ->
               Number (v1 + v2)
@@ -303,43 +310,54 @@ applyBinPrimitive op e1 e2
                    Number (modBy v2 v1)
                else
                    Error (AST.stringLit "division by zero")
+          ("compare", _, _) ->
+              structuralCmp e1 e2
           ("==", _, _) ->
               structuralEq e1 e2
           ("/=", _, _) ->
               App (Var "not") (structuralEq e1 e2)
-          ("compare", _, _) ->
-              case (compareExpr e1 e2) of
-                  Ok rel -> orderingOp rel
-                  Err msg -> Error (AST.stringLit msg)
-          (">", _, _) ->
-              case compareExpr e1 e2 of
-                  Ok GT -> AST.trueCons
-                  Ok _ -> AST.falseCons
-                  Err msg -> Error (AST.stringLit msg)
-          (">=", _, _) ->
-              case compareExpr e1 e2 of
-                  Ok LT -> AST.falseCons
-                  Ok _ -> AST.trueCons
-                  Err msg -> Error (AST.stringLit msg)
-          ("<", _, _) ->
-              case compareExpr e1 e2 of
-                  Ok LT -> AST.trueCons
-                  Ok _ -> AST.falseCons
-                  Err msg -> Error (AST.stringLit msg)
           ("<=", _, _) ->
-              case compareExpr e1 e2 of
-                  Ok GT -> AST.falseCons
-                  Ok _ -> AST.trueCons
-                  Err msg -> Error (AST.stringLit msg)
+              orderingCase (structuralCmp e1 e2)
+                  AST.trueCons AST.trueCons AST.falseCons
+          ("<", _, _) ->
+              orderingCase (structuralCmp e1 e2)
+                  AST.trueCons AST.falseCons AST.falseCons              
+          (">=", _, _) ->
+              orderingCase (structuralCmp e1 e2)
+                  AST.falseCons AST.trueCons AST.trueCons
+          (">", _, _) ->
+              orderingCase (structuralCmp e1 e2)
+                  AST.falseCons AST.falseCons AST.trueCons              
           _ ->
               Error (AST.stringLit "invalid primitive arguments")
 
+
 -- apply a unary primitive
-applyUnaryPrim : Name -> Expr -> Expr
-applyUnaryPrim op e
+-- the argument should be in whnf
+applyPrimitive1 : Name -> Expr -> Expr
+applyPrimitive1 op e
     = case (op, e) of
           ("negate", Number v) ->
               Number (-v)
+          ("toLower", Char c) ->
+              Char (Char.toLower c)
+          ("toUpper", Char c) ->
+              Char (Char.toUpper c)
+          ("isUpper", Char c) ->
+              compareOp (Char.isUpper c)
+          ("isLower", Char c) ->
+              compareOp (Char.isLower c)
+          ("isAlpha", Char c) ->
+              compareOp (Char.isAlpha c)
+          ("isAlphaNum", Char c) ->
+              compareOp (Char.isAlphaNum c)
+          ("isDigit", Char c) ->
+              compareOp (Char.isDigit c)
+          
+          ("ord", Char c) ->
+              Number (Char.toCode c)
+          ("chr", Number n) ->
+              Char (Char.fromCode n)
           _  ->
               Error (AST.stringLit "invalid primitive arguments")
 
@@ -362,8 +380,7 @@ normalizeConsArgs heap args
                       (heap2, rest1) = normalizeConsArgs heap1 rest
                   in (heap2, Var loc::rest1)
 
-
--- polymorphic structural equality
+-- polymorphic structural equality (==)
 -- assumes arguments are already in whnf
 -- but may produce a result that is not in whnf
 structuralEq :  Expr -> Expr -> Expr
@@ -374,7 +391,7 @@ structuralEq e1 e2
           (Char c1, Char c2) ->
               compareOp (c1 == c2)
           (Cons c1 args1, Cons c2 args2) ->
-              if c1 == c2 && List.length args1 == List.length args2 then
+              if c1 == c2 then
                   structuralEqList (List.map2 Tuple.pair args1 args2)
               else
                   AST.falseCons
@@ -389,29 +406,84 @@ structuralEqList args
           [] ->
               AST.trueCons
           [(e1,e2)] ->
-              InfixOp "==" e1 e2
+              BinaryOp "==" e1 e2
           ((e1,e2)::rest) ->
-              App (App (Var "&&") (InfixOp "==" e1 e2)) (structuralEqList rest)
+              App (App (Var "&&") (BinaryOp "==" e1 e2)) (structuralEqList rest)
 
+
+  
+structuralCmp : Expr -> Expr -> Expr
+structuralCmp e1 e2
+    = case (e1, e2) of
+          (Number v1, Number v2) ->
+              orderingOp (compare v1 v2)
+          (Char c1, Char c2) ->
+              orderingOp (compare c1 c2)
+          (Cons c1 args1, Cons c2 args2) ->
+              case compareCons c1 c2 of
+                  LT ->
+                      Cons "LT" []
+                  EQ ->
+                      structuralCmpList (List.map2 Tuple.pair args1 args2)
+                  GT ->
+                      Cons "GT" []
+          (Lam _ _ _, Lam _ _ _) ->
+              Error (AST.stringLit "can't compare functions")
+          _ ->
+              Error (AST.stringLit "invalid arguments to comparison")
+
+structuralCmpList : List (Expr,Expr) -> Expr
+structuralCmpList args
+    = case args of
+          [] ->
+              Cons "EQ" []
+          [(e1,e2)] ->
+              BinaryOp "compare" e1 e2
+          ((e1,e2)::rest) ->
+              Case (BinaryOp "compare" e1 e2)
+                  [ (ConsP "EQ" [], structuralCmpList rest)
+                  , (VarP "c", Var "c")
+                  ]
+                  
+
+-- compare constructor tags
+-- special case for lists, otherwise compare alphabetically
+compareCons : Tag -> Tag -> Order
+compareCons t1 t2
+    = case (t1,t2) of
+          ("[]", ":") ->
+              LT
+          (":", "[]") ->
+              GT
+          _ ->
+              compare t1 t2
+
+-- build a case over a comparision result
+-- shortcircuiting the the scrutinee is known
+orderingCase : Expr -> Expr -> Expr -> Expr -> Expr
+orderingCase expr ltBranch eqBranch gtBranch
+    = case expr of
+          Error msg ->
+              Error msg
+          Cons "LT" [] ->
+              ltBranch
+          Cons "EQ" [] ->
+              eqBranch
+          Cons "GT" [] ->
+              gtBranch
+          _ ->
+              Case expr [ (ConsP "LT" [], ltBranch)
+                        , (ConsP "EQ" [], eqBranch)
+                        , (ConsP "GT" [], gtBranch) ]
+          
+
+                  
 -- convert a boolean to an AST expression             
 compareOp : Bool -> Expr
 compareOp c
     = if c then AST.trueCons else AST.falseCons
 
       
-compareExpr : Expr -> Expr -> Result String Order
-compareExpr e1 e2
-    = case (e1, e2) of
-          (Number v1, Number v2) ->
-              Ok (compare v1 v2)
-          (Char v1, Char v2) ->
-              Ok (compare v1 v2)
-          (Cons _ _, Cons _ _) ->
-              Err "can't compare constructors"
-          (Lam _ _ _, Lam _ _ _) ->
-              Err "can't compare functions"
-          _ ->
-              Err "invalid arguments to comparison"
                           
 orderingOp : Order -> Expr
 orderingOp c
@@ -474,24 +546,32 @@ initializeHeap : Heap -> Heap
 initializeHeap heap
     = Heap.insertFromList heap <|
       [ (":", AST.lambda Nothing (Match (VarP "x")
-                             (Match (VarP "y")
-                               (Return (Cons ":" [Var "x",Var "y"])
-                                    Nothing)
-                               ))) 
-      , ("negate", AST.lambda Nothing (Match (VarP "x")
-                                    (Return (PrefixOp "negate" (Var "x")) Nothing)))
-      , ("compare", AST.lambda Nothing (Match (VarP "x")
-                                            (Match (VarP "y")
-                                                 (Return (InfixOp "compare" (Var "x") (Var "y")) Nothing))))
+                                      (Match (VarP "y")
+                                           (Return (Cons ":" [Var "x",Var "y"])
+                                                Nothing)
+                                      ))) 
+      , ("compare",
+             AST.lambda Nothing (Match (VarP "x")
+                                     (Match (VarP "y")
+                                          (Return (BinaryOp "compare" (Var "x") (Var "y")) Nothing))))
       ] ++
-      List.map binop [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]  
+      List.map infixOp [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]
+         ++
+      List.map prefixOp ["negate", "ord", "chr", "toUpper", "toLower",
+                         "isLower", "isUpper", "isAlpha", "isAlphaNum"]
+
+
+prefixOp :  Name -> (Name, Expr)
+prefixOp op
+    = (op, AST.lambda Nothing
+           (Match (VarP "x") (Return (UnaryOp op (Var "x")) Nothing)))
 
           
-binop : Name -> (Name, Expr)
-binop op = (op, AST.lambda Nothing
+infixOp : Name -> (Name, Expr)
+infixOp op = (op, AST.lambda Nothing
                    (Match (VarP "x")
                        (Match (VarP "y")
-                           (Return (InfixOp op (Var "x") (Var "y"))
+                           (Return (BinaryOp op (Var "x") (Var "y"))
                                  Nothing)
                         )))
 
@@ -534,14 +614,14 @@ nextAux iters conf0
 justification : Conf -> Maybe Info
 justification (heap, control, stack)
     = case (control, stack) of
-         (E v1, (RetPrim2 op v2::_)) ->
+         (E v1, ((RetBinary op v2)::_)) ->
              if isWhnf v1 then 
-                 Just ("primitive " ++ showPrim2 op v2 v1)
+                 Just ("primitive " ++ op)
              else
                  Nothing
-         (E v1, (RetPrim3 op::_)) ->
-             if isWhnf v1 then 
-                 Just ("primitive " ++ showPrim1 op v1)
+         (E w, ((RetUnary op)::_)) ->
+             if isWhnf w then 
+                 Just ("primitive " ++ op)
              else
                  Nothing
 {-
@@ -553,6 +633,7 @@ justification (heap, control, stack)
 -}
          (M (Return expr info) [], MatchEnd::_) ->
              info
+
          (E (Error msg), _) ->
              Just "runtime error"
 
@@ -562,7 +643,7 @@ justification (heap, control, stack)
          _ ->
              Nothing
 
-
+{-
 showPrim2 : Name -> Expr -> Expr -> String
 showPrim2 op v1 v2
     = case (v1,v2) of
@@ -583,179 +664,5 @@ showPrim1 op v1
               op ++ " " ++ String.fromChar x1
           _ ->
               op
-              
+-}              
                   
-            
---------------------------------------------------------------------
--- examples for debugging 
--------------------------------------------------------------------
-{-
--- debugging function
-transitions : Conf -> ()
-transitions conf = transitions_ 0 conf
-              
-transitions_ : Int -> Conf -> ()
-transitions_ n conf
-    = let
-        _ = Debug.log (String.fromInt n) (getControl conf, getStack conf )
-      in
-       case transition conf of
-           Nothing ->
-               ()
-           Just conf1 ->
-               transitions_ (n+1) conf1
--}
-
-{-
-example0 : Conf
-example0 = (heap0, E (InfixOp "*" (Number 1) (Number 2)), [])
-
-example1 : Conf
-example1 =
-    let
-        heap = Dict.singleton "square"
-               (Lam (Just "square")
-                    (Match (VarP "x") (Return (InfixOp "*" (Var "x") (Var "x"))
-                                           "square x = x*x")))
-        stack = []
-    in 
-        (heap, E (App (Var "square") (Number 5)), stack)
-
-
-example3 : Conf
-example3 =
-   let tl =  Lam (Just "tail")
-             (Match (ConsP ":" [VarP "x", VarP "xs"])
-                      (Return (Var "xs") "tail (x:xs) = xs"))
-       e = App tl (AST.listLit [Number 1,Number 2,Number 3])
-   in (Dict.empty, E e, [])
-
-example4 : Conf
-example4
-    = let
-        expr = App (Lam Nothing
-                        (Match (ConsP ":" [VarP "h",VarP "t"])
-                             (Return (Var "h") "head")))
-               (AST.listLit [])
-    in (Dict.empty, E expr, []) 
-    
-
-
-example5 : Conf
-example5 =
-    let
-        heap = Dict.singleton "sum"
-               (Lam (Just "sum")
-                    (Alt (Match (ConsP ":" [VarP "x",VarP "xs"])
-                              (Return (InfixOp "+"
-                                           (Var "x")
-                                           (App (Var "sum") (Var "xs")))
-                                           "sum (x:xs) = x + sum xs"))
-                         (Match (ConsP "[]" [])
-                              (Return (Number 0) "sum [] = 0"))))
-        control = E (App (Var "sum") (AST.listLit [Number 1,Number 2,Number 3]))
-        stack = []
-    in
-        (heap, control, stack)
-
-example6 : Conf
-example6 =
-    let
-        heap = Dict.singleton "fact"
-               (Lam (Just "fact")
-                   (Alt (Match (VarP "n")
-                             (Arg (InfixOp ">" (Var "n") (Number 0))
-                                  (Match (ConsP "True" [])
-                                       (Return (InfixOp "*" (Var "n") (App (Var "fact") (InfixOp "-" (Var "n") (Number 1)))) "fact n | n>0 = n*fact (n-1)"))))
-                        (Match (VarP "n")
-                             (Return (Number 1) "fact n | otherwise = 1"))))
-        control = E (App (Var "fact") (Number 5))
-        stack = []
-    in
-        (heap, control, stack)
-           
-         
-example7 : Conf
-example7 =
-    let heap = Dict.singleton "factAcc"
-               (Lam (Just "factAcc")
-                    (Alt (Match (VarP "n")
-                              (Match (VarP "acc")
-                                   (Arg (InfixOp ">" (Var "n") (Number 1))
-                                        (Match (ConsP "True" [])
-                                             (Return (App (App (Var "factAcc") (InfixOp "-" (Var "n") (Number 1))) (InfixOp "*" (Var "n") (Var "acc"))) "factAcc n acc | n>0 = facAcc (n-1) (n*acc)")))))
-                         (Match DefaultP
-                              (Match (VarP "acc")
-                                   (Return (Var "acc") "factAcc _ acc = acc")))))
-        control = E (App (App (Var "factAcc") (Number 5)) (Number 1))
-        stack = []
-    in
-        (heap, control, stack)
-
-
-example8
-    = let heap = Dict.fromList
-                 [ ("square", Lam (Just "square")
-                        (Match (VarP "x")
-                             (Return (InfixOp "*" (Var "x") (Var "x"))
-                                  "square x = x*x")))
-                 ]
-      in
-          (heap, E (App (Var "square") (App (Var "square") (Number 5))), [])
-               
-
-example9
-    = let heap = Dict.fromList
-                 [ ("revacc", Lam (Just "revacc")
-                        (Alt
-                         (Match (ConsP ":" [VarP "x",VarP "xs"])
-                              (Match (VarP "acc")
-                                   (Return
-                                        (App (App (Var "revacc") (Var "xs"))  (Cons ":" [Var "x",Var "acc"])) "revacc (x:xs) acc = revacc xs (x:acc)")))
-                         (Match (ConsP "[]" [])
-                              (Match (VarP "acc")
-                                   (Return (Var "acc")
-                                        "revacc [] acc = acc")))
-                        ))
-                 ]
-      in (heap, E (App (App (Var "revacc") (AST.listLit [Number 1, Number 2, Number 3])) (AST.listLit [])), [])
-              
-
-
-example10
-    = let heap = Dict.fromList
-                 [ ("double", Lam (Just "double")
-                      (Alt
-                       (Match (ConsP ":" [VarP "x", VarP "xs"])
-                            (Return
-                                 (Cons ":"
-                                 [InfixOp "*" (Number 2) (Var "x"),
-                                      App (Var "double") (Var "xs")])
-                                 "double-1"))
-                       (Match (ConsP "[]" [])
-                            (Return (Cons "[]" []) "double-2"))
-                           ))
-                     ]
-
-          expr = (App (Var "double") (AST.listLit [Number 1, Number 2, Number 3]))
-      in
-          (heap, E expr, [DeepEval expr Context.empty])
--}
-
-{-
-example11
-    = (Heap.empty,
-           E (Case (InfixOp "==" (Number 1) (Number 2))
-                  [(ConsP "True" [], Number 42)]),
-           
-                      [])
--}
-
-{-
--- extra debugging stuff                 
-observe : a -> b -> b
-observe x y
-    = let
-        _ = Debug.log ">>>" x
-      in  y
--}

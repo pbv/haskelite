@@ -14,7 +14,7 @@ import AST exposing (Expr(..),
                      Pattern(..),
                      Decl(..), Data(..), Bind, Module, Program(..),
                      Name, Info)
-import Types exposing (Type(..), Tycon, tyInt, tyBool, tyChar)
+import Types exposing (Type(..), Tycon, tyInt, tyBool, tyChar, tyConst)
 import Char
 import Set exposing (Set)
 import Dict exposing (Dict)
@@ -398,7 +398,7 @@ insertArrows t0 ts
 typeApplication : Parser Type
 typeApplication
     = oneOf
-      [succeed TyConst
+      [succeed tyConst
           |= upperIdentifier
           |. spaces
           |= Parser.sequence
@@ -418,7 +418,7 @@ typeApplication
 delimitedType : Parser Type
 delimitedType
     = oneOf
-      [ succeed (\c -> TyConst c [])
+      [ succeed (\c -> tyConst c [])
             |= upperIdentifier
       , succeed TyVar        -- identifiers are parsed as free type vars
             |= identifier    -- should be generalized if necessary
@@ -507,7 +507,9 @@ pattern =
     , succeed NumberP
            |= integer
     , succeed CharP
-           |= litCharacter
+           |= charLiteral
+    , succeed stringPattern
+           |= stringLiteral
     , succeed AST.listPattern
          |= patternSeq "[" "]" "," 
     , backtrackable
@@ -532,7 +534,11 @@ consPattern l =
         Just (p,ps) ->
             (List.foldr (\x y -> ConsP ":" [x,y]) p ps)
 
+stringPattern : String -> Pattern
+stringPattern 
+    = String.foldr (\x y -> ConsP ":" [CharP x,y]) (ConsP "[]" []) 
 
+                
 -- parse a sequence of patterns with a given start, end and separator
 patternSeq : String -> String -> String -> Parser (List Pattern)    
 patternSeq open close sep =
@@ -562,18 +568,18 @@ topExprEnd
 topExpr : Parser Expr
 topExpr = infix2
 
-infix7 = infixLeft  applicativeExpr [ ("*", InfixOp "*") ]
-infix6 = infixLeft  infix7  [ ("+", InfixOp "+")
-                            , ("-", InfixOp "-") ]
+infix7 = infixLeft  applicativeExpr [ ("*", BinaryOp "*") ]
+infix6 = infixLeft  infix7  [ ("+", BinaryOp "+")
+                            , ("-", BinaryOp "-") ]
 infix5 = infixRight infix6 [ (":", \e1 e2 -> Cons ":" [e1,e2])
                            , ("++", \e1 e2 -> App (App (Var "++") e1) e2)
                            ]
-infix4 = infixLeft  infix5 [ ("==", InfixOp "==")
-                           , ("/=", InfixOp "/=")
-                           , ("<=", InfixOp "<=")
-                           , (">=", InfixOp ">=")
-                           , ("<", InfixOp "<")
-                           , (">", InfixOp ">")
+infix4 = infixLeft  infix5 [ ("==", BinaryOp "==")
+                           , ("/=", BinaryOp "/=")
+                           , ("<=", BinaryOp "<=")
+                           , (">=", BinaryOp ">=")
+                           , ("<", BinaryOp "<")
+                           , (">", BinaryOp ">")
                            ] -- TODO: these should be non-associative
 
 infix3 = infixRight infix4 [ ("&&", \e1 e2 -> App (App (Var "&&") e1) e2) ]
@@ -663,9 +669,9 @@ delimited =
     , succeed Number
           |= integer
     , succeed Char
-          |= litCharacter
+          |= charLiteral
     , succeed stringToList
-          |= litString
+          |= stringLiteral
     , succeed (\tag -> Cons tag [])
           |= upperIdentifier
     , backtrackable <|
@@ -766,7 +772,7 @@ prefixNeg
              
 infixApp : Parser Expr
 infixApp
-    = succeed (\e1 f e2 -> InfixOp f e1 e2)
+    = succeed (\e1 f e2 -> BinaryOp f e1 e2)
          |= delimited
          |. spaces   
          |. symbol "`"
@@ -913,32 +919,110 @@ upperIdentifier
       , reserved = Set.empty
       }
 
-
--- TODO: handle escaped characters         
+-- a string literal
+-- handles only some escaped chars
+{-
 litString : Parser String
 litString
-    = succeed identity
+    = succeed escapeChars
          |. symbol "\""
          |= Parser.getChompedString (Parser.chompWhile (\c->c/='\"'))
          |. symbol "\""
-
--- TODO: handle escaped characters         
+-}
+{-
+escapeChars : String -> String
+escapeChars =
+    String.replace "\\n" "\n" >>
+    String.replace "\\t" "\t" >>
+    String.replace "\\\\" "\\"
+-}            
+{-
 litCharacter : Parser Char
 litCharacter
-    = (succeed identity
+    = (succeed escapeChars
          |. symbol "'"
          |= Parser.getChompedString (Parser.chompWhile (\c -> c /= '\''))
          |. symbol "'")
       |> Parser.andThen checkCharLiteral
+-}
 
+charLiteral : Parser Char
+charLiteral 
+    = succeed identity
+        |. Parser.chompIf (\c -> c == '\'')
+        |= character '\''
+        |. Parser.chompIf (\c -> c == '\'')
+         
+stringLiteral : Parser String
+stringLiteral 
+    = succeed String.fromList
+         |= Parser.sequence
+            { start = "\""
+            , separator = ""
+            , spaces = succeed ()
+            , end = "\""
+            , item = character '\"'
+            , trailing = Parser.Forbidden
+            }
+         
+
+character : Char -> Parser Char
+character delimiter
+    = oneOf [ succeed identity
+                  |. Parser.chompIf (\c -> c=='\\')
+                  |= escapeChar
+            , getChompedChar (Parser.chompIf (\c -> c/=delimiter))
+            ]
+
+escapeChar : Parser Char
+escapeChar
+    = oneOf [ succeed '\n'
+                  |. Parser.chompIf (\c -> c == 'n')
+            , succeed '\t'
+                  |. Parser.chompIf (\c -> c == 't')
+            , getChompedChar
+                  (Parser.chompIf (\c -> c == '\\' || c=='\'' || c=='\"'))
+            , succeed Char.fromCode
+                  |= integer
+            ]
+      
+getChompedChar : Parser a -> Parser Char
+getChompedChar p
+    = Parser.getChompedString p |>
+      andThen (\s -> case String.uncons s of
+                         Just (c, "") -> succeed c
+                         _ -> problem "character literal")
+      
+
+{-          
 checkCharLiteral : String -> Parser Char
 checkCharLiteral s
     = case String.uncons s of
-          Just (c, "")
-              -> succeed c
+          Just ('\\', rest) ->
+              unescapeChar rest
+          Just (c, "") ->
+              succeed c
           _ ->
               problem "character literal"
-    
+-}
+{-                  
+unescapeChar : String -> Parser Char
+unescapeChar str
+    = case str of
+          "n" ->
+              succeed '\n'
+          "t" ->
+              succeed '\t'
+          "\\" ->
+              succeed '\\'
+          _ -> case String.toInt str of
+                   Just c ->
+                       succeed (Char.fromCode c)
+                   Nothing ->
+                       problem "character code"
+-}
+
+                  
 reservedWords : Set String    
 reservedWords
     = Set.fromList [ "if", "then", "else",

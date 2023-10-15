@@ -33,11 +33,11 @@ type Expr
     | Number Int
     | Char Char
     | Cons Tag (List Expr)
-    | InfixOp Name Expr Expr           -- primitive binary operators +, * etc
-    | PrefixOp Name Expr               -- primitive unary operations (-)
+    | BinaryOp Name Expr Expr            -- binary primitive operations
+    | UnaryOp Name Expr                  -- unary primitive operations
     | IfThenElse Expr Expr Expr
-    | Error Expr                       -- runtime errors; the argument should
-                                       -- be an evaluated string
+    | Error Expr                       -- runtime errors;
+                                       -- argument should be an evaluated string
 
       
 -- * matchings
@@ -118,10 +118,10 @@ applySubst s e
           App e1 e2 ->
               App (applySubst s e1)(applySubst s e2)
                   
-          InfixOp op e1 e2 ->
-              InfixOp op (applySubst s e1) (applySubst s e2)
-          PrefixOp op e1 ->
-              PrefixOp op (applySubst s e1) 
+          BinaryOp op e1 e2 ->
+              BinaryOp op (applySubst s e1) (applySubst s e2)
+          UnaryOp op e1 ->
+              UnaryOp op (applySubst s e1)
           Cons c args ->
               Cons c (List.map (applySubst s) args)
 

@@ -10,6 +10,7 @@ import Types exposing (Type(..))
 import Heap exposing (Heap)
 import Machine exposing (Conf, Stack, Control(..), Cont(..))
 import DList exposing (DList)
+import Set exposing (Set)
 
     
 type alias Options
@@ -421,7 +422,7 @@ getChar : Expr -> Char
 getChar e =
     case e of
         Char c -> c
-        _ -> '\0'   -- this never happens!
+        _ -> '?'   -- this never happens!
 
       
 

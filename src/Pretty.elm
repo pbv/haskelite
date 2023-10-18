@@ -456,7 +456,7 @@ prettyCont opts heap stack acc
               prettyCont opts heap rest (BinaryOp op e1 acc)
           (RetUnary op::rest) ->
               prettyCont opts heap rest (UnaryOp op acc)
-          MatchEnd::rest ->
+          MatchEnd _::rest ->
               prettyCont opts heap rest acc
           DeepEval::rest ->
               prettyCont opts heap rest acc

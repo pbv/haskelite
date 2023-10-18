@@ -15,16 +15,23 @@
 	  "data BST a = Leaf | Node a (BST a) (BST a)\n\n"+
 	  "-- insert a value into an ordered search tree\n"+
 	  "-- NB: this function is polymorphic on 'a'\n"+
-	  "-- but will only only actually work with integers and characters\n"+
+	  "-- but will not work all types!\n"+
           "insert :: a -> BST a -> BST a\n"+
 	  "insert x Leaf = Node x Leaf Leaf\n"+
 	  "insert x (Node y left right)\n"+
 	  "         | x<y = Node y (insert x left) right\n"+
 	  "         | x>y = Node y left (insert x right)\n"+
-	  "         | otherwise = Node y left right\n";
+	  "         | otherwise = Node y left right\n\n"+
+	  "insertList :: [a] -> BST a\n"+
+	  "insertList [] = Leaf\n"+
+	  "insertList (x:xs) = insert x (insertList xs)\n\n";
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
-	  flags: { expression:"insert 3 (Node 2 (Node 1 Leaf Leaf) (Node 4 Leaf Leaf))", declarations: decls }
+	  flags: {
+	      expression:"insertList [\"armadillo\", \"iguana\", \"dog\", \"horse\"]",
+	      declarations: decls,
+	      skip : ["compare", "<", ">", "=="]
+	  }
       });
     </script>
     <hr>

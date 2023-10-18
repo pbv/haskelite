@@ -14,9 +14,10 @@ import AST exposing (Expr(..),
                      Name,
                      Tag,
                      Subst)
-import Dict exposing (Dict)
 import Heap exposing (Heap)
 import Context exposing (ExprCtx)
+import Dict exposing (Dict)
+import Set exposing (Set)
 import Monocle.Optional as Monocle
 
 
@@ -36,7 +37,7 @@ type alias Stack
 type Cont
     = PushArg Expr
     | Update Name
-    | MatchEnd 
+    | MatchEnd Skip
     | PushAlt ArgStack Matching
     | PushPat ArgStack Pattern Matching
       -- continuations for primitive operations
@@ -47,14 +48,15 @@ type Cont
     | DeepEval
     | Continue Expr ExprCtx
 
-
+type Skip
+    = Skipped | NotSkipped
       
 
       
 isWhnf : Expr -> Bool
 isWhnf expr =
     case expr of
-        Lam 0 _ m ->     --- AST.matchingArity m == 0
+        Lam 0 _ m ->      --- AST.matchingArity m == 0
             False
         Lam _ _ m ->
             True          ---  AST.matchingArity m > 0
@@ -85,13 +87,14 @@ getControl (_, control, _) = control
 
 getStack : Conf -> Stack
 getStack (_, _, stack) = stack           
-
+                      
+                         
                          
 --                
 -- a small-step transition of the machine
---
-transition : Conf -> Maybe Conf
-transition conf
+-- first argument is the set of functions to skip over
+transition : Set Name -> Conf -> Maybe Conf
+transition skipped conf
     = case conf of
           -- short circuit errors
           (heap, E (Error msg), _::_) ->
@@ -106,7 +109,14 @@ transition conf
 
           -- saturated lambda: go into matching evaluation
           (heap, E (Lam 0 optname m), stack) ->
-              Just (heap, M m [], MatchEnd::stack)
+              case optname of
+                  Just fun ->
+                      if Set.member fun skipped then
+                          Just (heap, M m [], MatchEnd Skipped::DeepEval::stack)
+                      else
+                          Just (heap, M m [], MatchEnd NotSkipped::stack)
+                  Nothing ->
+                      Just (heap, M m [], MatchEnd NotSkipped::stack)
 
           -- apply argument to non-saturated lambda
           (heap, E (Lam _ optname m), PushArg e1::rest) ->
@@ -133,19 +143,21 @@ transition conf
           (heap, E (Case e1 alts), stack) ->
               if isVar e1 || isWhnf e1 then
                   -- no indirection needed
-                  Just (heap, M (AST.translateCase e1 alts) [], MatchEnd::stack)
+                  Just (heap, M (AST.translateCase e1 alts) [],
+                            MatchEnd NotSkipped::stack)
               else
                   -- create an indirection
                   let
                       (loc, heap1) = Heap.newIndirection heap e1
                   in
                       Just (heap1, M (AST.translateCase (Var loc) alts) [],
-                                MatchEnd::stack)
+                                MatchEnd NotSkipped::stack)
                                
                       
           -- if-then-else
           (heap, E (IfThenElse e1 e2 e3), stack) ->
-              Just (heap, M (AST.translateIfThenElse e1 e2 e3) [], MatchEnd::stack)
+              Just (heap, M (AST.translateIfThenElse e1 e2 e3) [],
+                        MatchEnd NotSkipped::stack)
 
           (heap, E (Var y), stack) ->
               case Heap.get y heap of
@@ -236,7 +248,7 @@ transition conf
                   Just (heap, M Fail [], stack)
                                 
           -- successful match: return an expression
-          (heap, M (Return expr info) args, MatchEnd::stack) ->
+          (heap, M (Return expr info) args, MatchEnd _::stack) ->
               Just (heap, E (applyArgs expr args), stack)
 
           (heap, M (Return expr info) args, (PushAlt _ _)::stack) ->
@@ -246,7 +258,7 @@ transition conf
           (heap, M Fail _, (PushAlt args m)::stack) ->
               Just (heap, M m args, stack)
 
-          (heap, M Fail _, MatchEnd::stack) ->
+          (heap, M Fail _, MatchEnd _::stack) ->
               Just (heap, E (Error (AST.stringLit "non-exaustive patterns")), [])
                   
           -- deal with alternatives
@@ -353,7 +365,6 @@ applyPrimitive1 op e
               compareOp (Char.isAlphaNum c)
           ("isDigit", Char c) ->
               compareOp (Char.isDigit c)
-          
           ("ord", Char c) ->
               Number (Char.toCode c)
           ("chr", Number n) ->
@@ -440,7 +451,7 @@ structuralCmpList args
           [(e1,e2)] ->
               BinaryOp "compare" e1 e2
           ((e1,e2)::rest) ->
-              Case (BinaryOp "compare" e1 e2)
+              AST.silentCase (BinaryOp "compare" e1 e2)
                   [ (ConsP "EQ" [], structuralCmpList rest)
                   , (VarP "c", Var "c")
                   ]
@@ -459,7 +470,7 @@ compareCons t1 t2
               compare t1 t2
 
 -- build a case over a comparision result
--- shortcircuiting the the scrutinee is known
+-- shortcircuiting the the scrutinee is knowno
 orderingCase : Expr -> Expr -> Expr -> Expr -> Expr
 orderingCase expr ltBranch eqBranch gtBranch
     = case expr of
@@ -472,7 +483,7 @@ orderingCase expr ltBranch eqBranch gtBranch
           Cons "GT" [] ->
               gtBranch
           _ ->
-              Case expr [ (ConsP "LT" [], ltBranch)
+              AST.silentCase expr [ (ConsP "LT" [], ltBranch)
                         , (ConsP "EQ" [], eqBranch)
                         , (ConsP "GT" [], gtBranch) ]
           
@@ -550,15 +561,12 @@ initializeHeap heap
                                            (Return (Cons ":" [Var "x",Var "y"])
                                                 Nothing)
                                       ))) 
-      , ("compare",
-             AST.lambda Nothing (Match (VarP "x")
-                                     (Match (VarP "y")
-                                          (Return (BinaryOp "compare" (Var "x") (Var "y")) Nothing))))
       ] ++
-      List.map infixOp [ "+", "-", "*", "<", ">", "<=", ">=", "div", "mod" ]
+      List.map infixOp [ "+", "-", "*", "<", ">", "<=", ">=",
+                             "div", "mod", "compare" ]
          ++
       List.map prefixOp ["negate", "ord", "chr", "toUpper", "toLower",
-                         "isLower", "isUpper", "isAlpha", "isAlphaNum"]
+                         "isLower", "isUpper", "isAlpha", "isDigit", "isAlphaNum"]
 
 
 prefixOp :  Name -> (Name, Expr)
@@ -584,43 +592,85 @@ start : Heap -> Expr -> Conf
 start heap0 expr
     = (initializeHeap heap0, E expr, [DeepEval])
 
+-- size expansion limit;
+-- this is used to prevent infinite evaluation
+sizeLimit : Int
+sizeLimit = 100
+      
 --            
 -- a labelled transition step ignoring silent transitions
---
-next : Conf -> Maybe (Conf, Info)
-next conf0
-    = nextAux 100 conf0
+-- 1st argument is the set of functions to skip 
+next : Set Name -> Conf -> Maybe (Conf, Info)
+next skipped conf0
+    = let size0 = confSize conf0
+      in 
+          nextAux skipped (size0 + sizeLimit) conf0
 
 -- worker function with an iteration limit
--- the first argument is limit counter for "silent" transitions
-nextAux :  Int -> Conf -> Maybe (Conf, Info)
-nextAux iters conf0
-    = if iters > 0 then
-          case transition conf0 of
+-- the 2nd argument is limit counter for "silent" transitions
+nextAux :  Set Name -> Int -> Conf -> Maybe (Conf, Info)
+nextAux skipped limit conf0
+    = if confSize conf0 < limit then
+          case transition skipped conf0 of
               Nothing ->
                   Nothing
               Just conf1 ->
-                  case justification conf0 of
+                  case justification skipped conf0 of
                       Just info ->
                           Just (conf1, info)
                       Nothing ->
-                          nextAux (iters-1) conf1
+                          nextAux skipped limit conf1
       else
-          Just (conf0, "cyclic definition?")
+          Just (conf0, "continue evaluation?")
 
                           
-                          
+
+
+-- size metric for a configuration
+confSize : Conf -> Int
+confSize (heap, control, stack)
+    = case control of
+          E expr ->
+              exprSize expr + stackSize stack
+          _ ->
+              stackSize stack
+              
+-- compute normal form expression sizes
+exprSize : Expr -> Int
+exprSize expr
+    = case expr of
+          Cons tag args ->
+              1 + List.sum (List.map exprSize args)
+          _ ->
+              1
+
+stackSize : Stack -> Int
+stackSize stk = List.sum (List.map contSize stk)
+
+contSize : Cont -> Int
+contSize cont
+    = case cont of
+          ContBinary _ expr ->
+              exprSize expr
+          RetBinary _ expr ->
+              exprSize expr
+          Continue expr _ ->
+              exprSize expr
+          _ ->
+              1
+
+              
 -- justification for a transition step 
-justification : Conf -> Maybe Info
-justification (heap, control, stack)
+justification : Set Name -> Conf -> Maybe Info
+justification skip (heap, control, stack)
     = case (control, stack) of
          (E v1, ((RetBinary op v2)::_)) ->
-             if isWhnf v1 then 
+             if isWhnf v1 && not (Set.member op skip) then 
                  Just ("primitive " ++ op)
              else
                  Nothing
          (E w, ((RetUnary op)::_)) ->
-             if isWhnf w then 
+             if isWhnf w && not (Set.member op skip) then 
                  Just ("primitive " ++ op)
              else
                  Nothing
@@ -631,13 +681,15 @@ justification (heap, control, stack)
              else
                  Nothing
 -}
-         (M (Return expr info) [], MatchEnd::_) ->
+         (M (Return expr info) [], MatchEnd Skipped::_) ->
+             Nothing
+         (M (Return expr info) [], MatchEnd NotSkipped::_) ->
              info
 
          (E (Error msg), _) ->
              Just "runtime error"
 
-         (M Fail _, MatchEnd::_) ->
+         (M Fail _, MatchEnd _::_) ->
              Just "pattern match failure"
 
          _ ->

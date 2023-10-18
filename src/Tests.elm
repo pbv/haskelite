@@ -1,8 +1,9 @@
 module Tests exposing (..)
 
 import AST exposing (Expr(..), Matching(..), Pattern(..))
-import Machine exposing (Conf, Control(..))
+import Machine exposing (Conf, Control(..), Cont(..))
 import Heap
+import Set
 
 --------------------------------------------------------------------
 -- examples for debugging 
@@ -15,9 +16,11 @@ transitions conf = transitions_ 0 conf
 transitions_ : Int -> Conf -> ()
 transitions_ n conf
     = let
-        _ = Debug.log (String.fromInt n) (Machine.getControl conf, Machine.getStack conf )
+        --_ = Debug.log (String.fromInt n) (Machine.getControl conf, Machine.getStack conf )
+        --_ = Debug.log "control" (Machine.getControl conf)
+        _ = Debug.log "stack" (Machine.getStack conf)
       in
-       case Machine.transition conf of
+       case Machine.transition Set.empty conf of
            Nothing ->
                ()
            Just conf1 ->
@@ -163,11 +166,19 @@ example10
 
 example11
     = (Heap.empty,
-           E (Case (InfixOp "==" (Number 1) (Number 2))
+           E (Case (BinaryOp "==" (Number 1) (Number 2))
                   [(ConsP "True" [], Number 42)]),
            
                       [])
 
+example12
+    = let heap = Heap.fromList [("xs", Cons ":" [Number 1, Var "xs"])]
+          control = E (Var "xs")
+          stack = [DeepEval]
+    in (heap, control, stack) 
+      
+           
+      
 
 {-
 -- extra debugging stuff                 

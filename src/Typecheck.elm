@@ -381,4 +381,5 @@ initialEnv
       , ("isDigit", TyFun tyChar tyBool)
       , ("isAlpha", TyFun tyChar tyBool)
       , ("isAlphaNum", TyFun tyChar tyBool)
+      , ("skip", TyFun a a)
       ]

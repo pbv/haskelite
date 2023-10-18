@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <head>
+    <link rel="stylesheet" href="screen.css">
+  </head>
+
+  <body>
+    <h1>Convert an integer into decimal</h1>
+    <p>Converting an integer into decimal using successive divisions and
+      an accumulator. <a href="index.html">Back</a></p>
+    <div id="haskelite"></div>
+    <script src="haskelite-min.js"></script>
+    <script>
+      var decls =
+	  "decimal :: Int -> String\n"+
+	  "decimal 0 = \"0\"\n"+
+	  "decimal n\n"+
+	  "   | n>0 = decimalAux n []\n\n"+
+	  "decimalAux :: Int -> String -> String\n"+
+	  "decimalAux n acc\n"+
+	  "   | n>0 = decimalAux (div n 10) (digit (mod n 10):acc)\n"+
+	  "   | otherwise = acc\n\n"+
+	  "digit :: Int -> Char\n"+
+	  "digit d = chr (ord '0' + d)\n"
+   
+      var app = Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression:"decimal 123", declarations: decls, skip: [] }
+      });
+    </script>
+    <hr>
+    Pedro Vasconcelos, 2023.
+  </body>
+</html>

@@ -300,3 +300,17 @@ translateCase e0 alts
                       Alt (Match patt (Return expr (Just "case"))) rest)
                    Fail alts
       in Arg e0 body
+
+-- smart constructor for a "silent" case expression
+-- i.e. no justification step
+silentCase : Expr -> List (Pattern,Expr) -> Expr
+silentCase e0 alts
+    = let
+        body = List.foldr
+                 (\(patt,expr) rest ->
+                      Alt (Match patt (Return expr Nothing)) rest)
+                   Fail alts
+      in Lam 0 Nothing (Arg e0 body)
+
+
+              

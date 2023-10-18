@@ -13,7 +13,9 @@
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
 	  flags: { expression:"sum (map square [1..5])",
-		   declarations: decls }
+		   declarations: decls,
+		   skip: []
+		 }
       });
     </script>
     <hr>

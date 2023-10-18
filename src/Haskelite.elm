@@ -15,6 +15,7 @@ import Pretty
 import Prelude
 
 import Dict
+import Set exposing (Set)
 
 import Html exposing (..)
 import Html.Attributes exposing (type_, class, value, style, placeholder, checked,
@@ -26,9 +27,9 @@ import Browser
 
 import List.Extra as List
 
-
-type alias Inputs 
-    = { expression:String, declarations:String }
+-- startup flags
+type alias Flags
+    = { expression:String, declarations:String, skip: List String }
 
 type Model
     = Editing EditModel            -- while editing
@@ -36,7 +37,7 @@ type Model
     | Panic String                 -- when initialization failed
 
 type alias EditModel
-    = { inputs : Inputs                  -- user inputs
+    = { flags : Flags                    -- user flags
       , parsed : Result String Program   -- result of parsing
       , prelude : Module                 -- prelude declarations
       }
@@ -50,8 +51,9 @@ type alias ReduceModel
     = { current : Step             -- current configuration
       , previous : List Step       -- list of previous steps
       , next : Maybe Step          -- optional next step
-      , inputs : Inputs            -- saved inputs (to go back to editing)
-      , options : Pretty.Options          -- displaying options
+      , flags : Flags              -- saved flags (to go back to editing)
+      , options : Pretty.Options   -- displaying options
+      , skip : Set Name            -- set of function names to skip
       }
 
    
@@ -62,7 +64,7 @@ type Msg
     | Reset              -- reset evaluation
     | EditMode           -- go into editing mode
     | EvalMode           -- go into evaluation mode
-    | Edit Inputs        -- modify inputs
+    | Edit Flags         -- modify flags
     | Toggle (Pretty.Options -> Pretty.Options) -- modify options
 
      
@@ -77,31 +79,31 @@ main =
 
         
 -- initializing the application
-init : Inputs -> (Model, Cmd msg)
-init inputs  = (initModel inputs, Cmd.none)
+init : Flags -> (Model, Cmd msg)
+init flags = (initModel flags, Cmd.none)
 
-initModel : Inputs -> Model
-initModel inputs
+initModel : Flags -> Model
+initModel flags
     = case Prelude.preludeResult of
           Err msg ->
               Panic msg
           Ok prelude ->  
               let
-                  result = parseAndTypecheck prelude inputs
+                  result = parseAndTypecheck prelude flags
               in
                   Editing
-                  { inputs = inputs
+                  { flags = flags
                   , parsed = result
                   , prelude = prelude
                   }
 
 -- parse and typecheck input expression and declararations
 -- the first argument is the prelude
-parseAndTypecheck : Module -> Inputs -> Result String Program
-parseAndTypecheck mod inputs
+parseAndTypecheck : Module -> Flags -> Result String Program
+parseAndTypecheck mod flags
     = let env0 = Typecheck.addModuleEnv mod Typecheck.initialEnv
       in 
-          HsParser.parseProgram inputs.expression inputs.declarations |>
+          HsParser.parseProgram flags.expression flags.declarations |>
           Result.andThen (\prog -> Typecheck.tcProgram env0 prog |>
           Result.andThen (\_ -> Ok prog))
         
@@ -121,13 +123,15 @@ panicView msg =
                      
 editingView : EditModel -> Html Msg
 editingView model =
+    let oldflags = model.flags
+    in 
     div [] [ span [] [
                   input [ placeholder "Enter an expression"
-                        , value model.inputs.expression
+                        , value model.flags.expression
                         , size 65
                         , spellcheck False
                         , class "editline"
-                        , onInput (\str -> Edit {expression=str,declarations=model.inputs.declarations})
+                        , onInput (\str -> Edit {oldflags | expression=str})
                         ]  []
                  , button
                       [ class "navbar", onClick EvalMode ]
@@ -135,16 +139,16 @@ editingView model =
                ]
            , br [] []
            , textarea [ placeholder "Enter function definitions"
-                      , value model.inputs.declarations
+                      , value model.flags.declarations
                       , rows 24
                       , cols 80
                       , spellcheck False
-                      , onInput (\str -> Edit {expression=model.inputs.expression,declarations=str})
+                      , onInput (\str -> Edit {oldflags | declarations=str})
                       ] []
            , br [] []
            , case model.parsed of
-                 Err msg -> if model.inputs.expression == "" &&
-                               model.inputs.declarations == "" then
+                 Err msg -> if model.flags.expression == "" &&
+                               model.flags.declarations == "" then
                                 span [] []
                              else
                                 span [class "error"] [text msg]
@@ -171,6 +175,7 @@ reduceView model =
     --              , checkbox model.options.prettyEnums
     --                   (Toggle toggleEnums) "Pretty-print enumerations"
                   ]
+        ,  skippedNames model.flags.skip
         -- fill the lines div in reverse order;
         -- the CSS enabled a custom flow direction to ensure the
         -- current line always visible when scrolling is needed
@@ -182,6 +187,17 @@ reduceView model =
                  List.map (renderStep model.options) model.previous
         ]
 
+skippedNames : List Name -> Html a
+skippedNames names
+    = case names of
+          [] ->
+              span [] []
+          _ ->
+              span [] [ text "Skipping: ",
+                          code [] <|
+                           List.intersperse (text " ") (List.map text names) ]
+          
+        
 
 checkbox : Bool -> msg -> String -> Html msg
 checkbox b msg name =
@@ -242,7 +258,7 @@ reduceUpdate msg model =
                     Reducing
                     { model
                         | current = new
-                        , next = Machine.next (Tuple.first new)
+                        , next = Machine.next model.skip (Tuple.first new)
                         , previous = model.current :: model.previous
                     }
                 Nothing ->
@@ -254,16 +270,16 @@ reduceUpdate msg model =
                     Reducing
                     { model
                         | current = start
-                        , next = Machine.next (Tuple.first start)
+                        , next = Machine.next Set.empty (Tuple.first start)
                         , previous = []
                     }
                 Nothing ->
                     Reducing model
         EditMode ->
-            initModel model.inputs
+            initModel model.flags
             
         Toggle f ->
-            Reducing { model | options = f model.options}
+            Reducing {model | options = f model.options}
 
         _ ->
             Reducing model
@@ -277,23 +293,25 @@ reduceUpdate msg model =
 editUpdate : Msg -> EditModel -> Model 
 editUpdate msg model =
     case msg of
-        Edit inputs ->
-            let result = HsParser.parseProgram inputs.expression inputs.declarations
+        Edit flags ->
+            let result = HsParser.parseProgram flags.expression flags.declarations
             in
-                Editing { model | inputs=inputs, parsed=result }
+                Editing { model | flags=flags, parsed=result }
         
         EvalMode ->
-            case parseAndTypecheck model.prelude model.inputs of
+            case parseAndTypecheck model.prelude model.flags of
                 Ok (LetProg mod expr) ->
                     let
                         heap0 = Heap.fromBinds (model.prelude.binds ++ mod.binds)
                         conf0 = Machine.start heap0 expr
+                        skipSet = Set.fromList model.flags.skip 
                     in Reducing
                         { current = (conf0, "initial expression")
-                        , next = Machine.next conf0
+                        , next = Machine.next skipSet conf0
                         , previous = []
-                        , inputs = model.inputs
+                        , flags = model.flags
                         , options = Pretty.defaultOpts
+                        , skip = skipSet
                         }
                 Err msg1 ->
                     Editing {model | parsed = Err msg1}

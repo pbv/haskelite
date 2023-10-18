@@ -21,7 +21,10 @@
 	  "                | otherwise = y:insert x ys\n";
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
-	  flags: { expression:"insert 3 [1,2,2,5,6]", declarations: decls }
+	  flags: { expression:"insert 3 [1,2,2,5,6]",
+		   declarations: decls,
+		   skip: []
+		 }
       });
     </script>
     <hr>

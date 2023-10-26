@@ -35,8 +35,8 @@ guards; recursive definitions.</p>
 Definitions for the following functions from the Standard Prelude are
 provided.  Note that functions based on equality or ordering have an
 overly polymorphic type (they should really have a typeclass
-restriction); they can "get stuck" at runtime if you apply
-them to values of wrong types.
+restriction); they will fail at runtime if you apply
+them to function values.
 
 <pre>
 even, odd :: Int -> Bool
@@ -68,6 +68,9 @@ zip :: [a] -> [b] -> [(a,b)]
 zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
 takeWhile, dropWhile :: (a -> Bool) -> [a] -> [a]
 any, all :: (a -> Bool) -> [a] -> Bool
+chr :: Int -> Char
+ord :: Char -> Int
+isAlpha, isDigit, isAlphaNum, isUpper, isLower :: Char -> Bool    
 </pre>
 
 <h2>Not implemented</h2>
@@ -75,6 +78,7 @@ any, all :: (a -> Bool) -> [a] -> Bool
 The following Haskell 98 features are <em>not</em> implemented:
 
 <ul>
+<li>where clauses
 <li>modules
 <li>type classes
 <li>the numeric tower (Float, Integer, Double, etc.)

@@ -919,33 +919,6 @@ upperIdentifier
       , reserved = Set.empty
       }
 
--- a string literal
--- handles only some escaped chars
-{-
-litString : Parser String
-litString
-    = succeed escapeChars
-         |. symbol "\""
-         |= Parser.getChompedString (Parser.chompWhile (\c->c/='\"'))
-         |. symbol "\""
--}
-{-
-escapeChars : String -> String
-escapeChars =
-    String.replace "\\n" "\n" >>
-    String.replace "\\t" "\t" >>
-    String.replace "\\\\" "\\"
--}            
-{-
-litCharacter : Parser Char
-litCharacter
-    = (succeed escapeChars
-         |. symbol "'"
-         |= Parser.getChompedString (Parser.chompWhile (\c -> c /= '\''))
-         |. symbol "'")
-      |> Parser.andThen checkCharLiteral
--}
-
 charLiteral : Parser Char
 charLiteral 
     = succeed identity
@@ -994,33 +967,6 @@ getChompedChar p
                          _ -> problem "character literal")
       
 
-{-          
-checkCharLiteral : String -> Parser Char
-checkCharLiteral s
-    = case String.uncons s of
-          Just ('\\', rest) ->
-              unescapeChar rest
-          Just (c, "") ->
-              succeed c
-          _ ->
-              problem "character literal"
--}
-{-                  
-unescapeChar : String -> Parser Char
-unescapeChar str
-    = case str of
-          "n" ->
-              succeed '\n'
-          "t" ->
-              succeed '\t'
-          "\\" ->
-              succeed '\\'
-          _ -> case String.toInt str of
-                   Just c ->
-                       succeed (Char.fromCode c)
-                   Nothing ->
-                       problem "character code"
--}
 
                   
 reservedWords : Set String    
@@ -1125,55 +1071,4 @@ problemToString prob
           _ -> "?"
       
 
-{-
------------------------------------------------------
--- examples for debugging 
 
-example1 : String
-example1 =
-    """
-len :: [a] -> Int
-len [] = 0
-len (x:xs) = 1 + len xs
-
-zip [] _ = [] 
-zip _ [] = [] 
-zip (x:xs) (y:ys) = (x,y) : zip xs ys 
-"""
-
-example2 =
-    """
-[] ++ ys = ys
-(x:xs) ++ ys = x : (xs++ys)
-"""
-   
-example3 =
-   """
-foo x | x==0 = 42
-      | x==1 = 1+x
-      | x==2 = 2*x
-      | otherwise = 0
-"""
-
-example4 = """
-fact n | n>0 = n*fact (n-1)
-       | otherwise = 1
-"""
- 
-example5 = """
-enumFrom :: Int -> [Int]
-enumFrom !n = n : enumFrom (n+1)
-"""   
-
-example6 = """case xs of
- [] -> 1
- (a:b) -> 2
-"""
-
--}   
-
-example7 = """
-data Maybe a = Nothing  | Just a
-
-data Either a b = Left a | Right b
-"""

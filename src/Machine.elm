@@ -141,18 +141,8 @@ transition skipped conf
 
           -- case expressions
           (heap, E (Case e1 alts), stack) ->
-              if isVar e1 || isWhnf e1 then
-                  -- no indirection needed
-                  Just (heap, M (AST.translateCase e1 alts) [],
-                            MatchEnd NotSkipped::stack)
-              else
-                  -- create an indirection
-                  let
-                      (loc, heap1) = Heap.newIndirection heap e1
-                  in
-                      Just (heap1, M (AST.translateCase (Var loc) alts) [],
-                                MatchEnd NotSkipped::stack)
-                               
+              Just (heap, M (AST.translateCase e1 alts) [],
+                        MatchEnd NotSkipped::stack)                              
                       
           -- if-then-else
           (heap, E (IfThenElse e1 e2 e3), stack) ->

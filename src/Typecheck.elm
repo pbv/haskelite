@@ -144,6 +144,10 @@ tcMatching env match ty
               tcMatching env m1 ty |>
               andThen (\_ -> tcMatching env m2 ty)
 
+          Where binds m2 ->
+              tcRecBind env binds |>
+              andThen  (\env1 -> tcMatching env1 m2 ty)
+
                   
 
 

@@ -47,6 +47,7 @@ type Matching
     | Match Pattern Matching        -- match a pattern
     | Arg Expr Matching             -- argument supply
     | Alt Matching Matching         -- alternative
+    | Where (List Bind) Matching    -- where clause
 
 
 -- * patterns      
@@ -105,11 +106,11 @@ applySubst s e
               Lam arity optname (applyMatchSubst s m)
 
           Let binds e0 ->
-              let s1 = restrictSubst (List.map .name binds) s
+              let
+                  s1 = restrictSubst (List.map .name binds) s
                   binds1 = applyBindsSubst s1 binds
-                  e1 = applySubst s1 e0
               in
-                  Let binds1 e1
+                  Let binds1 (applySubst s1 e0)
 
           Case e0 alts ->
               let e1 = applySubst s e0
@@ -156,6 +157,13 @@ applyMatchSubst s m
 
           Alt m1 m2 ->
               Alt (applyMatchSubst s m1) (applyMatchSubst s m2)
+
+          Where binds m2 ->
+              let
+                  s1 = restrictSubst (List.map .name binds) s
+                  binds1= applyBindsSubst s1 binds
+              in
+                  Where binds1 (applyMatchSubst s1 m2)
               
 applyAltsSubst : Subst -> List (Pattern,Expr) -> List (Pattern,Expr)
 applyAltsSubst s 
@@ -208,6 +216,9 @@ matchingArity m
               -- assumes both arities are equal, i.e.
               -- matching is well formed
 
+          Where _ m2 ->
+              matchingArity m2
+
 
 -- check that a matching is well formed, i.e.
 -- all branches of alternatives have identical arities
@@ -233,6 +244,9 @@ matchingWellformed m
               Maybe.andThen (\a1 -> matchingWellformed m2 |>
               Maybe.andThen (\a2 -> if a1==a2 then Just a1 else Nothing))
               -- both arities should be equal
+
+          Where _ m2 ->
+              matchingWellformed m2
                
                   
 isOperator : Name -> Bool

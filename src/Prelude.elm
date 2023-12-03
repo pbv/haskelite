@@ -133,11 +133,13 @@ concat [] = []
 concat (xs:xss) = xs ++ concat xss
 
 repeat :: a -> [a]
-repeat x = let xs = x:xs in xs
+repeat x = let xs = x:xs 
+           in xs
 
 cycle :: [a] -> [a]
 cycle [] = error "cycle: empty list"
-cycle xs = let xs' = xs++xs' in xs'
+cycle xs = let xs' = xs++xs' 
+           in xs'
 
 iterate :: (a -> a) -> a -> [a]
 iterate f x = x : iterate f (f x)

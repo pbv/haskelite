@@ -259,6 +259,13 @@ transition skipped conf
           (heap, M (Arg e m1) args, stack) ->
               Just (heap, M m1 (e::args), stack)
 
+          -- deal with where bindings
+          (heap, M (Where binds m1) args, stack) ->
+              let
+                  (s, heap1) = Heap.newBindings heap binds
+              in
+                  Just (heap1, M (AST.applyMatchSubst s m1) args, stack)
+
                   
           -- deep evaluation
           -- NB: this does not preserve sharing

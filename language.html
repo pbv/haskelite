@@ -13,14 +13,16 @@
 <h2>Expressions</h2>
 
 <p>Integers, characters, strings (i.e. lists of characters),
-variables, arithmetic operations (+, -, *, div, mod),
-comparisons (==, <=, etc.), tuples, lists, enumerations
-(e.g. [1..10]), lambda-expressions, let bindings, case expressions.</p>
+variables, arithmetic operations (+, -, *, div, mod), comparisons (==,
+<=, etc.), tuples, lists, enumerations (e.g. [1..10]),
+lambda-expressions, let and where local bindings, case
+expressions.</p>
 
 
 <h2>Data type definitions</h2>
-<p> Haskell-98 like <code>data</code> declarations; no existentials or GADTs;
- no <code>deriving</code> (because there are no typeclasses)!</p>
+<p> Haskell-98 like <code>data</code> declarations; no record syntax,
+ existentials or GADTs; no <code>deriving</code> (because there are no
+ typeclasses)!</p>
 
 <p>Currently all data declarations must come <em>before</em> any function
  definitions.</p>
@@ -78,11 +80,11 @@ isAlpha, isDigit, isAlphaNum, isUpper, isLower :: Char -> Bool
 The following Haskell 98 features are <em>not</em> implemented:
 
 <ul>
-<li>where clauses
 <li>modules
 <li>type classes
+<li>record syntax
 <li>the numeric tower (Float, Integer, Double, etc.)
-<li>list compreensions
+<li>list comprehensions
 </ul>
 
 <hr>

@@ -21,7 +21,7 @@
 	  "-- evaluate an expression\n"+
           "eval :: Expr -> [(Char,Int)] -> Int\n"+
 	  "eval (Var x) assocs = case lookup x assocs of\n"+
-	  "                           (Just v) -> v;\n"+
+	  "                           Just v -> v\n"+
 	  "                           Nothing -> error \"unknown variable\"\n"+
 	  "eval (Num v) assocs = v\n"+
 	  "eval (Binop op e1 e2) assocs = apply op (eval e1 assocs) (eval e2 assocs)\n\n"+

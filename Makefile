@@ -1,6 +1,6 @@
 
 
-SRC = src/AST.elm src/HsParser.elm src/Haskelite.elm src/Pretty.elm src/Machine.elm src/Heap.elm src/Context.elm src/Prelude.elm src/Types.elm src/Typecheck.elm src/Unify.elm src/Tc.elm
+SRC = src/AST.elm src/HsParser.elm src/Indent.elm src/Haskelite.elm src/Pretty.elm src/Machine.elm src/Heap.elm src/Context.elm src/Prelude.elm src/Types.elm src/Typecheck.elm src/Unify.elm src/Tc.elm
 
 JS = haskelite.js
 

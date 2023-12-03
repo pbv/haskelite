@@ -9,6 +9,7 @@ import Parser exposing (Parser,
                         symbol, keyword, variable,
                         succeed, problem, oneOf, andThen,
                         backtrackable, lazy)
+import Indent 
 import AST exposing (Expr(..),
                      Matching(..),
                      Pattern(..),
@@ -20,8 +21,6 @@ import Set exposing (Set)
 import Dict exposing (Dict)
 import List.Extra as List
 
-
-
 parseProgram : String -> String -> Result String Program
 parseProgram inputExpr inputDecls
     = Result.mapError deadEndsToString <|
@@ -30,8 +29,6 @@ parseProgram inputExpr inputDecls
                             Parser.run toplevelModule inputDecls |>
                             Result.andThen (\mod -> Ok (LetProg mod expr))))
 
-
-
 ----------------------------------------------------------------
 -- modules and declarations
 ----------------------------------------------------------------
@@ -39,61 +36,75 @@ parseProgram inputExpr inputDecls
 toplevelModule : Parser Module
 toplevelModule
     = dataDeclarations |>
-      andThen (\ddecls -> (succeed (collectBinds True)
-                             |= declList
-                             |. Parser.end) |>
-                             andThen (\binds ->  checkBinds binds |>
-                             andThen (\_ -> succeed { dataDecls = ddecls
-                                                    , binds = binds })))
+      andThen (\ddecls -> (succeed (collectBinds recordNames)
+                             |= topDeclList
+                             |. Parser.end)
+              |> andThen (\binds ->  case checkBinds binds of
+                                         Err msg ->
+                                             problem msg
+                                         Ok _ ->
+                                             succeed { dataDecls = ddecls
+                                                     , binds = binds
+                                                     }))
+
 
 -- check arities of a list of bindings
-checkBinds : List Bind -> Parser ()
+checkBinds : List Bind -> Result String ()
 checkBinds binds 
     = case binds of
           [] ->
-              succeed ()
+              Ok ()
           (first::rest) ->
               checkBind first |>
-              andThen (\_ -> checkBinds rest)
+              Result.andThen (\_ -> checkBinds rest)
 
-checkBind : Bind -> Parser ()
+checkBind : Bind -> Result String ()
 checkBind bind
     = case bind.expr of
           Lam _ _ m ->
               case AST.matchingWellformed m of
                   Just _ ->
-                      succeed ()
+                      Ok ()
                   Nothing ->
-                      problem ("equations for " ++ bind.name ++
-                               " have different number of arguments")
+                      Err ("equations for " ++ bind.name ++
+                               " to have equal number of arguments")
           _ ->
-              succeed ()
-                              
+              Ok ()
           
+-- should we record names of bindings?
+type alias Naming
+    = Name -> Maybe Name
+
+recordNames : Naming
+recordNames
+    = Just
+
+ignoreNames : Naming
+ignoreNames
+    = always Nothing
+              
 -- collect declarations by identifier and make single bindings
--- first argument is True if we want to record the name for
--- each binding in the lambda 
-collectBinds : Bool -> List Decl -> List Bind
-collectBinds named decls
-    = List.map (makeBind named) <|
+collectBinds : Naming -> List Decl -> List Bind
+collectBinds naming decls
+    = List.map (makeBind naming) <|
       List.groupWhile (\d1 d2 -> AST.declName d1 == AST.declName d2) decls
 
-makeBind : Bool -> (Decl, List Decl) -> Bind
-makeBind named pair =
+makeBind : Naming -> (Decl, List Decl) -> Bind
+makeBind naming pair =
     case pair of
         (TypeSig id ty, rest) ->
             let m = collectAlts rest
             in 
             { name = id,
               typeSig = Just ty,
-              expr = AST.lambda (if named then Just id else Nothing) m
+              expr = AST.lambda (naming id) m
             }
         (Equation id match, rest) ->
             let m = collectAlts (Equation id match::rest)
             in 
             { name = id,
               typeSig = Nothing,
-              expr = AST.lambda (if named then Just id else Nothing) m
+              expr = AST.lambda (naming id) m
             }
             
 
@@ -109,28 +120,38 @@ joinDecl decl match1
               joinAlt match2 match1
 
              
-             
-declList : Parser (List Decl)
-declList
+-- toplevel declarations
+topDeclList : Parser (List Decl)
+topDeclList
     = Parser.sequence
       { start = ""
       , end = ""
       , separator = ""
       , spaces = whitespaceOrComment
       , item = declaration
-      , trailing = Parser.Mandatory
+      , trailing = Parser.Forbidden
       }
 
 
+-- local indented declarations
+indentedDeclList : Parser (List Decl)
+indentedDeclList
+    = Indent.list declaration "indented binding"
+      |> andThen (\decls -> if List.isEmpty decls then
+                                problem "non-empty bindings"
+                            else
+                                succeed decls)
 
--- single declaration    
+ 
+    
+-- parse a single declaration    
 declaration : Parser Decl
 declaration
     = oneOf
       [ backtrackable typeSignature
       , backtrackable infixEquation 
       , prefixEquation
-      ]  
+      ]
 
 ------------------------------------------------------------    
 -- data type declarations
@@ -163,7 +184,7 @@ makeDataDecl tyresult alts
     = let
         tyalts = List.map (\(con, tyargs) -> (con, makeArrows tyresult tyargs)) alts
       in
-          Data tyresult tyalts
+        Data tyresult tyalts
 
 makeArrows : Type -> List Type -> Type
 makeArrows tyresult ts
@@ -174,16 +195,20 @@ dataLHS
     = succeed (\c vs -> TyConst c (List.map TyVar vs))
           |= upperIdentifier
           |. spaces
-          |=  (Parser.sequence
-              { start = ""
-              , end = ""
-              , separator = ""
-              , spaces = spaces
-              , item = identifier
-              , trailing = Parser.Forbidden
-              } |> andThen (ensure List.allDifferent
-                               "type variables to be distinct"))
+          |=  (identifiers |>
+                   andThen (ensure List.allDifferent "distinct type variables"))
 
+-- a sequence of identifiers separated by spaces
+identifiers : Parser (List Name)
+identifiers =
+    Parser.sequence
+    { start = ""
+    , end = ""
+    , separator = ""
+    , spaces = spaces
+    , item = identifier
+    , trailing = Parser.Forbidden
+    }
 
             
        
@@ -213,22 +238,29 @@ dataAlternative
              }
 
 ---------------------------------------------------------------------
-
 prefixEquation : Parser Decl
 prefixEquation
     = getParseChomped_ equationLHS |>
-      andThen (\((id,patts),prefix) ->
-                   equationAlts |>
-                   andThen
-                   (\alts ->
-                        case alts of
-                            [] ->
-                                succeed (\(expr,posfix) ->
-                                             Equation id (makeSimpleMatching patts expr (prefix++posfix)))
-                                   |= getParseChomped_ equationRHS
-                            _ ->
-                                succeed (Equation id (makeGuardMatching patts prefix alts))))
-    
+      andThen (\((name,patts), prefix) ->
+          succeed (makeEquation name patts)
+              |= equationAlts prefix
+              |. whitespace
+              |= whereBindings)
+
+-- helper function to construct an equation 
+makeEquation : Name -> List Pattern -> List Matching -> List Bind -> Decl
+makeEquation name patts alts binds
+    = Equation name (makePatterns patts (makeBindings binds (joinAlts alts)))
+                      
+whereBindings : Parser (List Bind)
+whereBindings
+    = oneOf
+      [ succeed identity
+          |. keyword "where"
+          |= lazy (\_ -> bindings)
+      , succeed []
+      ]
+                 
 
 infixEquation : Parser Decl
 infixEquation
@@ -260,23 +292,20 @@ equationLHS
          |. spaces
          |= (patternSeq "" "" "" 
             |> andThen
-               (ensure distinctPatterns
-                    "pattern variables should be distinct"))
+               (ensure distinctPatterns "distinct pattern variables"))
 
 
--- alternative
--- i.e. list of guards and expressions (possibly empty)
-equationAlts : Parser (List ((Expr,Expr), String))
-equationAlts
-    = Parser.sequence
-      { start = ""
-      , end = ""
-      , separator = ""
-      , spaces = whitespaceOrComment
-      , item = getParseChomped_ guardedExpr
-      , trailing = Parser.Mandatory
-      }
-
+-- equation alternatives
+-- i.e. list of guards and expressions or a single return expression
+equationAlts : String -> Parser (List Matching)
+equationAlts prefix
+    = oneOf
+      [ Indent.list (equationGuard prefix) "indented guard"
+             |> andThen (ensure (List.isEmpty >> not) "alternative")
+      , succeed (\(expr,info) -> [Return expr (Just (prefix++info))])
+           |= getParseChomped_ equationRHS
+      ]
+  
 equationRHS : Parser Expr
 equationRHS
     = succeed identity
@@ -284,10 +313,16 @@ equationRHS
            |. operator "="
            |. spaces
            |= topExpr   
-    
--- a guard and an expression,
--- i.e. "|" cond "=" expr
-guardedExpr : Parser (Expr, Expr)    
+
+
+-- an equation guard,
+-- i.e. "| cond = expr"
+equationGuard :  String -> Parser Matching
+equationGuard prefix 
+    = succeed (\ ((e1,e2), info) -> makeGuard e1 e2 (prefix++info))
+         |= getParseChomped_ guardedExpr
+              
+guardedExpr : Parser (Expr, Expr)
 guardedExpr
     = succeed Tuple.pair
           |. operator "|"
@@ -298,32 +333,14 @@ guardedExpr
           |. spaces
           |= topExpr
 
-makeGuardEquation : Name -> Matching -> Parser Decl
-makeGuardEquation id match
-    = case AST.matchingWellformed match of
-          Just _ ->
-              succeed (Equation id match)
-          Nothing ->
-              problem ("equations for " ++ id ++
-                           " with different number arguments")
-             
 
-makeSimpleMatching : List Pattern -> Expr -> String -> Matching
-makeSimpleMatching patts expr info
-    = makeMatching patts (Return expr (Just info))
-
-makeGuardMatching : List Pattern
-                  -> String
-                  -> List ((Expr,Expr),String)
-                  -> Matching      
-makeGuardMatching patts prefix alts
-    =  joinAlts <|
-       List.map (\((guard,expr),posfix) ->
-                     makeMatching patts (makeGuard guard
-                                             expr (prefix++posfix))
-                ) alts
-
-
+makeBindings : List Bind -> Matching -> Matching
+makeBindings binds match
+    = case binds of
+          [] ->
+              match
+          _ ->
+              Where binds match
 
 makeGuard : Expr -> Expr -> String -> Matching
 makeGuard guard expr info
@@ -526,6 +543,18 @@ pattern =
             |. symbol ")"   
     ]
 
+-- non-delimited pattern   
+pattern_ : Parser Pattern
+pattern_ = 
+    oneOf
+    [ succeed ConsP
+        |= upperIdentifier
+        |. spaces
+        |= patternSeq "" "" ""
+    , pattern
+    ]
+
+    
 consPattern : List Pattern -> Pattern
 consPattern l =
     case List.unconsLast l of
@@ -807,7 +836,8 @@ lambdaExpr
 lambdaExprAux : Parser (String -> Expr)  
 lambdaExprAux
     = succeed (\patts expr info ->
-                   AST.lambda Nothing (makeMatching patts (Return expr (Just info))))
+                   AST.lambda Nothing
+                       (makePatterns patts (Return expr (Just info))))
          |. symbol "\\"
          |. spaces
          |= patternSeq "" "" ""
@@ -815,8 +845,9 @@ lambdaExprAux
          |. spaces
          |= lazy (\_ -> topExpr)
 
-makeMatching : List Pattern -> Matching -> Matching
-makeMatching ps end
+-- add a list of patterns to a matching 
+makePatterns : List Pattern -> Matching -> Matching
+makePatterns ps end
     = List.foldr Match end ps
 
 
@@ -824,7 +855,7 @@ letExpr : Parser Expr
 letExpr
     = succeed Let
          |. keyword "let"
-         |. spaces
+         -- |. spaces
          |= lazy (\_ -> bindings)
          |. spaces
          |. keyword "in"
@@ -840,40 +871,41 @@ caseExpr
          |= lazy (\_ -> topExpr)
          |. spaces
          |. keyword "of"
-         |. whitespace
-         |= caseAlts   
-           
+         -- |. whitespace
+         |= caseAlts
+
 caseAlts : Parser (List (Pattern,Expr))
 caseAlts
-    = Parser.sequence
-      { start = ""
-      , separator = ";"
-      , end = ""
-      , spaces = whitespaceOrComment
-      , item  = caseAlt
-      , trailing = Parser.Forbidden
-      }
+    = Indent.list caseAlt "indented case alternative"
+      |> andThen (\alts -> if List.isEmpty alts then
+                               problem "non-empty case alternatives"
+                           else
+                               succeed alts)
+           
 
 caseAlt : Parser (Pattern, Expr)
 caseAlt
     = succeed Tuple.pair
-         |= pattern
+         |= pattern_
          |. spaces   
          |. symbol "->"
          |. spaces
          |= lazy (\_ -> topExpr)
             
     
-            
+-- a sequence of indented bindings
 bindings : Parser (List Bind)
 bindings
-    = (succeed (collectBinds False)
-         |= declList) |>
-      andThen (\binds -> checkBinds binds |>
-      andThen (\_ -> succeed binds))                   
+    = succeed (collectBinds ignoreNames)
+         |= indentedDeclList 
+      |> andThen (\binds -> case checkBinds binds of
+                                Err msg ->
+                                    problem msg
+                                Ok _ ->
+                                    succeed binds)
 
             
-if_then_else : Parser Expr                
+if_then_else : Parser Expr       
 if_then_else
     = succeed IfThenElse
          |. keyword "if"
@@ -991,7 +1023,7 @@ whitespace : Parser ()
 whitespace    
     = Parser.chompWhile (\c -> c==' ' || c=='\t' || c=='\n' || c=='\r')
 
--- just space (no newlines)
+-- just spaces and tabulations (no newlines)
 spaces : Parser ()
 spaces
     = Parser.chompWhile (\c -> c==' ' || c=='\t')
@@ -999,6 +1031,7 @@ spaces
 ----------------------------------------------------------------------      
 -- helper functions
 ----------------------------------------------------------------------
+
 -- convert a string into an AST expression (list of chars)
 stringToList : String -> Expr
 stringToList s
@@ -1022,8 +1055,6 @@ getParseChomped_ parser
         |= parser
         |= Parser.getOffset
         |= Parser.getSource
-
-
 
 
 ifProgress : Parser a -> Int -> Parser (Parser.Step Int ())

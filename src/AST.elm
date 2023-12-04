@@ -8,15 +8,15 @@ import Types exposing (Type(..), Tycon)
 import Dict exposing (Dict)
 import Maybe
 
--- variables
+-- * variables (terms and types)
 type alias Name
     = String
 
--- constructor tags      
+-- * constructor tags      
 type alias Tag
     = String
 
--- information associated with a successful match
+-- * information associated with a successful match
 type alias Info
     = String     
       
@@ -47,7 +47,7 @@ type Matching
     | Match Pattern Matching        -- match a pattern
     | Arg Expr Matching             -- argument supply
     | Alt Matching Matching         -- alternative
-    | Where (List Bind) Matching    -- where clause
+    | Where (List Bind) Matching    -- local bindings; can be recursive
 
 
 -- * patterns      
@@ -62,11 +62,9 @@ type Pattern
       
 -- * declarations      
 type Decl
-    = TypeSig Name Type
-    | Equation Name Matching
-
-type Data
-    = Data Type (List (Tag,Type))  -- alternatives in GADT-style
+    = TypeSig Name Type            -- type signature
+    | Equation Name Matching       -- a single equation
+    | Data Type (List (Tag,Type))  -- data alternatives in GADT-style
 
 -- * bindings
 type alias Bind
@@ -74,7 +72,7 @@ type alias Bind
 
 -- * modules
 type alias Module
-    = { dataDecls : List Data, binds : List Bind }
+    = { dataDecls : List Decl, binds : List Bind }
       
 -- * programs
 type Program
@@ -84,14 +82,16 @@ type Program
 type alias Subst
     = Dict Name Expr
       
--- get the names of terms associated with a declaration      
-declName : Decl -> Name
+-- get the identifier associated with a declaration      
+declName : Decl -> Maybe Name
 declName decl
     = case decl of
           TypeSig name _ ->
-              name
+              Just name
           Equation name _ ->
-              name
+              Just name
+          _ ->
+              Nothing
               
 -- apply substitution to an expression
 applySubst : Subst -> Expr -> Expr
@@ -164,7 +164,8 @@ applyMatchSubst s m
                   binds1= applyBindsSubst s1 binds
               in
                   Where binds1 (applyMatchSubst s1 m2)
-              
+
+                      
 applyAltsSubst : Subst -> List (Pattern,Expr) -> List (Pattern,Expr)
 applyAltsSubst s 
     = List.map (\(patt,expr) -> let s1 = restrictSubst (patternVars patt) s

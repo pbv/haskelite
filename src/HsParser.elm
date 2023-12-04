@@ -13,7 +13,7 @@ import Indent
 import AST exposing (Expr(..),
                      Matching(..),
                      Pattern(..),
-                     Decl(..), Data(..), Bind, Module, Program(..),
+                     Decl(..), Bind, Module, Program(..),
                      Name, Info)
 import Types exposing (Type(..), Tycon, tyInt, tyBool, tyChar, tyConst)
 import Char
@@ -35,20 +35,18 @@ parseProgram inputExpr inputDecls
 
 toplevelModule : Parser Module
 toplevelModule
-    = dataDeclarations |>
-      andThen (\ddecls -> (succeed (collectBinds recordNames)
-                             |= topDeclList
-                             |. Parser.end)
-              |> andThen (\binds ->  case checkBinds binds of
-                                         Err msg ->
-                                             problem msg
-                                         Ok _ ->
-                                             succeed { dataDecls = ddecls
-                                                     , binds = binds
-                                                     }))
+    = succeed (collectDeclarations recordNames)
+                 |= topDeclList
+                 |. Parser.end
+      |> andThen (\mod ->
+                      case checkBinds mod.binds of
+                          Err msg ->
+                              problem msg
+                          Ok _ ->
+                              succeed mod)
 
 
--- check arities of a list of bindings
+-- check consistent number arguments in bindings
 checkBinds : List Bind -> Result String ()
 checkBinds binds 
     = case binds of
@@ -83,29 +81,47 @@ ignoreNames : Naming
 ignoreNames
     = always Nothing
               
--- collect declarations by identifier and make single bindings
+-- collect toplevel declarations by identifier and make single bindings
+collectDeclarations : Naming -> List Decl -> Module
+collectDeclarations naming decls
+    = let
+        ddecls = List.filter checkData decls
+        binds = collectBinds naming decls
+    in { dataDecls = ddecls, binds = binds }
+
+
 collectBinds : Naming -> List Decl -> List Bind
 collectBinds naming decls
-    = List.map (makeBind naming) <|
-      List.groupWhile (\d1 d2 -> AST.declName d1 == AST.declName d2) decls
+    = List.filterMap (makeBind naming) <|
+      List.groupWhile (\d1 d2 -> AST.declName d1==AST.declName d2) decls
 
-makeBind : Naming -> (Decl, List Decl) -> Bind
+
+              
+checkData : Decl -> Bool
+checkData decl
+    = case decl of
+          Data _ _ -> True
+          _ -> False
+          
+makeBind : Naming -> (Decl, List Decl) -> Maybe Bind
 makeBind naming pair =
     case pair of
         (TypeSig id ty, rest) ->
             let m = collectAlts rest
             in 
-            { name = id,
-              typeSig = Just ty,
-              expr = AST.lambda (naming id) m
-            }
+            Just { name = id,
+                   typeSig = Just ty,
+                   expr = AST.lambda (naming id) m
+                 }
         (Equation id match, rest) ->
             let m = collectAlts (Equation id match::rest)
             in 
-            { name = id,
-              typeSig = Nothing,
-              expr = AST.lambda (naming id) m
-            }
+            Just { name = id,
+                   typeSig = Nothing,
+                   expr = AST.lambda (naming id) m
+                 }
+        _ ->
+            Nothing
             
 
 collectAlts : List Decl -> Matching
@@ -114,13 +130,13 @@ collectAlts = List.foldr joinDecl Fail
 joinDecl : Decl -> Matching -> Matching    
 joinDecl decl match1
     = case decl of
-          TypeSig _ _ ->
-              match1
           Equation _ match2 ->
               joinAlt match2 match1
+          _ ->
+              match1
 
              
--- toplevel declarations
+-- a sequence of toplevel declarations
 topDeclList : Parser (List Decl)
 topDeclList
     = Parser.sequence
@@ -128,12 +144,11 @@ topDeclList
       , end = ""
       , separator = ""
       , spaces = whitespaceOrComment
-      , item = declaration
+      , item = topDeclaration
       , trailing = Parser.Forbidden
       }
 
-
--- local indented declarations
+-- indented local declarations
 indentedDeclList : Parser (List Decl)
 indentedDeclList
     = Indent.list declaration "indented binding"
@@ -141,10 +156,18 @@ indentedDeclList
                                 problem "non-empty bindings"
                             else
                                 succeed decls)
-
- 
     
--- parse a single declaration    
+-- a single top-level declaration
+topDeclaration : Parser Decl
+topDeclaration
+    = oneOf
+      [ dataDeclaration
+      , backtrackable typeSignature
+      , backtrackable infixEquation 
+      , prefixEquation
+      ]
+
+-- local declarations; type declarations not allowed
 declaration : Parser Decl
 declaration
     = oneOf
@@ -156,19 +179,7 @@ declaration
 ------------------------------------------------------------    
 -- data type declarations
 ------------------------------------------------------------
-dataDeclarations : Parser (List Data)
-dataDeclarations
-    = Parser.sequence
-      { start = ""
-      , end = ""
-      , separator = ""
-      , spaces = whitespaceOrComment
-      , item  = dataDeclaration
-      , trailing = Parser.Forbidden
-      }
-
-
-dataDeclaration : Parser Data
+dataDeclaration : Parser Decl
 dataDeclaration
     = succeed makeDataDecl
          |. keyword "data"
@@ -179,7 +190,7 @@ dataDeclaration
          |. spaces
          |= dataAlternatives
 
-makeDataDecl : Type -> List (Name, List Type) -> Data
+makeDataDecl : Type -> List (Name, List Type) -> Decl
 makeDataDecl tyresult alts
     = let
         tyalts = List.map (\(con, tyargs) -> (con, makeArrows tyresult tyargs)) alts

@@ -17,15 +17,17 @@ variables, arithmetic operations (+, -, *, div, mod), comparisons (==,
 <=, etc.), tuples, lists, enumerations (e.g. [1..10]),
 lambda-expressions, let and where local bindings, case
 expressions.</p>
+<p>Let and where bindings can only define single variables, not patterns.</p>
 
-
+       
 <h2>Data type definitions</h2>
 <p> Haskell-98 like <code>data</code> declarations; no record syntax,
  existentials or GADTs; no <code>deriving</code> (because there are no
  typeclasses)!</p>
 
-<p>Currently all data declarations must come <em>before</em> any function
- definitions.</p>
+<p>Data types have structural equality and order (similar to
+deriving Eq and Ord); these can fail at runtime (e.g. when attempting
+to compare functions).</p>
 
 <h2>Function definitions</h2>
 

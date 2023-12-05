@@ -9,7 +9,7 @@ import Dict exposing (Dict)
 import Set exposing (Set)
 import Set
 import AST exposing (Expr(..), Matching(..), Pattern(..),
-                      Program(..), Module, Bind, Decl(..), Name)
+                      Program(..), Module, Bind, Decl(..), DataDecl, Name)
 import Types exposing (Type(..), tyBool, tyInt, tyChar, tyString, tyOrdering)
 import Tc exposing (Tc, pure, andThen, explain, fail)
 import Pretty
@@ -330,7 +330,7 @@ addTypeSig bind tyenv
               tyenv
 
 -- extend a type environment with a list of data declarations
-addDataDecls : List Decl -> TyEnv -> TyEnv
+addDataDecls : List DataDecl -> TyEnv -> TyEnv
 addDataDecls ddecls env
     = case ddecls of
           [] ->
@@ -338,17 +338,14 @@ addDataDecls ddecls env
           (decl :: rest) ->
               addDataDecls rest (addDataDecl decl env)
 
-addDataDecl : Decl -> TyEnv -> TyEnv
-addDataDecl decl env =
-    case decl of
-        Data _ alts ->
-            let env1 = Dict.fromList
-                       (List.map (\(con,ty) -> (con, Types.generalize Set.empty ty))
-                            alts)
-            in
-                Dict.union env env1
-        _ ->
-            env
+addDataDecl : DataDecl -> TyEnv -> TyEnv
+addDataDecl ddecl env 
+    = let env1 = Dict.fromList
+                 (List.map (\(con,ty) -> (con, Types.generalize Set.empty ty))
+                      ddecl.alternatives)
+      in
+          Dict.union env env1
+
 
 
 ------------------------------------------------------------------------------

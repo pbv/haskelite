@@ -64,15 +64,19 @@ type Pattern
 type Decl
     = TypeSig Name Type            -- type signature
     | Equation Name Matching       -- a single equation
-    | Data Type (List (Tag,Type))  -- data alternatives in GADT-style
+    | Data DataDecl                -- data declaration
 
+-- * data declaration; alternatives in GADT-style      
+type alias DataDecl
+    = { result: Type, alternatives: List (Tag, Type) }
+      
 -- * bindings
 type alias Bind
     = { name: Name, typeSig: Maybe Type, expr: Expr }
 
 -- * modules
 type alias Module
-    = { dataDecls : List Decl, binds : List Bind }
+    = { dataDecls : List DataDecl, binds : List Bind }
       
 -- * programs
 type Program

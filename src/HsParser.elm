@@ -13,7 +13,7 @@ import Indent
 import AST exposing (Expr(..),
                      Matching(..),
                      Pattern(..),
-                     Decl(..), Bind, Module, Program(..),
+                     Decl(..), DataDecl, Bind, Module, Program(..),
                      Name, Info)
 import Types exposing (Type(..), Tycon, tyInt, tyBool, tyChar, tyConst)
 import Char
@@ -85,7 +85,7 @@ ignoreNames
 collectDeclarations : Naming -> List Decl -> Module
 collectDeclarations naming decls
     = let
-        ddecls = List.filter checkData decls
+        ddecls = List.filterMap checkData decls
         binds = collectBinds naming decls
     in { dataDecls = ddecls, binds = binds }
 
@@ -97,11 +97,11 @@ collectBinds naming decls
 
 
               
-checkData : Decl -> Bool
+checkData : Decl -> Maybe DataDecl
 checkData decl
     = case decl of
-          Data _ _ -> True
-          _ -> False
+          Data d -> Just d
+          _ -> Nothing
           
 makeBind : Naming -> (Decl, List Decl) -> Maybe Bind
 makeBind naming pair =
@@ -136,7 +136,7 @@ joinDecl decl match1
               match1
 
              
--- a sequence of toplevel declarations
+-- toplevel declarations
 topDeclList : Parser (List Decl)
 topDeclList
     = Parser.sequence
@@ -156,7 +156,8 @@ indentedDeclList
                                 problem "non-empty bindings"
                             else
                                 succeed decls)
-    
+
+        
 -- a single top-level declaration
 topDeclaration : Parser Decl
 topDeclaration
@@ -166,6 +167,7 @@ topDeclaration
       , backtrackable infixEquation 
       , prefixEquation
       ]
+
 
 -- local declarations; type declarations not allowed
 declaration : Parser Decl
@@ -195,7 +197,7 @@ makeDataDecl tyresult alts
     = let
         tyalts = List.map (\(con, tyargs) -> (con, makeArrows tyresult tyargs)) alts
       in
-        Data tyresult tyalts
+        Data {result=tyresult, alternatives=tyalts}
 
 makeArrows : Type -> List Type -> Type
 makeArrows tyresult ts

@@ -3,29 +3,39 @@
   Pedro Vasconcelos, 2023
 -}
 
-module Types exposing (..)
+module Types exposing (Type(..), Kind(..), TySubst, Tycon, Tyvar,
+                       tyBool, tyInt, tyChar, tyOrdering, tyString,
+                       tyConst, applyTySubst, generalize,
+                       freeTyVars, genVars
+                      )
 
 import Dict exposing (Dict)
 import Set exposing (Set)
 
-type alias Name
+type alias Tyvar
     = String
 
 type alias Tycon
     = String
       
--- syntax of types
+-- syntax for types
 type Type
-    = TyVar Name                 -- free type variable
+    = TyVar Tyvar                 -- free type variable
     | TyGen Int                  -- quantified (generic) type variable
     | TyConst Tycon (List Type)  -- type constructor applied to type arguments
     | TyTuple (List Type)        -- special type constructors
     | TyList Type
     | TyFun Type Type
 
+
+-- syntax for kinds
+type Kind
+    = KindStar
+    | KindFun Kind Kind
+      
 -- type substitutions
 type alias TySubst
-    = Dict Name Type
+    = Dict Tyvar Type
 
 tyBool : Type
 tyBool = TyConst "Bool" []
@@ -74,48 +84,68 @@ applyTySubst s ty
               -> TyFun (applyTySubst s t1) (applyTySubst s t2)
           TyConst c ts
               -> TyConst c (List.map (applyTySubst s) ts)
-      
+
+                 
 -- quantify free variable of a type
 -- first argument are the free variables in the type environment
-generalize : Set Name -> Type -> Type
+generalize : Set Tyvar -> Type -> Type
 generalize fvs ty
-    = let vs = Set.toList <| Set.diff (freeTyVars ty) fvs
+    = let vs = List.filter (\y -> not (Set.member y fvs)) (freeTyVars ty) 
           gs = List.range 0 (List.length vs - 1)
           s = Dict.fromList <| List.map2 (\v i -> Tuple.pair v (TyGen i)) vs gs
       in applyTySubst s ty
-    
--- set of all free type variables in a type
-freeTyVars : Type -> Set Name
+
+          
+-- set of all free type variables in a type, no repeat entries
+freeTyVars : Type -> List Tyvar
 freeTyVars ty
+    = nub (freeTyVars_ ty)
+
+-- worker function      
+freeTyVars_ : Type -> List Tyvar
+freeTyVars_ ty
     = case ty of
           TyGen _ ->
-              Set.empty
+              []
           TyVar v ->
-              Set.singleton v
+              [v]
           TyList t1 ->
-              freeTyVars t1
+              freeTyVars_ t1
           TyTuple ts ->
-              List.foldl Set.union Set.empty <| List.map freeTyVars ts
+              List.concatMap freeTyVars_ ts
           TyFun t1 t2 ->
-              Set.union (freeTyVars t1) (freeTyVars t2)
+              freeTyVars_ t1 ++ freeTyVars_ t2
           TyConst c ts ->
-              List.foldl Set.union Set.empty <| List.map freeTyVars ts
+              List.concatMap freeTyVars_ ts
 
--- set of all generic vars in a type
-genVars : Type -> Set Int
+-- set of all generic vars in a type, no repeated entries
+genVars : Type -> List Int
 genVars ty
+    = nub (genVars_ ty)
+
+-- worker function
+genVars_ : Type -> List Int
+genVars_ ty
     = case ty of
           TyVar _ ->
-              Set.empty
+              []
           TyGen n ->
-              Set.singleton n
+              [n]
           TyList t1 ->
-              genVars t1
+              genVars_ t1
           TyTuple ts ->
-              List.foldl Set.union Set.empty <| List.map genVars ts
+              List.concatMap genVars_ ts
           TyFun t1 t2 ->
-              Set.union (genVars t1) (genVars t2)
+              genVars t1 ++ genVars_ t2
           TyConst c ts ->
-              List.foldl Set.union Set.empty <| List.map genVars ts
-      
+              List.concatMap genVars_ ts
 
+-- remove duplicate entries
+nub : List a -> List a
+nub lst
+    = case lst of
+          [] ->
+              []
+          (x :: xs) ->
+              x :: nub (List.filter (\y -> y/=x) xs)
+                  

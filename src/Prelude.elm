@@ -4,21 +4,29 @@
 
   Pedro Vasconcelos, 2021-23
 -}
-module Prelude exposing (preludeResult)
+module Prelude exposing (prelude)
 
-import AST exposing (Module)
+import AST exposing (Module, Bind)
 import Parser
-import HsParser
+import HsParser exposing (toplevelModule)
+import Typecheck exposing (KindEnv, TyEnv, tcModule, initialKindEnv, initialTypeEnv)
+import Tc 
 
--- result of parsing the prelude text below
-preludeResult : Result String Module
-preludeResult
+-- result of parsing and typechecking the prelude text below
+preludeModule : Result String Module
+preludeModule
     = Result.mapError HsParser.deadEndsToString <|
-      Parser.run HsParser.toplevelModule prelude 
+      Parser.run toplevelModule preludeText 
 
 
-prelude : String
-prelude =
+prelude : Result String (List Bind, KindEnv, TyEnv)
+prelude = preludeModule |>
+          Result.andThen
+              (\mod -> Tc.eval (tcModule initialKindEnv initialTypeEnv mod) |>
+                   Result.andThen (\(kenv,tenv) -> Ok (mod.binds, kenv, tenv)))
+          
+preludeText : String
+preludeText =
     """
 -- Basic algebraic data types
 data Bool = True | False

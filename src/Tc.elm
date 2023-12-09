@@ -6,12 +6,12 @@
   Pedro Vasconcelos, 2022-23
 -}
 module Tc exposing (Tc, run, eval, pure, fail, explain, andThen,
-                   get, put, modify, traverse, simplify,
-                   freshVar, freshVars, freshName, freshInst, unify)
+                   get, put, modify, traverse, traverse_, simplify,
+                   freshType, freshTypes, freshVar, freshInst, unify)
 
 import Dict exposing (Dict)
 import Set
-import Types exposing (Name, Type(..), TySubst, applyTySubst)
+import Types exposing (Type(..), TySubst, Tyvar, applyTySubst)
 import State exposing (State)
 import Unify
 import Tuple
@@ -77,25 +77,38 @@ modify f = get |> andThen (\s -> put (f s))
 traverse : (a -> Tc b) -> List a -> Tc (List b)
 traverse f lst
     = case lst of
-          [] -> pure []
-          (v::vs) -> f v |> andThen
+          [] ->
+              pure []
+          (v::vs) ->
+              f v |> andThen
                      (\u -> traverse f vs |>
                             andThen(\us -> pure (u::us)))
 
-freshVar : Tc Type
-freshVar
-    = freshName |> andThen (\n -> pure (TyVar n))
+-- same as above, but ignore the results 
+-- aka mapM_                          
+traverse_ : (a -> Tc b) -> List a -> Tc ()
+traverse_ f lst
+    = case lst of
+          [] ->
+              pure ()
+          (v::vs) ->
+              f v |> andThen (\_ -> traverse_ f vs)
 
-freshVars : Int -> Tc (List Type)
-freshVars n
+      
+freshType : Tc Type
+freshType
+    = freshVar |> andThen (\v -> pure (TyVar v))
+
+freshTypes : Int -> Tc (List Type)
+freshTypes n
     = if n<=0 then
           pure []
       else
-          freshVar |> andThen (\v -> freshVars (n-1) |>
-                                   andThen (\vs -> pure (v::vs)))
+          freshType |> andThen (\v -> freshTypes (n-1) |>
+                                    andThen (\vs -> pure (v::vs)))
       
-freshName : Tc Name
-freshName = get |>
+freshVar : Tc Tyvar
+freshVar = get |>
             andThen
             (\s -> let c = s.varcount
                    in put { s | varcount = 1 + c }
@@ -107,9 +120,9 @@ freshName = get |>
 freshInst : Type -> Tc Type
 freshInst ty
     = let
-        gvs = Set.toList (Types.genVars ty)
+        gvs = Types.genVars ty
       in
-          freshVars (List.length gvs) |>
+          freshTypes (List.length gvs) |>
           andThen (\vs -> let r = Dict.fromList <| List.map2 Tuple.pair gvs vs
                           in pure (freshInst_ r ty))
 

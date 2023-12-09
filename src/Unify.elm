@@ -5,7 +5,7 @@
 module Unify exposing (..)
 
 import Dict
-import Types exposing (Name, Type(..), TySubst, applyTySubst)
+import Types exposing (Tyvar, Type(..), TySubst, applyTySubst)
 import Pretty
 
 unifyEqs : TySubst -> List (Type,Type) -> Result String TySubst
@@ -56,13 +56,13 @@ unifyAux s t1 t2 eqs
               mismatch t1 t2
                   
 
-extend : Name -> Type -> TySubst -> TySubst
+extend : Tyvar -> Type -> TySubst -> TySubst
 extend v t s
     = let s1 = Dict.singleton v t
       in Dict.insert v t <| Dict.map (\_ -> applyTySubst s1) s
 
 
-occurs : Name -> Type -> Bool
+occurs : Tyvar -> Type -> Bool
 occurs v ty
     = case ty of
           TyVar x ->

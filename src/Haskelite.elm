@@ -9,7 +9,7 @@ import AST exposing (Expr(..), Program(..), Module, Bind, Info, Name)
 import HsParser
 import Machine
 import Heap
-import Typecheck exposing (TyEnv)
+import Typecheck exposing (TyEnv, KindEnv)
 import Parser
 import Pretty
 import Prelude
@@ -37,9 +37,11 @@ type Model
     | Panic String                 -- when initialization failed
 
 type alias EditModel
-    = { flags : Flags                    -- user flags
-      , parsed : Result String Program   -- result of parsing
-      , prelude : Module                 -- prelude declarations
+    = { flags : Flags                    -- user inputs
+      , parsed : Result String Program   -- result of parsing and typechecking
+      , prelude : List Bind              -- prelude definitions
+      , kindEnv : KindEnv                -- kind and type environments
+      , typeEnv : TyEnv                  -- for primitives and prelude
       }
 
 -- a labelled transition step: the machine configuration
@@ -84,28 +86,28 @@ init flags = (initModel flags, Cmd.none)
 
 initModel : Flags -> Model
 initModel flags
-    = case Prelude.preludeResult of
+    = case Prelude.prelude of
           Err msg ->
               Panic msg
-          Ok prelude ->  
+          Ok (binds, kenv, tenv) ->  
               let
-                  result = parseAndTypecheck prelude flags
+                  result = parseAndTypecheck kenv tenv flags
               in
                   Editing
                   { flags = flags
                   , parsed = result
-                  , prelude = prelude
+                  , prelude = binds
+                  , kindEnv =  kenv
+                  , typeEnv = tenv
                   }
 
--- parse and typecheck input expression and declararations
+-- parse and typecheck use expression and function declararations
 -- the first argument is the prelude
-parseAndTypecheck : Module -> Flags -> Result String Program
-parseAndTypecheck mod flags
-    = let env0 = Typecheck.addModuleEnv mod Typecheck.initialEnv
-      in 
-          HsParser.parseProgram flags.expression flags.declarations |>
-          Result.andThen (\prog -> Typecheck.tcProgram env0 prog |>
-          Result.andThen (\_ -> Ok prog))
+parseAndTypecheck : KindEnv -> TyEnv -> Flags -> Result String Program
+parseAndTypecheck kenv tenv flags
+    = HsParser.parseProgram flags.expression flags.declarations |>
+      Result.andThen (\prog -> Typecheck.tcMain kenv tenv prog |>
+                      Result.andThen (\_ -> Ok prog))
         
 view : Model -> Html Msg
 view model =
@@ -299,10 +301,10 @@ editUpdate msg model =
                 Editing { model | flags=flags, parsed=result }
         
         EvalMode ->
-            case parseAndTypecheck model.prelude model.flags of
+            case parseAndTypecheck model.kindEnv model.typeEnv model.flags of
                 Ok (LetProg mod expr) ->
                     let
-                        heap0 = Heap.fromBinds (model.prelude.binds ++ mod.binds)
+                        heap0 = Heap.fromBinds (model.prelude ++ mod.binds)
                         conf0 = Machine.start heap0 expr
                         skipSet = Set.fromList model.flags.skip 
                     in Reducing

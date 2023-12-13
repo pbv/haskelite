@@ -76,7 +76,10 @@ type alias Bind
 
 -- * modules
 type alias Module
-    = { dataDecls : List DataDecl, binds : List Bind }
+    = { dataDecls : List DataDecl
+      , binds : List Bind
+      , skip : List Name         -- names to skip over when evaluating
+      }
       
 -- * programs
 type Program

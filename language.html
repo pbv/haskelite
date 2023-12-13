@@ -23,7 +23,8 @@ expressions.</p>
 <h2>Data type definitions</h2>
 <p> Haskell-98 like <code>data</code> declarations; no record syntax,
  existentials or GADTs; no <code>deriving</code> (because there are no
- typeclasses)!</p>
+  typeclasses); no higher-kinded types.
+<p>
 
 <p>Data types have structural equality and order (similar to
 deriving Eq and Ord); these can fail at runtime (e.g. when attempting
@@ -31,8 +32,21 @@ to compare functions).</p>
 
 <h2>Function definitions</h2>
 
-<p>Pattern matching over integers, characters, lists and tuples; boolean
-guards; recursive definitions.</p>
+<p>You can define functions using multiple equations with pattern
+matching over integers, characters, lists and tuples, boolean guards,
+and recursive definitions.</p>
+
+    <p>You can ommit evaluation steps for particular functions (either user-defined
+      or from the prelude) using <code>--SKIP--</code> comments at the begining of the definitions; for example:
+      <pre>
+       --SKIP-- compare ++ 
+      </pre>
+      means that the evaluation should skip steps
+      envolving <code>compare</code> and <code>++</code>;
+      this can be useful to hide evaluation details and focus on other functions.
+    </p>
+      
+
 
 <h2>Standard Prelude</h2>
 

@@ -36,6 +36,7 @@ parseProgram inputExpr inputDecls
 toplevelModule : Parser Module
 toplevelModule
     = succeed (collectDeclarations recordNames)
+                 |= skipAnnotations
                  |= topDeclList
                  |. Parser.end
       |> andThen (\mod ->
@@ -82,12 +83,12 @@ ignoreNames
     = always Nothing
               
 -- collect toplevel declarations by identifier and make single bindings
-collectDeclarations : Naming -> List Decl -> Module
-collectDeclarations naming decls
+collectDeclarations : Naming -> List Name -> List Decl -> Module
+collectDeclarations naming skipList decls
     = let
         ddecls = List.filterMap checkData decls
         binds = collectBinds naming decls
-    in { dataDecls = ddecls, binds = binds }
+    in { dataDecls = ddecls, binds = binds, skip = skipList }
 
 
 collectBinds : Naming -> List Decl -> List Bind
@@ -1011,14 +1012,11 @@ getChompedChar p
                          Just (c, "") -> succeed c
                          _ -> problem "character literal")
       
-
-
                   
 reservedWords : Set String    
 reservedWords
     = Set.fromList [ "if", "then", "else",
                      "let", "in", "case", "of", "where", "data" ]
-
 
 
 -- consume whitespaces (including newlines) or comments
@@ -1030,7 +1028,34 @@ whitespaceOrComment
           , Parser.multiComment "{-" "-}" Parser.Nestable
           , whitespace
           ]           
+
       
+skipAnnotation : Parser (List String)
+skipAnnotation
+    = succeed String.words
+        |. symbol "--SKIP--"
+        |= Parser.getChompedString (Parser.chompUntilEndOr "\n")    
+
+annotationOrComment : Parser (List String)
+annotationOrComment
+    = oneOf
+      [ skipAnnotation
+      , succeed [] |. Parser.lineComment "--"
+      , succeed [] |. Parser.multiComment "{-" "-}" Parser.Nestable
+      ]
+        
+skipAnnotations : Parser (List String)
+skipAnnotations
+    = succeed List.concat 
+      |= Parser.sequence
+         { start = ""
+         , end = ""
+         , separator = ""
+         , spaces = whitespace
+         , item = annotationOrComment
+         , trailing = Parser.Forbidden
+         }
+           
 -- whitespace, including newlines
 whitespace : Parser ()
 whitespace    

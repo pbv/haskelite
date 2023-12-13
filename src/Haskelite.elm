@@ -29,7 +29,7 @@ import List.Extra as List
 
 -- startup flags
 type alias Flags
-    = { expression:String, declarations:String, skip: List String }
+    = { expression:String, declarations:String }
 
 type Model
     = Editing EditModel            -- while editing
@@ -55,7 +55,7 @@ type alias ReduceModel
       , next : Maybe Step          -- optional next step
       , flags : Flags              -- saved flags (to go back to editing)
       , options : Pretty.Options   -- displaying options
-      , skip : Set Name            -- set of function names to skip
+      , skipped : Set Name        -- set of function names to skip
       }
 
    
@@ -177,7 +177,7 @@ reduceView model =
     --              , checkbox model.options.prettyEnums
     --                   (Toggle toggleEnums) "Pretty-print enumerations"
                   ]
-        ,  skippedNames model.flags.skip
+        ,  skippedNames (Set.toList model.skipped)
         -- fill the lines div in reverse order;
         -- the CSS enabled a custom flow direction to ensure the
         -- current line always visible when scrolling is needed
@@ -260,7 +260,7 @@ reduceUpdate msg model =
                     Reducing
                     { model
                         | current = new
-                        , next = Machine.next model.skip (Tuple.first new)
+                        , next = Machine.next model.skipped (Tuple.first new)
                         , previous = model.current :: model.previous
                     }
                 Nothing ->
@@ -286,11 +286,6 @@ reduceUpdate msg model =
         _ ->
             Reducing model
                  
-
-
-
-                
-           
                 
 editUpdate : Msg -> EditModel -> Model 
 editUpdate msg model =
@@ -306,14 +301,14 @@ editUpdate msg model =
                     let
                         heap0 = Heap.fromBinds (model.prelude ++ mod.binds)
                         conf0 = Machine.start heap0 expr
-                        skipSet = Set.fromList model.flags.skip 
+                        skipped = Set.fromList mod.skip
                     in Reducing
                         { current = (conf0, "initial expression")
-                        , next = Machine.next skipSet conf0
+                        , next = Machine.next skipped conf0
                         , previous = []
                         , flags = model.flags
                         , options = Pretty.defaultOpts
-                        , skip = skipSet
+                        , skipped = skipped
                         }
                 Err msg1 ->
                     Editing {model | parsed = Err msg1}

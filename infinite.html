@@ -18,8 +18,8 @@
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
 	  flags: { expression: "sum (takeWhile (\\x -> x<20) (map square [1..]))",
-		   declarations: decls,
-		   skip: [] }
+		   declarations: decls
+		  }
       });
     </script>
     <hr>

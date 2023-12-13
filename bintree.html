@@ -11,6 +11,8 @@
     <script src="haskelite-min.js"></script>
     <script>
       var decls =
+	  "-- skip evaluation of the following operations:\n"+
+	  "--SKIP-- compare < > ==\n\n"+
 	  "-- a recursive type for binary search trees of 'a's\n"+
 	  "data BST a = Leaf | Node a (BST a) (BST a)\n\n"+
 	  "-- insert a value into an ordered search tree\n"+
@@ -29,8 +31,7 @@
           node: document.getElementById("haskelite"),
 	  flags: {
 	      expression:"insertList [\"armadillo\", \"iguana\", \"dog\", \"horse\"]",
-	      declarations: decls,
-	      skip : ["compare", "<", ">", "=="]
+	      declarations: decls
 	  }
       });
     </script>

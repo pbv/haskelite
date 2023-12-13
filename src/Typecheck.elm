@@ -13,7 +13,6 @@ import AST exposing (Expr(..), Matching(..), Pattern(..),
 import Types exposing (Type(..), Kind(..), Tycon, Tyvar,
                        tyBool, tyInt, tyChar, tyString, tyOrdering)
 import Tc exposing (Tc, pure, andThen, traverse, traverse_, explain, fail)
-import TcEnv 
 import Pretty
 import Heap
 
@@ -80,7 +79,7 @@ wellformedSignature : KindEnv -> Bind -> Tc ()
 wellformedSignature kindenv bind
     = case bind.typeSig of
           Just typ ->
-              explain ("type signature for "++ bind.name)
+              explain ("type signature for "++ bind.name ++ ", ")
                   (wellformedType kindenv typ)
           Nothing ->
               pure ()

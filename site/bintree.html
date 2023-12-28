@@ -1,21 +1,27 @@
 <!doctype html>
 <html>
   <head>
-    <link rel="stylesheet" href="screen.css">
+    <title>Inserting a value into a binary search tree</title>
+    <link rel='stylesheet' href='lib/codemirror.css'>
+    <link rel="stylesheet" href="lib/screen.css">
+    <script type='text/javascript' src='lib/codemirror.js'></script>
+    <script type='text/javascript' src='lib/haskell.js'></script>
+    <script type='text/javascript' src='js/code-editor.js'></script>
+    <script type='text/javascript' src='js/haskelite-min.js'></script>
   </head>
 
   <body>
     <h1>Inserting a value into a binary search tree</h1>
     <p>Inserting a value into a binary search tree. <a href="index.html">Back</a></p>
-    <div id="haskelite"></div>
-    <script src="haskelite-min.js"></script>
+    <div id="haskelite"/>
     <script>
       var decls =
-	  "-- skip evaluation of the following operations:\n"+
+	  "-- Skip evaluation of the following functions:\n"+
 	  "--SKIP-- compare < > ==\n\n"+
-	  "-- a recursive type for binary search trees of 'a's\n"+
+	  
+	  "-- A recursive data type for Binary Search Trees (BST) of 'a's\n"+
 	  "data BST a = Leaf | Node a (BST a) (BST a)\n\n"+
-	  "-- insert a value into an ordered search tree\n"+
+	  "-- Insert a value into an ordered search tree\n"+
 	  "-- NB: this function is polymorphic on 'a'\n"+
 	  "-- but will not work all types!\n"+
           "insert :: a -> BST a -> BST a\n"+
@@ -36,6 +42,11 @@
       });
     </script>
     <hr>
-    Pedro Vasconcelos, 2023.
+    <div class="credits">
+    Pedro Vasconcelos, 2023.<br>
+    Powered by <a href="https://elm-lang.org/">Elm</a> and
+    <a href="https://codemirror.net/">CodeMirror</a>.
+    </div>
+
   </body>
 </html>

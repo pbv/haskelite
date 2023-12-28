@@ -11,18 +11,24 @@
     font-family: monospace;
     padding: 2em;
     margin: 1em 1em;
-    background: lightyellow;
     cursor: default;
     height: 20em;
     overflow-y: auto;
     flex-direction: column-reverse;
     display: flex;
+    border-top: 1px solid grey;
+    border-bottom: 1px solid grey;
 }
 
 .line {
     position: relative;
     display: block;
-    border-bottom: 2px solid lightyellow;
+    border-bottom: 2px solid transparent;
+}
+
+.linenumber {
+    font-style: oblique;
+    color: gray;
 }
 
 .current {
@@ -67,6 +73,7 @@
     margin: 5px 5px;
 }
 
-.eval {
-    background-color: yellow; 
+.credits {
+    padding-top: 10px;
+    font-style: oblique;
 }

@@ -1,7 +1,13 @@
 <!doctype html>
 <html>
   <head>
-    <link rel="stylesheet" href="screen.css">
+    <title>Right and left folds</title>
+    <link rel='stylesheet' href='lib/codemirror.css'>
+    <link rel="stylesheet" href="lib/screen.css">
+    <script type='text/javascript' src='lib/codemirror.js'></script>
+    <script type='text/javascript' src='lib/haskell.js'></script>
+    <script type='text/javascript' src='js/code-editor.js'></script>
+    <script type='text/javascript' src='js/haskelite-min.js'></script>
   </head>
 
   <body>
@@ -12,13 +18,12 @@
       equivalent.  Compare the two by exploring the evaluation of
       a list sum using folds.
       <a href="index.html">Back</a></p>
-    <div id="haskelite"></div>
-    <script src="haskelite-min.js"></script>
+    <div id="haskelite"/>
     <script>
       var decls =
-	  "-- compute the sum of a list associating to the right\n"+
+	  "-- Compute the sum of a list associating to the right\n"+
 	  "example1 = foldr (+) 0 [1,2,3,4,5]\n\n"+
-	  "-- compute the sum of a list associating to the left\n"+
+	  "-- Compute the sum of a list associating to the left\n"+
 	  "example2 = foldl (+) 0 [1,2,3,4,5]\n\n"+
 	  "-- Data.List exports a function foldl' that performs as foldl\n"+
 	  "-- but applies the operation strictly for efficiency\n"+
@@ -29,6 +34,10 @@
       });
     </script>
     <hr>
-    Pedro Vasconcelos, 2023.
+    <div class="credits">
+    Pedro Vasconcelos, 2023.<br>
+    Powered by <a href="https://elm-lang.org/">Elm</a> and
+    <a href="https://codemirror.net/">CodeMirror</a>.
+    </div>
   </body>
 </html>

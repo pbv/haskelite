@@ -1,0 +1,42 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Computing factorial</title>
+    <link rel='stylesheet' href='lib/codemirror.css'>
+    <link rel="stylesheet" href="lib/screen.css">
+    <script type='text/javascript' src='lib/codemirror.js'></script>
+    <script type='text/javascript' src='lib/haskell.js'></script>
+    <script type='text/javascript' src='js/code-editor.js'></script>
+    <script type='text/javascript' src='js/haskelite-min.js'></script>
+  </head>
+
+  <body>
+    <h1>Computing factorial</h1>
+    <p>Three different ways of computing the factorial.
+      <a href="index.html">Back</a></p>
+    <div id="haskelite"/>
+    <script>
+      var decls =
+	  "fact1 :: Int -> Int\n" +
+	  "fact1 0 = 1\n" +
+	  "fact1 n = n*fact1 (n-1)\n\n" +
+	  "fact2 :: Int -> Int\n"+
+	  "fact2 n\n"+
+	  "   | n>0 = n*fact2 (n-1)\n"+
+	  "   | otherwise = 1\n\n"+
+	  "fact3 :: Int -> Int\n"+
+	  "fact3 n = product [1..n]\n";
+      var app = Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression:"fact1 5", declarations: decls }
+      });
+    </script>
+    <hr>
+    <div class="credits">
+    Pedro Vasconcelos, 2023.<br>
+    Powered by <a href="https://elm-lang.org/">Elm</a> and
+    the <a href="https://codemirror.net/">CodeMirror</a> JavaScript
+    code editor.
+    </div>
+  </body>
+</html>

@@ -1,24 +1,30 @@
 <!doctype html>
 <html>
   <head>
-    <link rel="stylesheet" href="screen.css">
+    <title>Expression evaluator</title>
+    <link rel='stylesheet' href='lib/codemirror.css'>
+    <link rel="stylesheet" href="lib/screen.css">
+    <script type='text/javascript' src='lib/codemirror.js'></script>
+    <script type='text/javascript' src='lib/haskell.js'></script>
+    <script type='text/javascript' src='js/code-editor.js'></script>
+    <script type='text/javascript' src='js/haskelite-min.js'></script>
   </head>
 
   <body>
     <h1>Expression evaluator</h1>
     <p>A simple evaluator for arithmetic expressions represented as
     abstract syntax trees (ASTs). <a href="index.html">Back</a></p>
-    <div id="haskelite"></div>
-    <script src="haskelite-min.js"></script>
+    <div id="haskelite"/>
+
     <script>
       var decls =
-	  "-- a recursive type for arithmetic expressions\n"+
+	  "-- A recursive type for arithmetic expressions\n"+
 	  "data Expr = Var Char | Num Int | Binop Op Expr Expr\n\n"+
-	  "-- an enumeration for the 4 basic arithmetic operations\n"+
+	  "-- An enumeration for the 4 basic arithmetic operations\n"+
 	  "data Op = Plus | Times | Minus | Div\n\n"+
-	  "-- an example expression: 3+2*x\n"+
+	  "-- An example expression: 3+2*x\n"+
 	  "example = Binop Plus (Num 3) (Binop Times (Num 2) (Var 'x'))\n\n"+
-	  "-- evaluate an expression\n"+
+	  "-- Recursive function to evaluate an expression\n"+
           "eval :: Expr -> [(Char,Int)] -> Int\n"+
 	  "eval (Var x) assocs = case lookup x assocs of\n"+
 	  "                           Just v -> v\n"+
@@ -39,6 +45,11 @@
       });
     </script>
     <hr>
-    Pedro Vasconcelos, 2023.
+    <div class="credits">
+    Pedro Vasconcelos, 2023.<br>
+    Powered by <a href="https://elm-lang.org/">Elm</a> and
+    <a href="https://codemirror.net/">CodeMirror</a>.
+    </div>
+
   </body>
 </html>

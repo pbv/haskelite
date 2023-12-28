@@ -24,6 +24,7 @@ import Html.Events exposing (on, onClick, onInput)
 import Platform.Cmd as Cmd
 import Platform.Sub as Sub
 import Browser
+import CustomElement.CodeEditor as Editor
 
 import List.Extra as List
 
@@ -127,26 +128,23 @@ editingView : EditModel -> Html Msg
 editingView model =
     let oldflags = model.flags
     in 
-    div [] [ span [] [
-                  input [ placeholder "Enter an expression"
-                        , value model.flags.expression
-                        , size 65
-                        , spellcheck False
-                        , class "editline"
-                        , onInput (\str -> Edit {oldflags | expression=str})
-                        ]  []
-                 , button
-                      [ class "navbar", onClick EvalMode ]
-                      [ text "Evaluate" ]
-               ]
+    div [] [ Editor.codeEditor
+                 [ Editor.editorValue model.flags.declarations
+                 , Editor.onEditorChanged (\str -> Edit {oldflags|declarations=str}) ]
+                 []
            , br [] []
-           , textarea [ placeholder "Enter function definitions"
-                      , value model.flags.declarations
-                      , rows 24
-                      , cols 80
-                      , spellcheck False
-                      , onInput (\str -> Edit {oldflags | declarations=str})
-                      ] []
+           , span [] [ span [class "editline"] [text ">>> "]
+                     , input [ placeholder "Enter an expression"
+                             , value model.flags.expression
+                             , size 65
+                             , spellcheck False
+                             , class "editline"
+                             , onInput (\str -> Edit {oldflags | expression=str})
+                             ]  []
+                     , button
+                           [ class "navbar", onClick EvalMode ]
+                           [ text "Evaluate" ]
+                     ]
            , br [] []
            , case model.parsed of
                  Err msg -> if model.flags.expression == "" &&
@@ -159,8 +157,20 @@ editingView model =
 
 reduceView : ReduceModel -> Html Msg
 reduceView model =
+    let linecount = List.length model.previous
+    in 
     div []
-        [ span [] [ button [ class "navbar"
+        [ -- fill the lines div in reverse order;
+        -- the CSS enabled a custom flow direction to ensure the
+        -- current line always visible when scrolling is needed
+         div [class "lines"]
+             <|  [ div [class "current"]
+                       [ renderStep model.options linecount linecount model.current ]
+                 ]
+                 ++
+                 List.map2 (renderStep model.options linecount)
+                       (List.reverse <| List.range 0 (linecount-1)) model.previous
+        , div [] [ span [] [ button [ class "navbar"
                            , disabled (not (List.isEmpty model.previous))
                            , onClick EditMode] [text "Edit"]
                   , button [ class "navbar"
@@ -172,23 +182,16 @@ reduceView model =
                   , button [ class "navbar"
                            , disabled (model.next == Nothing)
                            , onClick Next] [text "Next >"]
-                  , checkbox model.options.prettyLists
-                      (Toggle toggleLists) "Pretty-print lists"
-    --              , checkbox model.options.prettyEnums
-    --                   (Toggle toggleEnums) "Pretty-print enumerations"
-                  ]
-        ,  skippedNames (Set.toList model.skipped)
-        -- fill the lines div in reverse order;
-        -- the CSS enabled a custom flow direction to ensure the
-        -- current line always visible when scrolling is needed
-        , div [class "lines"]
-             <|  [ div [class "current"]
-                          [ renderStep model.options  model.current ]
+                           ]
+                 , span [style "padding-left" "20px"] []
+                 , checkbox model.options.prettyLists
+                            (Toggle toggleLists) "Pretty-print lists"
+                 , checkbox model.options.prettyEnums
+                           (Toggle toggleEnums) "Pretty-print enumerations"
                  ]
-                 ++
-                 List.map (renderStep model.options) model.previous
         ]
 
+{-        
 skippedNames : List Name -> Html a
 skippedNames names
     = case names of
@@ -198,13 +201,13 @@ skippedNames names
               span [] [ text "Skipping: ",
                           code [] <|
                            List.intersperse (text " ") (List.map text names) ]
-          
+-}          
         
 
 checkbox : Bool -> msg -> String -> Html msg
 checkbox b msg name =
     label
-        [ style "padding" "20px" ]
+        [class "navbar"] 
         [ input [ type_ "checkbox", onClick msg, checked b ] []
         , text name
         ]
@@ -216,17 +219,29 @@ toggleEnums : Pretty.Options -> Pretty.Options
 toggleEnums opts = { opts | prettyEnums = not (opts.prettyEnums) }
                 
 
-renderStep  : Pretty.Options -> Step -> Html Msg
-renderStep opts (conf, info)
+renderStep  : Pretty.Options -> Int -> Int -> Step -> Html Msg
+renderStep opts largest number (conf, info)
     = case Pretty.prettyConf opts conf of
           Just txt ->
               div [class "line"]
-                  [ text txt,
-                    div [class "info"] [text info]
+                  [ span [class "linenumber"]
+                        [text (rightAlign largest number ++ ". ")]
+                  , text txt
+                  , div [class "info"] [text info]
                   ]
           Nothing ->
               span [] []
 
+-- right align a number; first argument is the largest number in the sequence
+-- use a Unicode non breakable space to prevent HTML from eating up the formating
+rightAlign : Int -> Int -> String
+rightAlign largest number
+    = String.padLeft (decimalDigits largest) '\u{00a0}' (String.fromInt number)
+
+-- get the number of decimal digits          
+decimalDigits : Int -> Int
+decimalDigits n = ceiling (logBase 10.0 (max 1 (toFloat n)+1))
+                  
 
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =

@@ -1,21 +1,26 @@
 <!doctype html>
 <html>
   <head>
-    <link rel="stylesheet" href="screen.css">
+    <title>Convert an integer into decimal</title>
+    <link rel='stylesheet' href='lib/codemirror.css'>
+    <link rel="stylesheet" href="lib/screen.css">
+    <script type='text/javascript' src='lib/codemirror.js'></script>
+    <script type='text/javascript' src='lib/haskell.js'></script>
+    <script type='text/javascript' src='js/code-editor.js'></script>
+    <script type='text/javascript' src='js/haskelite-min.js'></script>
   </head>
 
   <body>
     <h1>Convert an integer into decimal</h1>
     <p>Converting an integer into decimal using successive divisions and
       an accumulator. <a href="index.html">Back</a></p>
-    <div id="haskelite"></div>
-    <script src="haskelite-min.js"></script>
+    <div id="haskelite"/>
+
     <script>
       var decls =
 	  "decimal :: Int -> String\n"+
 	  "decimal 0 = \"0\"\n"+
-	  "decimal n\n"+
-	  "   | n>0 = decimalAux n []\n\n"+
+	  "decimal n = decimalAux n []\n\n"+
 	  "decimalAux :: Int -> String -> String\n"+
 	  "decimalAux n acc\n"+
 	  "   | n>0 = decimalAux (div n 10) (digit (mod n 10):acc)\n"+
@@ -29,6 +34,10 @@
       });
     </script>
     <hr>
-    Pedro Vasconcelos, 2023.
+    <div class="credits">
+    Pedro Vasconcelos, 2023.<br>
+    Powered by <a href="https://elm-lang.org/">Elm</a> and
+    <a href="https://codemirror.net/">CodeMirror</a>.
+    </div>
   </body>
 </html>

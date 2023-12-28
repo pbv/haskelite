@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Summing square</title>
+    <link rel='stylesheet' href='lib/codemirror.css'>
+    <link rel="stylesheet" href="lib/screen.css">
+    <script type='text/javascript' src='lib/codemirror.js'></script>
+    <script type='text/javascript' src='lib/haskell.js'></script>
+    <script type='text/javascript' src='js/code-editor.js'></script>
+    <script type='text/javascript' src='js/haskelite-min.js'></script>
+  </head>
+  <body>
+    <h1>Summing squares</h1>
+    <p>Summing the squares of numbers from 1 to 5 using
+    the <em>map</em> and <em>sum</em>
+    functions. <a href="index.html">Back</a></p> <div id="haskelite"/>
+    <script>
+      var decls = "square x = x*x\n\n" +
+	  "{- The following are predefined in the Prelude:\n" +
+	  "map f [] = []\n"+
+	  "map f (x:xs) = f x : map f xs\n\n"+
+	  "sum [] = 0\n"+
+	  "sum (x:xs) = x + sum xs\n"+
+	  "-}\n";
+      var app = Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression:"sum (map square [1,2,3,4,5])",
+		   declarations: decls }
+      });
+    </script>
+    <hr>
+    <div class="credits">
+    Pedro Vasconcelos, 2023.<br>
+    Powered by <a href="https://elm-lang.org/">Elm</a> and
+    <a href="https://codemirror.net/">CodeMirror</a>.
+    </div>
+  </body>
+</html>

@@ -19,7 +19,7 @@ type alias Options
       }
 
 defaultOpts : Options
-defaultOpts = { prettyLists = True, prettyEnums = False }
+defaultOpts = { prettyLists = True, prettyEnums = True }
 
 type alias Prec                -- precedence for placing parenthesis
     = Int

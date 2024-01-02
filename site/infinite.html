@@ -12,7 +12,7 @@
 
   <body>
     <h1>Infinite lists</h1>
-    <p>Lazy evaluation allows producing and consuming a
+    <p>Lazy evaluation allows producing and consuming 
       infinite data structures such as lists.
       Here is an example that sums all squares that are
       less than 20.      
@@ -20,10 +20,16 @@
     <div id="haskelite"/>
 
     <script>
-      var decls = "square x = x*x\n";
+      var decls =
+	  "-- Sum all squares less than n.\n"+
+	  "-- Note that we need takeWhile above to ensure termination;\n"+
+	  "-- try to replace takeWhile with filter and see what happens.\n"+
+	  "sumSquares n = sum (takeWhile (\\x->x<n) (map square [1..]))\n\n"+
+	  "-- auxiliary function to compute the square of a number\n"+
+	  "square x = x*x\n";
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
-	  flags: { expression: "sum (takeWhile (\\x -> x<20) (map square [1..]))",
+	  flags: { expression: "sumSquares 20",
 		   declarations: decls
 		  }
       });

@@ -42,12 +42,12 @@ type Expr
       
 -- * matchings
 type Matching 
-    = Return Expr (Maybe Info)      -- matching succedeed
+    = Return Expr (Maybe Info)      -- matching succeeded
     | Fail                          -- matching failed
     | Match Pattern Matching        -- match a pattern
-    | Arg Expr Matching             -- argument supply
+    | Arg Expr Matching             -- supply an argument
     | Alt Matching Matching         -- alternative
-    | Where (List Bind) Matching    -- local bindings; can be recursive
+    | Where (List Bind) Matching    -- where bindings; can be recursive
 
 
 -- * patterns      
@@ -303,36 +303,6 @@ tuplePattern ps
 -- smart constructor for multi-arity applications
 applyMany : Expr -> List Expr -> Expr
 applyMany = List.foldl (\x y->App y x) 
-
-
---
--- syntax translations
---
-translateIfThenElse : Expr -> Expr -> Expr -> Matching
-translateIfThenElse e1 e2 e3
-    = Alt (Arg e1 (Match (ConsP "True" [])
-                       (Return e2 (Just "if-then"))))
-           (Return e3 (Just "if-else"))
-
-translateCase : Expr -> List (Pattern,Expr) -> Matching
-translateCase e0 alts
-    = let
-        body = List.foldr
-                 (\(patt,expr) rest ->
-                      Alt (Match patt (Return expr (Just "case"))) rest)
-                   Fail alts
-      in Arg e0 body
-
--- smart constructor for a "silent" case expression
--- i.e. no justification step
-silentCase : Expr -> List (Pattern,Expr) -> Expr
-silentCase e0 alts
-    = let
-        body = List.foldr
-                 (\(patt,expr) rest ->
-                      Alt (Match patt (Return expr Nothing)) rest)
-                   Fail alts
-      in Lam 0 Nothing (Arg e0 body)
 
 
               

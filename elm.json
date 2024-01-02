@@ -15,12 +15,14 @@
             "elm/parser": "1.1.0",
             "elm-community/list-extra": "8.3.1",
             "folkertdev/elm-state": "3.0.1",
-            "league/difference-list": "2.0.0"
+            "league/difference-list": "2.0.0",
+            "pithub/elm-parser-bug-workaround": "1.0.0"
         },
         "indirect": {
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
             "elm/virtual-dom": "1.0.2",
+            "pithub/elm-parser-extra": "1.0.0",
             "rtfeldman/elm-iso8601-date-strings": "1.1.4"
         }
     },

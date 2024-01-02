@@ -9,6 +9,7 @@ import Parser exposing (Parser,
                         symbol, keyword, variable,
                         succeed, problem, oneOf, andThen,
                         backtrackable, lazy)
+import Parser.Workaround 
 import Indent 
 import AST exposing (Expr(..),
                      Matching(..),
@@ -1024,7 +1025,7 @@ whitespaceOrComment : Parser ()
 whitespaceOrComment
     = Parser.loop 0 <| ifProgress <|
           oneOf
-          [ Parser.lineComment "--"
+          [ Parser.Workaround.lineCommentAfter "--"
           , Parser.multiComment "{-" "-}" Parser.Nestable
           , whitespace
           ]           
@@ -1034,13 +1035,13 @@ skipAnnotation : Parser (List String)
 skipAnnotation
     = succeed String.words
         |. symbol "--SKIP--"
-        |= Parser.getChompedString (Parser.chompUntilEndOr "\n")    
+        |= Parser.getChompedString (Parser.Workaround.chompUntilEndOrAfter "\n")    
 
 annotationOrComment : Parser (List String)
 annotationOrComment
     = oneOf
       [ skipAnnotation
-      , succeed [] |. Parser.lineComment "--"
+      , succeed [] |. Parser.Workaround.lineCommentAfter "--"
       , succeed [] |. Parser.multiComment "{-" "-}" Parser.Nestable
       ]
         

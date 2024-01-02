@@ -8,7 +8,8 @@ module Haskelite exposing (..)
 import AST exposing (Expr(..), Program(..), Module, Bind, Info, Name)
 import HsParser
 import Machine
-import Heap
+import Machine.Types as Machine
+import Machine.Heap as Heap
 import Typecheck exposing (TyEnv, KindEnv)
 import Parser
 import Pretty

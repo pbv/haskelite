@@ -5,52 +5,16 @@
 -}
 module Machine exposing (..)
 
-import AST exposing (Expr(..),
-                     Matching(..),
-                     Pattern(..),
-                     Bind,
-                     Decl(..),
-                     Info,
-                     Name,
-                     Tag,
-                     Subst)
-import Heap exposing (Heap)
+import AST exposing (..)
+import Machine.Types exposing (..)
+import Machine.Heap exposing (Heap)
+import Machine.Heap as Heap
 import Context exposing (ExprCtx)
 import Dict exposing (Dict)
-import Set exposing (Set)
+import Pretty
+
 import Monocle.Optional as Monocle
-
-
-type alias Conf
-    = (Heap, Control, Stack)
-
-type Control
-    = E Expr
-    | M Matching ArgStack
-
-type alias ArgStack
-    = List Expr
-      
-type alias Stack
-    = List Cont
-
-type Cont
-    = PushArg Expr
-    | Update Name
-    | MatchEnd Skip
-    | PushAlt ArgStack Matching
-    | PushPat ArgStack Pattern Matching
-      -- continuations for primitive operations
-    | ContBinary Name Expr
-    | RetBinary Name Expr
-    | RetUnary Name
-      -- for full normal form evaluation
-    | DeepEval
-    | Continue Expr ExprCtx
-
-type Skip
-    = Skipped | NotSkipped
-      
+import Set exposing (Set)
 
       
 isWhnf : Expr -> Bool
@@ -141,12 +105,20 @@ transition skipped conf
 
           -- case expressions
           (heap, E (Case e1 alts), stack) ->
-              Just (heap, M (AST.translateCase e1 alts) [],
-                        MatchEnd NotSkipped::stack)                              
+              if isVar e1 || isWhnf e1 then
+                  -- no indirection needed
+                  Just (heap, M (translateCase e1 alts) [],
+                            MatchEnd NotSkipped::stack)
+              else
+                  let
+                      (loc, heap1) = Heap.newIndirection heap e1
+                  in
+                      Just (heap1, M (translateCase (Var loc) alts) [],
+                                MatchEnd NotSkipped::stack)
                       
           -- if-then-else
           (heap, E (IfThenElse e1 e2 e3), stack) ->
-              Just (heap, M (AST.translateIfThenElse e1 e2 e3) [],
+              Just (heap, M (translateIfThenElse e1 e2 e3) [],
                         MatchEnd NotSkipped::stack)
 
           (heap, E (Var y), stack) ->
@@ -389,8 +361,8 @@ normalizeConsArgs heap args
                   in (heap2, Var loc::rest1)
 
 -- polymorphic structural equality (==)
--- assumes arguments are already in whnf
--- but may produce a result that is not in whnf
+-- assumes arguments are already in whnf but *not* full normal form
+-- produces an expression that is not in whnf
 structuralEq :  Expr -> Expr -> Expr
 structuralEq e1 e2
     = case (e1, e2) of
@@ -400,7 +372,7 @@ structuralEq e1 e2
               compareOp (c1 == c2)
           (Cons c1 args1, Cons c2 args2) ->
               if c1 == c2 then
-                  structuralEqList (List.map2 Tuple.pair args1 args2)
+                  structuralEqList args1 args2
               else
                   AST.falseCons
           (Lam _ _ _, Lam _ _ _) ->
@@ -408,18 +380,22 @@ structuralEq e1 e2
           _ ->
               Error (AST.stringLit "invalid arguments to equality")
 
-structuralEqList : List (Expr,Expr) -> Expr
-structuralEqList args
-    = case args of
-          [] ->
+structuralEqList : List Expr -> List Expr -> Expr
+structuralEqList args1 args2
+    = case (args1, args2) of
+          ([], []) ->
               AST.trueCons
-          [(e1,e2)] ->
+          ([e1],[e2]) ->
               BinaryOp "==" e1 e2
-          ((e1,e2)::rest) ->
-              App (App (Var "&&") (BinaryOp "==" e1 e2)) (structuralEqList rest)
+          (e1::rest1, e2::rest2) ->
+              App (App (Var "&&") (BinaryOp "==" e1 e2)) (structuralEqList rest1 rest2)
+          --  this case shouldn't happen because the constructor tags match
+          (_, _) ->
+              Error (AST.stringLit "shouldn't happen")
 
 
-  
+
+-- polymorphic structural comparison
 structuralCmp : Expr -> Expr -> Expr
 structuralCmp e1 e2
     = case (e1, e2) of
@@ -432,26 +408,28 @@ structuralCmp e1 e2
                   LT ->
                       Cons "LT" []
                   EQ ->
-                      structuralCmpList (List.map2 Tuple.pair args1 args2)
+                      structuralCmpList args1 args2
                   GT ->
                       Cons "GT" []
           (Lam _ _ _, Lam _ _ _) ->
               Error (AST.stringLit "can't compare functions")
           _ ->
-              Error (AST.stringLit "invalid arguments to comparison")
+              Error (AST.stringLit "invalid arguments to structuralCmp")
 
-structuralCmpList : List (Expr,Expr) -> Expr
-structuralCmpList args
-    = case args of
-          [] ->
+structuralCmpList : List Expr -> List Expr -> Expr
+structuralCmpList args1 args2
+    = case (args1, args2) of
+          ([], []) ->
               Cons "EQ" []
-          [(e1,e2)] ->
+          ([e1],[e2]) ->
               BinaryOp "compare" e1 e2
-          ((e1,e2)::rest) ->
-              AST.silentCase (BinaryOp "compare" e1 e2)
-                  [ (ConsP "EQ" [], structuralCmpList rest)
+          (e1::rest1, e2::rest2) ->
+              Case (BinaryOp "compare" e1 e2)
+                  [ (ConsP "EQ" [], structuralCmpList rest1 rest2)
                   , (VarP "c", Var "c")
                   ]
+          (_, _) ->
+              Error (AST.stringLit "shouldn't happen")
                   
 
 -- compare constructor tags
@@ -466,8 +444,8 @@ compareCons t1 t2
           _ ->
               compare t1 t2
 
--- build a case over a comparision result
--- shortcircuiting the the scrutinee is knowno
+-- build a case over a comparison result
+-- shortcircuiting if the scrutinee is known
 orderingCase : Expr -> Expr -> Expr -> Expr -> Expr
 orderingCase expr ltBranch eqBranch gtBranch
     = case expr of
@@ -480,7 +458,7 @@ orderingCase expr ltBranch eqBranch gtBranch
           Cons "GT" [] ->
               gtBranch
           _ ->
-              AST.silentCase expr [ (ConsP "LT" [], ltBranch)
+              Case expr [ (ConsP "LT" [], ltBranch)
                         , (ConsP "EQ" [], eqBranch)
                         , (ConsP "GT" [], gtBranch) ]
           
@@ -692,6 +670,31 @@ justification skip (heap, control, stack)
          _ ->
              Nothing
 
+
+
+--
+-- syntax translations
+--
+translateIfThenElse : Expr -> Expr -> Expr -> Matching
+translateIfThenElse e1 e2 e3
+    = Alt (Arg e1 (Match (ConsP "True" [])
+                       (Return e2 (Just "if True"))))
+           (Return e3 (Just "if False"))
+
+translateCase : Expr -> List (Pattern,Expr) -> Matching
+translateCase e0 alts
+    = let
+        body = List.foldr
+                 (\(patt,expr) rest ->
+                      let
+                          ppatt = Pretty.toString (Pretty.prettyPattern patt)
+                      in 
+                          Alt (Match patt (Return expr (Just ("case " ++ ppatt)))) rest)
+                   Fail alts
+      in Arg e0 body
+
+
+
 {-
 showPrim2 : Name -> Expr -> Expr -> String
 showPrim2 op v1 v2
@@ -713,5 +716,5 @@ showPrim1 op v1
               op ++ " " ++ String.fromChar x1
           _ ->
               op
--}              
-                  
+-}
+

@@ -14,7 +14,7 @@ import Types exposing (Type(..), Kind(..), Tycon, Tyvar,
                        tyBool, tyInt, tyChar, tyString, tyOrdering)
 import Tc exposing (Tc, pure, andThen, traverse, traverse_, explain, fail)
 import Pretty
-import Heap
+import Machine.Heap as Heap
 
 -- * type environments      
 type alias TyEnv
@@ -187,7 +187,7 @@ tcExpr tenv expr
 
           Case e0 alts ->
               Tc.freshType |>
-              andThen (\ty -> tcMatching tenv (AST.translateCase e0 alts) ty |>
+              andThen (\ty -> tcMatching tenv (translateCase e0 alts) ty |>
               andThen (\_ -> pure ty))
                  
               
@@ -455,6 +455,17 @@ getDataDecl ddecl env
       env ddecl.alternatives
 
 
+-- syntax translations
+translateCase : Expr -> List (Pattern,Expr) -> Matching
+translateCase e0 alts
+    = let
+        body = List.foldr
+                 (\(patt,expr) rest ->
+                      Alt (Match patt (Return expr Nothing)) rest)
+                   Fail alts
+      in Arg e0 body
+
+          
              
 ------------------------------------------------------------------------------
 -- initial kind environment for primitives

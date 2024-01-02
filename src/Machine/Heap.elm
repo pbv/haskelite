@@ -2,7 +2,7 @@
   Helper functions to implement the heap
   Pedro Vasconcelos, 2023
 -}
-module Heap exposing (..)
+module Machine.Heap exposing (..)
 
 import AST exposing (Expr(..), Name, Bind, Subst)
 import Dict exposing (Dict)

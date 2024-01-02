@@ -7,8 +7,9 @@ module Pretty exposing (..)
 
 import AST exposing (Expr(..), Matching(..), Bind, Pattern(..), Name)
 import Types exposing (Type(..))
-import Heap exposing (Heap)
-import Machine exposing (Conf, Stack, Control(..), Cont(..))
+import Machine.Types exposing (..)
+import Machine.Heap exposing (Heap)
+import Machine.Heap as Heap
 import DList exposing (DList)
 import Set exposing (Set)
 
@@ -282,7 +283,7 @@ prettyLam ctx optid m
                   Return e _ ->
                       prettyExpr_ ctx e
                   _ ->
-                      DList.singleton "<unimplemented>"
+                      DList.singleton "<unimplemented1>"
           
 -- pretty print a matching            
 prettyMatch : PrettyCtx -> Matching -> StringBuilder
@@ -295,7 +296,7 @@ prettyMatch ctx m =
             DList.cons "-> " (prettyExpr_ {ctx|prec=0} e)
 
         _ ->
-            DList.singleton "<unimplemented>"
+            DList.singleton "<unimplemented2>"
 
 
 -- pretty print a list of bindings
@@ -314,14 +315,13 @@ prettyBind : PrettyCtx -> Bind -> StringBuilder
 prettyBind ctx bind
     = DList.cons (bind.name ++ " = ") (prettyExpr_ {ctx|prec=0} bind.expr)
                 
-{-
+
 -- format an infix operator, sometimes with spaces either side
 formatOperator : Name -> String
 formatOperator op
-    = if op=="&&" || op == "||"
-      then " " ++ op ++ " "
-      else if AST.isOperator op then op else "`" ++ op ++ "`"
--}
+    = if op=="&&" || op == "||"  then " " ++ op ++ " " else op
+
+
 
 -- pretty print a pattern                   
 prettyPattern : Pattern -> StringBuilder

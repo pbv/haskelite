@@ -17,17 +17,19 @@ import Prelude
 
 import Dict
 import Set exposing (Set)
+import List.Extra as List
 
 import Html exposing (..)
 import Html.Attributes exposing (type_, class, value, style, placeholder, checked,
-                                     disabled, size, rows, cols, spellcheck)
+                                 disabled, size, rows, cols, spellcheck, tabindex)
 import Html.Events exposing (on, onClick, onInput)
 import Platform.Cmd as Cmd
 import Platform.Sub as Sub
 import Browser
 import CustomElement.CodeEditor as Editor
+import Keyboard.Event exposing (KeyboardEvent, considerKeyboardEvent)
+import Keyboard.Key exposing (Key(..))
 
-import List.Extra as List
 
 -- startup flags
 type alias Flags
@@ -70,6 +72,7 @@ type Msg
     | EvalMode           -- go into evaluation mode
     | Edit Flags         -- modify flags
     | Toggle (Pretty.Options -> Pretty.Options) -- modify options
+
 
      
 -- the main entry point for the app
@@ -160,11 +163,12 @@ reduceView : ReduceModel -> Html Msg
 reduceView model =
     let linecount = List.length model.previous
     in 
-    div []
+    div [ on "keydown" (considerKeyboardEvent handleKeyEvent)
+        , tabindex 0 ]
         [ -- fill the lines div in reverse order;
         -- the CSS enabled a custom flow direction to ensure the
         -- current line always visible when scrolling is needed
-         div [class "lines"]
+         div [ class "lines" ]
              <|  [ div [class "current"]
                        [ renderStep model.options linecount linecount model.current ]
                  ]
@@ -192,6 +196,31 @@ reduceView model =
                  ]
         ]
 
+
+handleKeyEvent : KeyboardEvent -> Maybe Msg
+handleKeyEvent ev
+    = case ev.keyCode of
+          Enter ->
+              Just Next
+          PageDown ->
+              Just Next
+          Down ->
+              Just Next
+          Right ->
+              Just Next
+          Backspace ->
+              Just Previous
+          PageUp ->
+              Just Previous
+          Left ->
+              Just Previous
+          Up ->
+              Just Previous
+          Escape ->
+              Just EditMode
+          _ ->
+              Nothing
+        
 {-        
 skippedNames : List Name -> Html a
 skippedNames names

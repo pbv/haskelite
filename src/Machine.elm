@@ -405,10 +405,10 @@ structuralCmp e1 e2
               orderingOp (compare c1 c2)
           (Cons c1 args1, Cons c2 args2) ->
               case compareCons c1 c2 of
-                  LT ->
-                      Cons "LT" []
                   EQ ->
                       structuralCmpList args1 args2
+                  LT ->
+                      Cons "LT" []
                   GT ->
                       Cons "GT" []
           (Lam _ _ _, Lam _ _ _) ->
@@ -426,7 +426,8 @@ structuralCmpList args1 args2
           (e1::rest1, e2::rest2) ->
               Case (BinaryOp "compare" e1 e2)
                   [ (ConsP "EQ" [], structuralCmpList rest1 rest2)
-                  , (VarP "c", Var "c")
+                  , (ConsP "LT" [], Cons "LT" [])
+                  , (ConsP "GT" [], Cons "GT" [])
                   ]
           (_, _) ->
               Error (AST.stringLit "shouldn't happen")

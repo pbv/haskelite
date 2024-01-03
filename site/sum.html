@@ -15,8 +15,10 @@
     the <em>map</em> and <em>sum</em>
     functions. <a href="index.html">Back</a></p> <div id="haskelite"/>
     <script>
-      var decls = "square x = x*x\n\n" +
-	  "{- The following are predefined in the Prelude:\n" +
+      var decls =
+	  "sumSquares xs = sum (map square xs)\n\n"+
+	  "square x = x*x\n\n" +
+	  "{- The following functions are predefined in the Prelude:\n" +
 	  "map f [] = []\n"+
 	  "map f (x:xs) = f x : map f xs\n\n"+
 	  "sum [] = 0\n"+
@@ -24,7 +26,7 @@
 	  "-}\n";
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
-	  flags: { expression:"sum (map square [1,2,3,4,5])",
+	  flags: { expression:"sumSquares [1,2,3,4,5]",
 		   declarations: decls }
       });
     </script>

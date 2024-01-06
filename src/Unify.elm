@@ -6,9 +6,13 @@ module Unify exposing (..)
 
 import Dict
 import Types exposing (Tyvar, Type(..), TySubst, applyTySubst)
-import Pretty
 
-unifyEqs : TySubst -> List (Type,Type) -> Result String TySubst
+type Error
+    = Mismatch Type Type
+    | OccursCheckFail Type Type
+    
+
+unifyEqs : TySubst -> List (Type,Type) -> Result Error TySubst
 unifyEqs s eqs
     = case eqs of
           [] ->
@@ -16,7 +20,7 @@ unifyEqs s eqs
           ((t1,t2)::rest) ->
               unifyAux s (applyTySubst s t1) (applyTySubst s t2) rest
 
-unifyAux : TySubst -> Type -> Type -> List (Type,Type) -> Result String TySubst
+unifyAux : TySubst -> Type -> Type -> List (Type,Type) -> Result Error TySubst
 unifyAux s t1 t2 eqs
     = case (t1, t2) of
           (TyVar x, TyVar y) ->
@@ -30,7 +34,7 @@ unifyAux s t1 t2 eqs
                         
           (TyVar x, _) ->
               if occurs x t2 then
-                 occurCheckFail t1 t2
+                  Err (OccursCheckFail t1 t2)
               else
                   unifyEqs (extend x t2 s) eqs
                         
@@ -38,13 +42,13 @@ unifyAux s t1 t2 eqs
               if c1 == c2 && List.length ts1 == List.length ts2 then
                   unifyEqs s (List.map2 Tuple.pair ts1 ts2 ++ eqs)
               else
-                  mismatch t1 t2
+                  Err (Mismatch t1 t2)
                                     
           (TyTuple ts1, TyTuple ts2) ->
               if List.length ts1 == List.length ts2 then
                   unifyEqs s (List.map2 Tuple.pair ts1 ts2 ++ eqs)
               else
-                  mismatch t1 t2
+                  Err (Mismatch t1 t2)
                   
           (TyList t3, TyList t4) ->
               unifyAux s t3 t4 eqs
@@ -53,7 +57,7 @@ unifyAux s t1 t2 eqs
               unifyAux s t1a t2a ((t1b,t2b)::eqs)
 
           (_, _) ->
-              mismatch t1 t2
+              Err (Mismatch t1 t2)
                   
 
 extend : Tyvar -> Type -> TySubst -> TySubst
@@ -65,6 +69,8 @@ extend v t s
 occurs : Tyvar -> Type -> Bool
 occurs v ty
     = case ty of
+          TyGen _ ->
+              False
           TyVar x ->
               x == v
           TyFun t1 t2 ->
@@ -73,21 +79,8 @@ occurs v ty
               occurs v t1
           TyTuple ts ->
               List.any (occurs v) ts
-          _ ->
-              False
+          TyConst c ts ->
+              List.any (occurs v) ts
 
 
 
-mismatch : Type -> Type -> Result String a
-mismatch t1 t2
-    = Err ("type mismatch: " ++
-               Pretty.prettyType t1 ++ " and " ++
-               Pretty.prettyType t2)
-      
-
-occurCheckFail : Type -> Type -> Result String a
-occurCheckFail t1 t2
-    = Err ("occur check fail (infinite type): " ++
-               Pretty.prettyType t1 ++ " = " ++
-               Pretty.prettyType t2 )
-      

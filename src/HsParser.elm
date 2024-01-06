@@ -16,7 +16,8 @@ import AST exposing (Expr(..),
                      Pattern(..),
                      Decl(..), DataDecl, Bind, Module, Program(..),
                      Name, Info)
-import Types exposing (Type(..), Tycon, tyInt, tyBool, tyChar, tyConst)
+import Types exposing (Type(..), Tycon, Tyvar,
+                           tyInt, tyBool, tyChar, tyConst)
 import Char
 import Set exposing (Set)
 import Dict exposing (Dict)
@@ -37,7 +38,6 @@ parseProgram inputExpr inputDecls
 toplevelModule : Parser Module
 toplevelModule
     = succeed (collectDeclarations recordNames)
-                 |= skipAnnotations
                  |= topDeclList
                  |. Parser.end
       |> andThen (\mod ->
@@ -84,12 +84,11 @@ ignoreNames
     = always Nothing
               
 -- collect toplevel declarations by identifier and make single bindings
-collectDeclarations : Naming -> List Name -> List Decl -> Module
-collectDeclarations naming skipList decls
-    = let
-        ddecls = List.filterMap checkData decls
-        binds = collectBinds naming decls
-    in { dataDecls = ddecls, binds = binds, skip = skipList }
+collectDeclarations : Naming -> List Decl -> Module
+collectDeclarations naming decls
+    = let ddecls = List.filterMap checkData decls
+          binds = collectBinds naming decls
+      in { dataDecls = ddecls, binds = binds }
 
 
 collectBinds : Naming -> List Decl -> List Bind
@@ -165,6 +164,7 @@ topDeclaration : Parser Decl
 topDeclaration
     = oneOf
       [ dataDeclaration
+      , typeDeclaration
       , backtrackable typeSignature
       , backtrackable infixEquation 
       , prefixEquation
@@ -180,6 +180,20 @@ declaration
       , prefixEquation
       ]
 
+----------------------------------------------------    
+-- type alias declarations
+----------------------------------------------------
+typeDeclaration : Parser Decl
+typeDeclaration
+    = succeed (\(tycon,vs) ty -> TypeAlias {tycon=tycon, args=vs, tyexp=ty})
+         |. keyword "type"
+         |. spaces
+         |= simpleType
+         |. spaces
+         |. operator "="
+         |. spaces
+         |= typeExpr
+    
 ------------------------------------------------------------    
 -- data type declarations
 ------------------------------------------------------------
@@ -188,31 +202,37 @@ dataDeclaration
     = succeed makeDataDecl
          |. keyword "data"
          |. spaces
-         |= dataLHS
+         |= simpleType
          |. spaces
          |. operator "="
          |. spaces
          |= dataAlternatives
 
-makeDataDecl : Type -> List (Name, List Type) -> Decl
-makeDataDecl tyresult alts
+makeDataDecl : (Tycon, List Tyvar) -> List (Name, List Type) -> Decl
+makeDataDecl (tycon, vs) alts
     = let
+        tyresult = TyConst tycon (List.map TyVar vs)
         tyalts = List.map (\(con, tyargs) -> (con, makeArrows tyresult tyargs)) alts
       in
-        Data {result=tyresult, alternatives=tyalts}
+        Data { tycon=tycon, args=vs, alternatives=tyalts }
 
 makeArrows : Type -> List Type -> Type
 makeArrows tyresult ts
     = List.foldr TyFun tyresult ts
             
-dataLHS : Parser Type
-dataLHS
-    = succeed (\c vs -> TyConst c (List.map TyVar vs))
-          |= upperIdentifier
-          |. spaces
-          |=  (identifiers |>
-                   andThen (ensure List.allDifferent "distinct type variables"))
 
+-- a simple type for declarations and aliases
+-- i.e. T v1 v2 .. vn
+-- where T is a type constructor and vs are distinct type variables
+simpleType : Parser (Tycon, List Tyvar)
+simpleType
+    = succeed Tuple.pair
+         |= upperIdentifier
+         |. spaces
+         |= (identifiers |>
+                 andThen (ensure List.allDifferent "distinct type variables"))
+
+              
 -- a sequence of identifiers separated by spaces
 identifiers : Parser (List Name)
 identifiers =
@@ -252,6 +272,7 @@ dataAlternative
              , trailing = Parser.Forbidden                      
              }
 
+            
 ---------------------------------------------------------------------
 prefixEquation : Parser Decl
 prefixEquation
@@ -1030,7 +1051,7 @@ whitespaceOrComment
           , whitespace
           ]           
 
-      
+{-      
 skipAnnotation : Parser (List String)
 skipAnnotation
     = succeed String.words
@@ -1056,7 +1077,8 @@ skipAnnotations
          , item = annotationOrComment
          , trailing = Parser.Forbidden
          }
-           
+-}
+
 -- whitespace, including newlines
 whitespace : Parser ()
 whitespace    

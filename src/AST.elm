@@ -4,7 +4,7 @@
 -}
 module AST exposing (..)
 
-import Types exposing (Type(..), Tycon)
+import Types exposing (Type(..), Tycon, Tyvar)
 import Dict exposing (Dict)
 import Maybe
 
@@ -65,10 +65,16 @@ type Decl
     = TypeSig Name Type            -- type signature
     | Equation Name Matching       -- a single equation
     | Data DataDecl                -- data declaration
+    | TypeAlias AliasDecl
 
--- * data declaration; alternatives in GADT-style      
+-- * data type declaration; alternatives in GADT-style      
 type alias DataDecl
-    = { result: Type, alternatives: List (Tag, Type) }
+    = { tycon: Tycon, args: List Tyvar, alternatives: List (Tag, Type) }
+
+-- * type alias declaration;
+-- expansion is a list of bound type vars and type expression
+type alias AliasDecl
+    = { tycon: Tycon, args: List Tyvar, tyexp: Type }
       
 -- * bindings
 type alias Bind
@@ -76,10 +82,7 @@ type alias Bind
 
 -- * modules
 type alias Module
-    = { dataDecls : List DataDecl
-      , binds : List Bind
-      , skip : List Name         -- names to skip over when evaluating
-      }
+    = { dataDecls : List DataDecl, binds : List Bind }
       
 -- * programs
 type Program

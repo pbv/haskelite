@@ -13,16 +13,14 @@ import AST exposing (Expr(..), Matching(..), Pattern(..),
 import Types exposing (Type(..), Kind(..), Tycon, Tyvar,
                        tyBool, tyInt, tyChar, tyString, tyOrdering)
 import Tc exposing (Tc, pure, andThen, traverse, traverse_, explain, fail)
-import Pretty
-import Machine.Heap as Heap
+import Shows exposing (..)
 
--- * type environments      
+-- * type environments for term variables  
 type alias TyEnv
     = Dict Name Type
 
--- * kind environments
--- only for type constructors 
--- no higher-kinded type variables 
+-- * kind environments for type constructors
+-- all type variables are of kind Star (no higher-kinded types)
 type alias KindEnv
     = Dict Tycon Kind
       
@@ -34,7 +32,7 @@ tcMain kenv tenv prog
 tcProgram : KindEnv -> TyEnv -> Program -> Tc Type
 tcProgram kenv tenv (LetProg mod expr) 
     = tcModule kenv tenv mod |>
-      andThen (\(_, tenv1) -> tcExpr_ tenv1 expr)
+      andThen (\(_, tenv1) -> tcExprWrap tenv1 expr)
 
                       
 -------------------------------------------------------------------------
@@ -49,22 +47,18 @@ tcModule kenv0 tenv0 mod
          andThen (\_ -> tcRecBinds tenv1 mod.binds |>
                            (andThen (\tenv2 -> pure (kenv1,tenv2)))))
          
-
--- given a result data type, find the kind of the type constructor
-getKindDecl : Type -> Maybe (Tycon, Kind)
-getKindDecl ty 
-    = case ty of
-          TyConst c ts ->
-              let kind = List.foldr (\_ k -> KindFun KindStar k) KindStar ts
-              in Just (c, kind)
-          _ ->
-              Nothing
-
+    
+-- get the kind from a data declaration
+getKindDecl : DataDecl -> (Tycon, Kind)
+getKindDecl ddecl
+    = let kind = List.foldr (\_ k -> KindFun KindStar k) KindStar ddecl.args
+      in (ddecl.tycon, kind)
+                  
 -- augment a kind environment with a list of data declararations
 getKindEnv : KindEnv -> List DataDecl -> KindEnv
 getKindEnv kindenv ddecls
     = List.foldl (\(c,k) e -> Dict.insert c k e) kindenv <|
-      List.filterMap (.result >> getKindDecl) ddecls
+      List.map getKindDecl ddecls
           
 wellformedDataDecls : KindEnv -> List DataDecl -> Tc ()
 wellformedDataDecls kindenv ddecls
@@ -142,10 +136,9 @@ wellformedTypes kindenv ts
 -----------------------------------------------------------------------          
              
 -- wrapper function that documents the expression being typechecked             
-tcExpr_ : TyEnv -> Expr -> Tc Type
-tcExpr_ tenv expr
-    = explain ("in expression " ++
-                  Pretty.prettyExpr Pretty.defaultOpts Heap.empty expr ++ ": ") <|
+tcExprWrap : TyEnv -> Expr -> Tc Type
+tcExprWrap tenv expr
+    = explain ("in expression " ++ showExpr expr ++ ": ") <|
       tcExpr tenv expr
 
              
@@ -155,22 +148,24 @@ tcExpr tenv expr
     = case expr of
           Number _ ->
               pure tyInt
+                  
           Char _ ->
               pure tyChar
+                  
           Var v ->
               case Dict.get v tenv of
                   Just ty ->
                       Tc.freshInst ty
                   Nothing ->
-                      fail ("undefined variable: " ++ v)
-
+                      fail ("undefined variable: " ++ showVar v)
+                          
           Cons tag args ->
               case Dict.get tag tenv of
                   Just ty ->
                       Tc.freshInst ty |>
                       andThen (\ty1 -> tcApplication tenv ty1 args)
                   Nothing ->
-                      Tc.fail ("unknown constructor " ++ tag)
+                      Tc.fail ("unknown constructor: " ++ showCons tag)
               
           App fun arg ->
               tcExpr tenv fun |>
@@ -193,14 +188,15 @@ tcExpr tenv expr
               
           IfThenElse e0 e1 e2 ->
               tcExpr tenv e0 |>
-              andThen (\t0 -> Tc.unify t0 tyBool |>
+              andThen (\t0 -> unify t0 tyBool |>
               andThen (\_ -> tcExpr tenv e1 |>
               andThen (\t1 -> tcExpr tenv e2 |>
-              andThen (\t2 -> Tc.unify t1 t2 |>
+              andThen (\t2 -> unify t1 t2 |>
               andThen (\_ -> pure t1)))))
 
           BinaryOp op e1 e2 ->
               tcExpr tenv (App (App (Var op) e1) e2)
+                  
           UnaryOp op e1 ->
               tcExpr tenv (App (Var op) e1)
 
@@ -221,24 +217,26 @@ tcApplication tenv tyfun args
           (e1::rest) ->
               tcExpr tenv e1 |>
               andThen (\tyarg -> Tc.freshType |>
-              andThen (\a -> Tc.unify tyfun (TyFun tyarg a) |>
+              andThen (\a -> unify tyfun (TyFun tyarg a) |>
               andThen (\_ -> tcApplication tenv a rest)))
 
 tcMatching : TyEnv -> Matching -> Type -> Tc ()
 tcMatching tenv match ty
     = case match of
           Return expr _ ->
-              explain ("in expression " ++
-                       Pretty.prettyExpr Pretty.defaultOpts Heap.empty expr ++ ": ")
-              (tcExpr tenv expr |> andThen (Tc.unify ty))
+              explain ("in expression " ++ showExpr expr ++ ": ")
+              (tcExpr tenv expr |>
+               andThen (unify ty))
+                  
           Fail ->
               pure ()
+                  
           Match patt match1 ->
               Tc.freshType |>
               andThen (\ty1 ->
               Tc.freshType |>
               andThen (\ty2 ->
-              Tc.unify (TyFun ty1 ty2) ty |>
+              unify (TyFun ty1 ty2) ty |>
               andThen (\_ ->
               tcPattern tenv patt ty1 |>
               andThen (\tenv1 ->
@@ -255,7 +253,7 @@ tcMatching tenv match ty
 
           Where binds m2 ->
               tcRecBinds tenv binds |>
-              andThen  (\tenv1 -> tcMatching tenv1 m2 ty)
+              andThen (\tenv1 -> tcMatching tenv1 m2 ty)
 
                   
 
@@ -279,14 +277,14 @@ tcPattern tenv patt ty
                       Tc.freshInst tyc |>
                       andThen (\tyc1 -> tcConsArgs tenv args tyc1 ty)
                   Nothing ->
-                      Tc.fail ("unknown constructor: " ++ tag)
+                      Tc.fail ("unknown constructor: " ++ showCons tag)
 
           (NumberP _) ->
-              Tc.unify ty tyInt |>
+              unify ty tyInt |>
               andThen (\_ -> pure tenv)
 
           (CharP _) ->
-              Tc.unify ty tyChar |>
+              unify ty tyChar |>
               andThen (\_ -> pure tenv)
 
 
@@ -297,7 +295,7 @@ tcConsArgs : TyEnv -> List Pattern -> Type -> Type -> Tc TyEnv
 tcConsArgs tenv patts tyc1 ty
     = case patts of
           [] ->
-              Tc.unify tyc1 ty |>
+              unify tyc1 ty |>
               andThen (\_ -> pure tenv)
 
           (p::ps) ->
@@ -305,7 +303,7 @@ tcConsArgs tenv patts tyc1 ty
               andThen (\a ->
               Tc.freshType |>
               andThen (\b ->
-              Tc.unify tyc1 (TyFun a b) |>
+              unify tyc1 (TyFun a b) |>
               andThen (\_ ->
               tcPattern tenv p a |>
               andThen (\tenv1 ->
@@ -359,7 +357,7 @@ tcRecAlts tyenv lst
           ((bind,ty) :: rest) ->
               (explain ("definition of " ++ bind.name ++ ": ") <|
                (tcExpr tyenv bind.expr |>
-                andThen (\ty1 -> Tc.unify ty ty1))) |>
+                andThen (\ty1 -> unify ty ty1))) |>
                   andThen (\_ -> tcRecAlts tyenv rest)
 
 
@@ -407,9 +405,9 @@ checkTypSig ftvs bind tyinfer
               in
               if gtysig /= tyinfer then
                   fail ("type signature " ++ bind.name ++ " :: " ++ 
-                        Pretty.prettyType tysig ++ 
+                        showType tysig ++ 
                         " is too general; inferred type: " ++
-                        Pretty.prettyType tyinfer)
+                        showType tyinfer)
               else
                   pure ()
 
@@ -419,9 +417,14 @@ freeTyEnvVars : TyEnv -> Set Tyvar
 freeTyEnvVars tyenv
     = Set.fromList <| Dict.foldl (\_ ty acc -> Types.freeTyVars ty ++ acc) [] tyenv
 
---    = Dict.foldl (\_ ty acc -> Set.union (Set.fromList <| Types.freeTyVars ty) acc) Set.empty 
-                      
 
+
+-------------------------------------------------------------------------------
+-- Unification wrapper
+-------------------------------------------------------------------------------
+unify : Type -> Type -> Tc ()
+unify = Tc.unify showType
+      
 ------------------------------------------------------------------------------
 -- Handling type environments
 ------------------------------------------------------------------------------

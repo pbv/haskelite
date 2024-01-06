@@ -36,6 +36,7 @@ type alias PrettyCtx
 type alias StringBuilder
     = DList String
 
+      
 -- convert a string builder back into a string      
 toString : StringBuilder -> String
 toString sb
@@ -456,7 +457,7 @@ prettyCont opts heap stack acc
               prettyCont opts heap rest (BinaryOp op e1 acc)
           (RetUnary op::rest) ->
               prettyCont opts heap rest (UnaryOp op acc)
-          MatchEnd _::rest ->
+          MatchEnd::rest ->
               prettyCont opts heap rest acc
           DeepEval::rest ->
               prettyCont opts heap rest acc

@@ -14,7 +14,6 @@ import Dict exposing (Dict)
 import Pretty
 
 import Monocle.Optional as Monocle
-import Set exposing (Set)
 
       
 isWhnf : Expr -> Bool
@@ -57,8 +56,8 @@ getStack (_, _, stack) = stack
 --                
 -- a small-step transition of the machine
 -- first argument is the set of functions to skip over
-transition : Set Name -> Conf -> Maybe Conf
-transition skipped conf
+transition : Conf -> Maybe Conf
+transition conf
     = case conf of
           -- short circuit errors
           (heap, E (Error msg), _::_) ->
@@ -75,12 +74,9 @@ transition skipped conf
           (heap, E (Lam 0 optname m), stack) ->
               case optname of
                   Just fun ->
-                      if Set.member fun skipped then
-                          Just (heap, M m [], MatchEnd Skipped::DeepEval::stack)
-                      else
-                          Just (heap, M m [], MatchEnd NotSkipped::stack)
+                      Just (heap, M m [], MatchEnd::stack)
                   Nothing ->
-                      Just (heap, M m [], MatchEnd NotSkipped::stack)
+                      Just (heap, M m [], MatchEnd::stack)
 
           -- apply argument to non-saturated lambda
           (heap, E (Lam _ optname m), PushArg e1::rest) ->
@@ -107,19 +103,16 @@ transition skipped conf
           (heap, E (Case e1 alts), stack) ->
               if isVar e1 || isWhnf e1 then
                   -- no indirection needed
-                  Just (heap, M (translateCase e1 alts) [],
-                            MatchEnd NotSkipped::stack)
+                  Just (heap, M (translateCase e1 alts) [], MatchEnd::stack)
               else
                   let
                       (loc, heap1) = Heap.newIndirection heap e1
                   in
-                      Just (heap1, M (translateCase (Var loc) alts) [],
-                                MatchEnd NotSkipped::stack)
+                      Just (heap1, M (translateCase (Var loc) alts) [], MatchEnd::stack)
                       
           -- if-then-else
           (heap, E (IfThenElse e1 e2 e3), stack) ->
-              Just (heap, M (translateIfThenElse e1 e2 e3) [],
-                        MatchEnd NotSkipped::stack)
+              Just (heap, M (translateIfThenElse e1 e2 e3) [], MatchEnd::stack)
 
           (heap, E (Var y), stack) ->
               case Heap.get y heap of
@@ -210,7 +203,7 @@ transition skipped conf
                   Just (heap, M Fail [], stack)
                                 
           -- successful match: return an expression
-          (heap, M (Return expr info) args, MatchEnd _::stack) ->
+          (heap, M (Return expr info) args, MatchEnd::stack) ->
               Just (heap, E (applyArgs expr args), stack)
 
           (heap, M (Return expr info) args, (PushAlt _ _)::stack) ->
@@ -220,7 +213,7 @@ transition skipped conf
           (heap, M Fail _, (PushAlt args m)::stack) ->
               Just (heap, M m args, stack)
 
-          (heap, M Fail _, MatchEnd _::stack) ->
+          (heap, M Fail _, MatchEnd::stack) ->
               Just (heap, E (Error (AST.stringLit "non-exaustive patterns")), [])
                   
           -- deal with alternatives
@@ -576,26 +569,26 @@ sizeLimit = 100
 --            
 -- a labelled transition step ignoring silent transitions
 -- 1st argument is the set of functions to skip 
-next : Set Name -> Conf -> Maybe (Conf, Info)
-next skipped conf0
+next : Conf -> Maybe (Conf, Info)
+next conf0
     = let size0 = confSize conf0
       in 
-          nextAux skipped (size0 + sizeLimit) conf0
+          nextAux (size0 + sizeLimit) conf0
 
 -- worker function with an iteration limit
 -- the 2nd argument is limit counter for "silent" transitions
-nextAux :  Set Name -> Int -> Conf -> Maybe (Conf, Info)
-nextAux skipped limit conf0
+nextAux :  Int -> Conf -> Maybe (Conf, Info)
+nextAux limit conf0
     = if confSize conf0 < limit then
-          case transition skipped conf0 of
+          case transition conf0 of
               Nothing ->
                   Nothing
               Just conf1 ->
-                  case justification skipped conf0 of
+                  case justification conf0 of
                       Just info ->
                           Just (conf1, info)
                       Nothing ->
-                          nextAux skipped limit conf1
+                          nextAux limit conf1
       else
           Just (conf0, "continue evaluation?")
 
@@ -637,16 +630,16 @@ contSize cont
 
               
 -- justification for a transition step 
-justification : Set Name -> Conf -> Maybe Info
-justification skip (heap, control, stack)
+justification : Conf -> Maybe Info
+justification (heap, control, stack)
     = case (control, stack) of
          (E v1, ((RetBinary op v2)::_)) ->
-             if isWhnf v1 && not (Set.member op skip) then 
+             if isWhnf v1 then 
                  Just ("primitive " ++ op)
              else
                  Nothing
          (E w, ((RetUnary op)::_)) ->
-             if isWhnf w && not (Set.member op skip) then 
+             if isWhnf w then 
                  Just ("primitive " ++ op)
              else
                  Nothing
@@ -657,15 +650,13 @@ justification skip (heap, control, stack)
              else
                  Nothing
 -}
-         (M (Return expr info) [], MatchEnd Skipped::_) ->
-             Nothing
-         (M (Return expr info) [], MatchEnd NotSkipped::_) ->
+         (M (Return expr info) [], MatchEnd::_) ->
              info
 
          (E (Error msg), _) ->
              Just "runtime error"
 
-         (M Fail _, MatchEnd _::_) ->
+         (M Fail _, MatchEnd::_) ->
              Just "pattern match failure"
 
          _ ->

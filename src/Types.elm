@@ -6,8 +6,7 @@
 module Types exposing (Type(..), Kind(..), TySubst, Tycon, Tyvar,
                        tyBool, tyInt, tyChar, tyOrdering, tyString,
                        tyConst, applyTySubst, generalize,
-                       freeTyVars, genVars
-                      )
+                       freeTyVars, genVars )
 
 import Dict exposing (Dict)
 import Set exposing (Set)
@@ -26,7 +25,6 @@ type Type
     | TyTuple (List Type)        -- special type constructors
     | TyList Type
     | TyFun Type Type
-
 
 -- syntax for kinds
 type Kind
@@ -99,53 +97,61 @@ generalize fvs ty
 -- set of all free type variables in a type, no repeat entries
 freeTyVars : Type -> List Tyvar
 freeTyVars ty
-    = nub (freeTyVars_ ty)
+    = nub (freeTyVarsAux ty)
 
 -- worker function      
-freeTyVars_ : Type -> List Tyvar
-freeTyVars_ ty
+freeTyVarsAux : Type -> List Tyvar
+freeTyVarsAux ty
     = case ty of
           TyGen _ ->
               []
           TyVar v ->
               [v]
           TyList t1 ->
-              freeTyVars_ t1
+              freeTyVarsAux t1
           TyTuple ts ->
-              List.concatMap freeTyVars_ ts
+              List.concatMap freeTyVarsAux ts
           TyFun t1 t2 ->
-              freeTyVars_ t1 ++ freeTyVars_ t2
+              freeTyVarsAux t1 ++ freeTyVarsAux t2
           TyConst c ts ->
-              List.concatMap freeTyVars_ ts
+              List.concatMap freeTyVarsAux ts
 
 -- set of all generic vars in a type, no repeated entries
 genVars : Type -> List Int
 genVars ty
-    = nub (genVars_ ty)
+    = nub (genVarsAux ty)
 
 -- worker function
-genVars_ : Type -> List Int
-genVars_ ty
+genVarsAux : Type -> List Int
+genVarsAux ty
     = case ty of
           TyVar _ ->
               []
           TyGen n ->
               [n]
           TyList t1 ->
-              genVars_ t1
+              genVarsAux t1
           TyTuple ts ->
-              List.concatMap genVars_ ts
+              List.concatMap genVarsAux ts
           TyFun t1 t2 ->
-              genVars t1 ++ genVars_ t2
+              genVarsAux t1 ++ genVarsAux t2
           TyConst c ts ->
-              List.concatMap genVars_ ts
+              List.concatMap genVarsAux ts
 
 -- remove duplicate entries
 nub : List a -> List a
 nub lst
+    = nubAux lst []
+
+nubAux : List a -> List a -> List a
+nubAux lst acc
     = case lst of
           [] ->
-              []
+              List.reverse acc
           (x :: xs) ->
-              x :: nub (List.filter (\y -> y/=x) xs)
+              if List.member x acc then
+                  nubAux xs acc
+              else
+                  nubAux xs (x::acc)
+
                   

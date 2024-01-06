@@ -20,7 +20,7 @@ type alias Stack
 type Cont
     = PushArg Expr
     | Update Name
-    | MatchEnd Skip
+    | MatchEnd 
     | PushAlt ArgStack Matching
     | PushPat ArgStack Pattern Matching
       -- continuations for primitive operations
@@ -31,5 +31,3 @@ type Cont
     | DeepEval
     | Continue Expr ExprCtx
 
-type Skip
-    = Skipped | NotSkipped

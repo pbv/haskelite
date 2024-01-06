@@ -6,15 +6,14 @@
   Pedro Vasconcelos, 2022-23
 -}
 module Tc exposing (Tc, run, eval, pure, fail, explain, andThen,
-                   get, put, modify, traverse, traverse_, simplify,
-                   freshType, freshTypes, freshVar, freshInst, unify)
+                    get, put, modify, traverse, traverse_, simplify,
+                    freshType, freshTypes, freshVar, freshInst, unify)
 
 import Dict exposing (Dict)
 import Set
 import Types exposing (Type(..), TySubst, Tyvar, applyTySubst)
 import State exposing (State)
 import Unify
-import Tuple
 
 type Tc a
     = Tc (State TcState (Result String a))
@@ -23,8 +22,7 @@ type alias TcState
     = { varcount : Int          -- current fresh variable counter
       , unifier : TySubst       -- current most general unifier
       }
-
-    
+      
 fromTc : Tc a -> State TcState (Result String a)
 fromTc (Tc m)
     = m
@@ -157,16 +155,18 @@ mkVar n
     = "t" ++ String.fromInt n
 
 
-unify : Type -> Type -> Tc ()
-unify t1 t2
+-- unify two types; the first argument is the pretty-printing function
+unify : (Type -> String) -> Type -> Type -> Tc ()
+unify show t1 t2
     = get |>
       andThen
       (\s -> case Unify.unifyEqs s.unifier [(t1,t2)] of
                  Ok r -> put { s | unifier=r }
-                 Err e -> fail e)   
-
-
-
+                 Err (Unify.Mismatch t3 t4) ->
+                        fail ("type mismatch: " ++ show t3 ++ " and " ++ show t4)
+                 Err (Unify.OccursCheckFail t3 t4) ->
+                        fail ("occurs check failed (infinite type): "++
+                                  show t3 ++ " = " ++ show t4))
               
 -- apply current substitution
 simplify : Type -> Tc Type

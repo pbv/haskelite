@@ -3,7 +3,7 @@
   Main module exporting the interactive HTML element
   Pedro Vasconcelos, 2021-23
 -}
-module Haskelite exposing (..)
+module Haskelite exposing (main)
 
 import AST exposing (Expr(..), Program(..), Module, Bind, Info, Name)
 import HsParser
@@ -59,10 +59,7 @@ type alias ReduceModel
       , next : Maybe Step          -- optional next step
       , flags : Flags              -- saved flags (to go back to editing)
       , options : Pretty.Options   -- displaying options
-      , skipped : Set Name        -- set of function names to skip
       }
-
-   
     
 type Msg
     = Previous           -- undo one evaluation step
@@ -305,7 +302,7 @@ reduceUpdate msg model =
                     Reducing
                     { model
                         | current = new
-                        , next = Machine.next model.skipped (Tuple.first new)
+                        , next = Machine.next (Tuple.first new)
                         , previous = model.current :: model.previous
                     }
                 Nothing ->
@@ -317,7 +314,7 @@ reduceUpdate msg model =
                     Reducing
                     { model
                         | current = start
-                        , next = Machine.next Set.empty (Tuple.first start)
+                        , next = Machine.next (Tuple.first start)
                         , previous = []
                     }
                 Nothing ->
@@ -346,14 +343,13 @@ editUpdate msg model =
                     let
                         heap0 = Heap.fromBinds (model.prelude ++ mod.binds)
                         conf0 = Machine.start heap0 expr
-                        skipped = Set.fromList mod.skip
                     in Reducing
                         { current = (conf0, "initial expression")
-                        , next = Machine.next skipped conf0
+                        , next = Machine.next conf0
                         , previous = []
                         , flags = model.flags
                         , options = Pretty.defaultOpts
-                        , skipped = skipped
+
                         }
                 Err msg1 ->
                     Editing {model | parsed = Err msg1}

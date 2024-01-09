@@ -11,19 +11,14 @@ import Parser exposing (Parser,
                         backtrackable, lazy)
 import Parser.Workaround 
 import Indent 
-import AST exposing (Expr(..),
-                     Matching(..),
-                     Pattern(..),
-                     Decl(..), DataDecl, Bind, Module, Program(..),
-                     Name, Info)
-import Types exposing (Type(..), Tycon, Tyvar,
-                           tyInt, tyBool, tyChar, tyConst)
+import AST exposing (..)
+import Types exposing (..)
 import Char
 import Set exposing (Set)
 import Dict exposing (Dict)
 import List.Extra as List
 
-parseProgram : String -> String -> Result String Program
+parseProgram : String -> String -> Result String AST.Program
 parseProgram inputExpr inputDecls
     = Result.mapError deadEndsToString <|
         (Parser.run topExprEnd inputExpr |>
@@ -87,8 +82,9 @@ ignoreNames
 collectDeclarations : Naming -> List Decl -> Module
 collectDeclarations naming decls
     = let ddecls = List.filterMap checkData decls
+          adecls = List.filterMap checkAlias decls
           binds = collectBinds naming decls
-      in { dataDecls = ddecls, binds = binds }
+      in { dataDecls = ddecls, aliasDecls = adecls, binds = binds }
 
 
 collectBinds : Naming -> List Decl -> List Bind
@@ -102,6 +98,12 @@ checkData : Decl -> Maybe DataDecl
 checkData decl
     = case decl of
           Data d -> Just d
+          _ -> Nothing
+
+checkAlias : Decl -> Maybe AliasDecl
+checkAlias decl
+    = case decl of
+          Alias d -> Just d
           _ -> Nothing
           
 makeBind : Naming -> (Decl, List Decl) -> Maybe Bind
@@ -164,7 +166,7 @@ topDeclaration : Parser Decl
 topDeclaration
     = oneOf
       [ dataDeclaration
-      , typeDeclaration
+      , typeDeclaration  
       , backtrackable typeSignature
       , backtrackable infixEquation 
       , prefixEquation
@@ -181,11 +183,11 @@ declaration
       ]
 
 ----------------------------------------------------    
--- type alias declarations
+-- type synonym declarations
 ----------------------------------------------------
 typeDeclaration : Parser Decl
 typeDeclaration
-    = succeed (\(tycon,vs) ty -> TypeAlias {tycon=tycon, args=vs, tyexp=ty})
+    = succeed (\(tycon,vs) ty -> Alias {tycon=tycon, args=vs, tyexp=ty})
          |. keyword "type"
          |. spaces
          |= simpleType
@@ -193,7 +195,8 @@ typeDeclaration
          |. operator "="
          |. spaces
          |= typeExpr
-    
+
+
 ------------------------------------------------------------    
 -- data type declarations
 ------------------------------------------------------------
@@ -206,7 +209,8 @@ dataDeclaration
          |. spaces
          |. operator "="
          |. spaces
-         |= dataAlternatives
+         |= dataAlternatives 
+
 
 makeDataDecl : (Tycon, List Tyvar) -> List (Name, List Type) -> Decl
 makeDataDecl (tycon, vs) alts

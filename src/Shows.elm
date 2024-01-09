@@ -14,11 +14,11 @@ showExpr = Pretty.prettyExpr Pretty.defaultOpts Heap.empty
 showType : Type -> String
 showType = Pretty.prettyType
 
-showVar : Name -> String
-showVar name
-    = "`" ++ name ++ "'"
+showPattern : Pattern -> String
+showPattern p = Pretty.toString (Pretty.prettyPattern p)
+           
+quote : String -> String
+quote name
+    = "’" ++ name ++ "’"
 
-showCons : Tag -> String
-showCons con
-    = "`" ++ con ++ "'"
       

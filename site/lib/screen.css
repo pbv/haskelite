@@ -12,7 +12,7 @@
     padding: 2em;
     margin: 1em 1em;
     cursor: default;
-    height: 20em;
+    height: 340px;
     overflow-y: auto;
     flex-direction: column-reverse;
     display: flex;

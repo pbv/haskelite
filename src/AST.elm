@@ -65,14 +65,13 @@ type Decl
     = TypeSig Name Type            -- type signature
     | Equation Name Matching       -- a single equation
     | Data DataDecl                -- data declaration
-    | TypeAlias AliasDecl
+    | Alias AliasDecl              -- type synonym declaration
 
 -- * data type declaration; alternatives in GADT-style      
 type alias DataDecl
     = { tycon: Tycon, args: List Tyvar, alternatives: List (Tag, Type) }
 
--- * type alias declaration;
--- expansion is a list of bound type vars and type expression
+-- * type synonym (alias)
 type alias AliasDecl
     = { tycon: Tycon, args: List Tyvar, tyexp: Type }
       
@@ -82,7 +81,10 @@ type alias Bind
 
 -- * modules
 type alias Module
-    = { dataDecls : List DataDecl, binds : List Bind }
+    = { dataDecls : List DataDecl
+      , aliasDecls : List AliasDecl
+      , binds : List Bind
+      }
       
 -- * programs
 type Program
@@ -306,6 +308,7 @@ tuplePattern ps
 -- smart constructor for multi-arity applications
 applyMany : Expr -> List Expr -> Expr
 applyMany = List.foldl (\x y->App y x) 
+
 
 
               

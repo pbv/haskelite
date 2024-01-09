@@ -11,7 +11,7 @@ import Machine.Heap exposing (Heap)
 import Machine.Heap as Heap
 import Context exposing (ExprCtx)
 import Dict exposing (Dict)
-import Pretty
+import Shows
 
 import Monocle.Optional as Monocle
 
@@ -678,10 +678,7 @@ translateCase e0 alts
     = let
         body = List.foldr
                  (\(patt,expr) rest ->
-                      let
-                          ppatt = Pretty.toString (Pretty.prettyPattern patt)
-                      in 
-                          Alt (Match patt (Return expr (Just ("case " ++ ppatt)))) rest)
+                      Alt (Match patt (Return expr (Just ("case " ++ Shows.showPattern patt)))) rest)
                    Fail alts
       in Arg e0 body
 

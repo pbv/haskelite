@@ -3,10 +3,10 @@
   Pedro Vasconcelos, 2023
 -}
 
-module Types exposing (Type(..), Kind(..), TySubst, Tycon, Tyvar,
+module Types exposing (Type(..), Kind(..),  Tycon, Tyvar, TySubst, -- TyAliases, 
                        tyBool, tyInt, tyChar, tyOrdering, tyString,
                        tyConst, applyTySubst, generalize,
-                       freeTyVars, genVars )
+                       freeTyVars, genVars)
 
 import Dict exposing (Dict)
 import Set exposing (Set)
@@ -19,7 +19,7 @@ type alias Tycon
       
 -- syntax for types
 type Type
-    = TyVar Tyvar                 -- free type variable
+    = TyVar Tyvar                -- free type variable
     | TyGen Int                  -- quantified (generic) type variable
     | TyConst Tycon (List Type)  -- type constructor applied to type arguments
     | TyTuple (List Type)        -- special type constructors
@@ -34,6 +34,7 @@ type Kind
 -- type substitutions
 type alias TySubst
     = Dict Tyvar Type
+
 
 tyBool : Type
 tyBool = TyConst "Bool" []
@@ -143,6 +144,7 @@ nub : List a -> List a
 nub lst
     = nubAux lst []
 
+-- worker function
 nubAux : List a -> List a -> List a
 nubAux lst acc
     = case lst of
@@ -154,4 +156,6 @@ nubAux lst acc
               else
                   nubAux xs (x::acc)
 
-                  
+
+
+                      

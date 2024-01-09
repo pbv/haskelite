@@ -7,6 +7,10 @@
     font-family: monospace;
 }
 
+input.editline {
+    width: 65%;
+}
+
 .lines   {
     font-family: monospace;
     padding: 2em;
@@ -59,11 +63,11 @@
 }
 
 
-.line:hover .info {
+.line:hover .info, .line:active .info {
     visibility: visible;
 }
 
-.line:hover {
+.line:hover, .line:active {
     border-bottom: 2px dotted black; 
 }
 

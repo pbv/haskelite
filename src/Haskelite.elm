@@ -137,7 +137,6 @@ editingView model =
            , span [] [ span [class "editline"] [text ">>> "]
                      , input [ placeholder "Enter an expression"
                              , value model.flags.expression
-                             , size 65
                              , spellcheck False
                              , class "editline"
                              , onInput (\str -> Edit {oldflags | expression=str})

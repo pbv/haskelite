@@ -3,10 +3,10 @@
   Pedro Vasconcelos, 2023
 -}
 
-module Types exposing (Type(..), Kind(..),  Tycon, Tyvar, TySubst, -- TyAliases, 
-                       tyBool, tyInt, tyChar, tyOrdering, tyString,
-                       tyConst, applyTySubst, generalize,
-                       freeTyVars, genVars)
+module Types exposing (Type(..), Kind(..), Tycon, Tyvar, TySubst,
+                       tyBool, tyInt, tyChar, tyOrdering, tyList,
+                       tyUnit, tyPair, tyTuple3, tyString, tyConst,
+                       applyTySubst, generalize, freeTyVars, genVars)
 
 import Dict exposing (Dict)
 import Set exposing (Set)
@@ -22,9 +22,7 @@ type Type
     = TyVar Tyvar                -- free type variable
     | TyGen Int                  -- quantified (generic) type variable
     | TyConst Tycon (List Type)  -- type constructor applied to type arguments
-    | TyTuple (List Type)        -- special type constructors
-    | TyList Type
-    | TyFun Type Type
+    | TyFun Type Type            -- functions
 
 -- syntax for kinds
 type Kind
@@ -34,7 +32,6 @@ type Kind
 -- type substitutions
 type alias TySubst
     = Dict Tyvar Type
-
 
 tyBool : Type
 tyBool = TyConst "Bool" []
@@ -48,8 +45,20 @@ tyChar = TyConst "Char" []
 tyOrdering : Type
 tyOrdering = TyConst "Ordering" []
 
+tyList : Type -> Type
+tyList t = TyConst "[]" [t]
+
+tyUnit : Type
+tyUnit = TyConst "()" []
+           
+tyPair : Type -> Type -> Type
+tyPair t1 t2 = TyConst "(,)" [t1,t2]
+
+tyTuple3 : Type -> Type -> Type -> Type
+tyTuple3 t1 t2 t3 = TyConst "(,,)" [t1,t2,t3]
+               
 tyString : Type
-tyString = TyList tyChar
+tyString = tyList tyChar
 
 -- smart constructor for type constants
 -- special case for Strings
@@ -75,10 +84,6 @@ applyTySubst s ty
               case Dict.get name s of
                   Nothing -> ty
                   Just t1 -> t1
-          TyList t1
-              -> TyList (applyTySubst s t1)
-          TyTuple ts
-              -> TyTuple (List.map (applyTySubst s) ts)
           TyFun t1 t2
               -> TyFun (applyTySubst s t1) (applyTySubst s t2)
           TyConst c ts
@@ -108,10 +113,6 @@ freeTyVarsAux ty
               []
           TyVar v ->
               [v]
-          TyList t1 ->
-              freeTyVarsAux t1
-          TyTuple ts ->
-              List.concatMap freeTyVarsAux ts
           TyFun t1 t2 ->
               freeTyVarsAux t1 ++ freeTyVarsAux t2
           TyConst c ts ->
@@ -130,10 +131,6 @@ genVarsAux ty
               []
           TyGen n ->
               [n]
-          TyList t1 ->
-              genVarsAux t1
-          TyTuple ts ->
-              List.concatMap genVarsAux ts
           TyFun t1 t2 ->
               genVarsAux t1 ++ genVarsAux t2
           TyConst c ts ->

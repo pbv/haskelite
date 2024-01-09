@@ -291,8 +291,16 @@ stringLit s = listLit (List.map Char <| String.toList s)
 tupleLit : List Expr -> Expr
 tupleLit args
     = case args of
-          [e] -> e   -- no singleton tuple
-          _ -> Cons "," args
+          [] ->
+              Cons "()" []
+          [e] ->
+              e   -- no singleton tuple
+          [e1,e2] ->
+              Cons "," args
+          [e1,e2,e3] ->
+              Cons ",," [e1, e2, e3]
+          _ ->
+              Error (stringLit "invalid tuple")
 
 listPattern : List Pattern -> Pattern
 listPattern =

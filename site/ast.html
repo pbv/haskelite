@@ -22,24 +22,27 @@
 	  "data Expr = Var Char | Num Int | Binop Op Expr Expr\n\n"+
 	  "-- An enumeration for the 4 basic arithmetic operations\n"+
 	  "data Op = Plus | Times | Minus | Div\n\n"+
-	  "-- An example expression: 3+2*x\n"+
-	  "example = Binop Plus (Num 3) (Binop Times (Num 2) (Var 'x'))\n\n"+
+	  "-- An example expression: 3+y+2*x\n"+
+	  "example = Binop Plus (Var 'y') (Binop Times (Num 2) (Var 'x'))\n\n"+
+	  "-- associations of variable to values\n"+
+	  "type Assocs = [(Char,Int)]\n\n"+
 	  "-- Recursive function to evaluate an expression\n"+
-          "eval :: Expr -> [(Char,Int)] -> Int\n"+
+          "eval :: Expr -> Assocs -> Int\n"+
+	  "eval (Num v) assocs = v\n"+
 	  "eval (Var x) assocs = case lookup x assocs of\n"+
 	  "                           Just v -> v\n"+
-	  "                           Nothing -> error \"unknown variable\"\n"+
-	  "eval (Num v) assocs = v\n"+
 	  "eval (Binop op e1 e2) assocs = apply op (eval e1 assocs) (eval e2 assocs)\n\n"+
 	  "apply :: Op -> Int -> Int -> Int\n"+
 	  "apply Plus = (+)\n"+
 	  "apply Minus = (-)\n"+
 	  "apply Times = (*)\n"+
-	  "apply Div = div\n";
+	  "apply Div = div\n\n"+
+	  "-- example values associations\n"+
+	  "assocs = [('x',5), ('y',2)]\n";
 	  
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
-	  flags: { expression:"eval example [('x',5)]",
+	  flags: { expression:"eval example assocs",
 		   declarations: decls
 		 }
       });

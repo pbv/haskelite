@@ -89,6 +89,11 @@ prettyExpr_ ctx e =
                  (DList.intersperse
                       (DList.singleton ",")                      
                       (List.map (prettyExpr_ {ctx|prec=0}) args))
+        Cons ",," args ->
+            bracket "(" ")" <|
+                 (DList.intersperse
+                      (DList.singleton ",")                      
+                      (List.map (prettyExpr_ {ctx|prec=0}) args))
 
 
         Cons ":" [e1, e2] ->
@@ -344,6 +349,11 @@ prettyPattern p =
                 DList.intersperse
                     (DList.singleton ",")
                     (List.map prettyPattern ps)
+        ConsP ",," ps ->
+            bracket "(" ")" <|
+                DList.intersperse
+                    (DList.singleton ",")
+                    (List.map prettyPattern ps)
 
         ConsP ":" [p1,p2] ->
             bracket "(" ")" <|
@@ -366,21 +376,30 @@ prettyType_ prec ty
     = case ty of
           TyConst c [] ->
               DList.singleton c
-          TyConst c ts ->
-              paren (prec>0) 
-                  (DList.intersperse (DList.singleton " ")
-                       (DList.singleton c :: List.map (prettyType_ 1) ts))
-          TyVar name ->
-              DList.singleton name
-          TyGen idx ->
-              DList.singleton (showGenVar idx)
-          TyList ty1 ->
+          TyConst "[]" [ty1] ->
               bracket "[" "]" (prettyType_ 0 ty1)
-          TyTuple ts ->
+          TyConst "(,)" ts ->
               bracket "(" ")" <|
                   DList.intersperse
                       (DList.singleton ",")
                       (List.map (prettyType_ 0) ts) 
+          TyConst "(,,)" ts ->
+              bracket "(" ")" <|
+                  DList.intersperse
+                      (DList.singleton ",")
+                      (List.map (prettyType_ 0) ts) 
+              
+          TyConst c ts ->
+              paren (prec>0) 
+                  (DList.intersperse (DList.singleton " ")
+                       (DList.singleton c :: List.map (prettyType_ 1) ts))
+                      
+          TyVar name ->
+              DList.singleton name
+
+          TyGen idx ->
+              DList.singleton (showGenVar idx)
+
           TyFun t1 t2 ->
               paren (prec>0) <|
                   DList.append (prettyType_ 1 t1)

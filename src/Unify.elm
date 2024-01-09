@@ -42,16 +42,7 @@ unifyAux s t1 t2 eqs
               if c1 == c2 && List.length ts1 == List.length ts2 then
                   unifyEqs s (List.map2 Tuple.pair ts1 ts2 ++ eqs)
               else
-                  Err (Mismatch t1 t2)
-                                    
-          (TyTuple ts1, TyTuple ts2) ->
-              if List.length ts1 == List.length ts2 then
-                  unifyEqs s (List.map2 Tuple.pair ts1 ts2 ++ eqs)
-              else
-                  Err (Mismatch t1 t2)
-                  
-          (TyList t3, TyList t4) ->
-              unifyAux s t3 t4 eqs
+                  Err (Mismatch t1 t2)                                    
              
           (TyFun t1a t1b, TyFun t2a t2b) ->
               unifyAux s t1a t2a ((t1b,t2b)::eqs)
@@ -75,10 +66,6 @@ occurs v ty
               x == v
           TyFun t1 t2 ->
               occurs v t1 || occurs v t2
-          TyList t1 ->
-              occurs v t1
-          TyTuple ts ->
-              List.any (occurs v) ts
           TyConst c ts ->
               List.any (occurs v) ts
 

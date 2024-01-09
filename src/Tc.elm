@@ -134,12 +134,6 @@ freshInst_ r ty
                       Nothing -> ty  -- NB: this should not happen!
           TyFun t1 t2 ->
               TyFun (freshInst_ r t1) (freshInst_ r t2)
-                  
-          TyList t1 ->
-              TyList (freshInst_ r t1)
-
-          TyTuple ts ->
-              TyTuple (List.map (freshInst_ r) ts)
 
           TyConst c ts ->
             TyConst c (List.map (freshInst_ r) ts)

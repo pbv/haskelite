@@ -479,20 +479,21 @@ delimitedType
             |= upperIdentifier
       , succeed TyVar        -- identifiers are parsed as free type vars
             |= identifier    -- should be generalized if necessary
-      , succeed TyList
+      , succeed tyList
             |. symbol "["
             |= lazy (\_ -> typeExpr)
             |. symbol "]"
-      , backtrackable
-            <| succeed tyTuple
-                  |= Parser.sequence
-                     { start = "("
-                     , end = ")"
-                     , separator = ","
-                     , item = lazy (\_ -> typeExpr)
-                     , spaces = spaces
-                     , trailing = Parser.Forbidden
-                     }
+      , Parser.sequence
+            { start = "("
+            , end = ")"
+            , separator = ","
+            , item = lazy (\_ -> typeExpr)
+            , spaces = spaces
+            , trailing = Parser.Forbidden
+            } |>
+          andThen makeTupleType
+      ]
+              {-
       , succeed TyConst
              |. symbol "("
              |= upperIdentifier
@@ -506,14 +507,22 @@ delimitedType
                 , trailing = Parser.Forbidden
                 }
       ]
+-}
 
-
-          
-tyTuple : List Type -> Type
-tyTuple ts
+makeTupleType : List Type -> Parser Type
+makeTupleType ts
     = case ts of
-          [t] -> t
-          _ -> TyTuple ts
+          [] ->
+              succeed tyUnit
+          [t1] ->
+              succeed t1
+          [t1,t2] ->
+              succeed (tyPair t1 t2)
+          [t1, t2, t3] ->
+              succeed (tyTuple3 t1 t2 t3)
+          _ ->
+              problem "invalid tuple: maximum 3 elements" 
+              
               
 
             
@@ -726,8 +735,6 @@ applicativeExpr
                   application ]
 
 
-      
-
 -- self-delimited expressions
 --
 delimited : Parser Expr
@@ -803,16 +810,32 @@ literalList
 
 literalTuple : Parser Expr
 literalTuple
-    = succeed AST.tupleLit
-         |= Parser.sequence
-            { start = "("
-            , end = ")"
-            , separator = ","
-            , spaces = spaces
-            , item = lazy (\_ -> topExpr)
-            , trailing = Parser.Forbidden
-            }
+    = Parser.sequence
+      { start = "("
+      , end = ")"
+      , separator = ","
+      , spaces = spaces
+      , item = lazy (\_ -> topExpr)
+      , trailing = Parser.Forbidden
+      } |>
+    andThen makeTuple
 
+makeTuple : List Expr -> Parser Expr
+makeTuple args
+    = case args of
+          [] ->
+              succeed (Cons "()" [])
+          [e] ->
+              succeed e   -- no singleton tuple
+          [e1,e2] ->
+              succeed (Cons "," args)
+          [e1,e2,e3] ->
+              succeed (Cons ",," args)
+          _ ->
+              problem "tuple with maximum 3 elements"
+
+
+        
 -- build an application to a list of arguments
 makeApp : Expr -> List Expr -> Expr
 makeApp e0 args

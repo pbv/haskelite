@@ -12,7 +12,8 @@ import AST exposing (Expr(..), Matching(..), Pattern(..),
                       Program(..), Module, Bind, Decl(..),
                          AliasDecl, DataDecl, Name, Tag)
 import Types exposing (Type(..), Kind(..), Tycon, Tyvar, 
-                       tyBool, tyInt, tyChar, tyString, tyOrdering, applyTySubst)
+                       tyBool, tyInt, tyChar, tyString, tyList,
+                           tyPair, tyTuple3, tyOrdering, applyTySubst)
 import Tc exposing (Tc, pure, andThen, traverse, traverse_, explain, fail)
 import Shows 
 
@@ -130,10 +131,6 @@ wellformedType kenv ty
                       fail ("unbound type variable " ++ Shows.quote v)
           TyGen _ ->
               pure ()
-          TyList t ->
-              wellformedType kenv t
-          TyTuple ts ->
-              wellformedTypes kenv ts
           TyFun t1 t2 ->
               wellformedTypes kenv [t1,t2]
           TyConst c ts ->
@@ -255,12 +252,6 @@ expandRec tyalias acc ty
               Ok ty
           TyGen _ ->
               Ok ty
-          TyTuple ts ->
-              expandList tyalias acc ts |>
-              Result.andThen (\ts1 -> Ok (TyTuple ts1))
-          TyList ty1 ->
-              expandRec tyalias acc ty1 |>
-              Result.andThen (\t -> Ok (TyList t))
           TyFun t1 t2 ->
               expandRec tyalias acc t1 |>
               Result.andThen (\t1e ->
@@ -664,8 +655,16 @@ translateCase e0 alts
 -- initial kind environment for primitives
 initialKindEnv : KindEnv
 initialKindEnv
-    = Dict.fromList [ ("Int", KindStar), ("Char", KindStar) ]
+    = Dict.fromList [ ("Int", KindStar), ("Char", KindStar),
+                      ("(,)", kindArgs 2),
+                      ("(,,)", kindArgs 3),
+                      ("[]", kindArgs 1)
+                    ]
 
+-- kind for an n-argument type constructor      
+kindArgs : Int -> Kind
+kindArgs n = if n > 0 then KindFun KindStar (kindArgs (n-1)) else KindStar
+      
 -- initial typing environment for primitives
 initialTypeEnv : TyEnv
 initialTypeEnv
@@ -674,6 +673,7 @@ initialTypeEnv
         -- NB: no typeclasses so these types are overly polymorphic!
         a = TyGen 0
         b = TyGen 1
+        c = TyGen 2
         cmpOp = TyFun a (TyFun a tyBool)
         orderOp = TyFun a (TyFun a tyOrdering)
       in
@@ -684,14 +684,14 @@ initialTypeEnv
       , (">=", cmpOp), ("<", cmpOp), (">", cmpOp)
       , ("compare", orderOp)
       , ("error", TyFun tyString a)
-      , (":", TyFun a (TyFun (TyList a) (TyList a)))
-      , ("[]", TyList a)
-      -- TODO: generalize this for more tuples 
-      , (",", TyFun a (TyFun b (TyTuple [a, b])))
-      , ("enumFrom", TyFun tyInt (TyList tyInt))
-      , ("enumFromTo", TyFun tyInt (TyFun tyInt (TyList tyInt)))
-      , ("enumFromThen", TyFun tyInt (TyFun tyInt (TyList tyInt)))
-      , ("enumFromThenTo", TyFun tyInt (TyFun tyInt (TyFun tyInt (TyList tyInt))))
+      , (":", TyFun a (TyFun (tyList a) (tyList a)))
+      , ("[]", tyList a)
+      , (",", TyFun a (TyFun b (tyPair a b)))
+      , (",,", TyFun a (TyFun b (TyFun c (tyTuple3 a b c))))
+      , ("enumFrom", TyFun tyInt (tyList tyInt))
+      , ("enumFromTo", TyFun tyInt (TyFun tyInt (tyList tyInt)))
+      , ("enumFromThen", TyFun tyInt (TyFun tyInt (tyList tyInt)))
+      , ("enumFromThenTo", TyFun tyInt (TyFun tyInt (TyFun tyInt (tyList tyInt))))
       , ("chr", TyFun tyInt tyChar)
       , ("ord", TyFun tyChar tyInt)
       , ("toUpper", TyFun tyChar tyChar)

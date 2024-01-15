@@ -1,8 +1,9 @@
 module Tests exposing (..)
 
 import AST exposing (Expr(..), Matching(..), Pattern(..))
-import Machine exposing (Conf, Control(..), Cont(..))
-import Heap
+import Machine.Types exposing (Conf, Control(..), Cont(..))
+import Machine.Heap as Heap
+import Machine
 import Set
 
 --------------------------------------------------------------------
@@ -16,11 +17,9 @@ transitions conf = transitions_ 0 conf
 transitions_ : Int -> Conf -> ()
 transitions_ n conf
     = let
-        --_ = Debug.log (String.fromInt n) (Machine.getControl conf, Machine.getStack conf )
-        --_ = Debug.log "control" (Machine.getControl conf)
-        _ = Debug.log "stack" (Machine.getStack conf)
+        _ = Debug.log (String.fromInt n) (Machine.getControl conf, Machine.getStack conf )
       in
-       case Machine.transition Set.empty conf of
+       case Machine.transition conf of
            Nothing ->
                ()
            Just conf1 ->
@@ -78,24 +77,25 @@ example5 =
         stack = []
     in
         (heap, control, stack)
+-}
 
 example6 : Conf
 example6 =
     let
-        heap = Dict.singleton "fact"
-               (Lam (Just "fact")
+        heap = Heap.fromList [("fact",
+               (Lam 1 (Just "fact")
                    (Alt (Match (VarP "n")
-                             (Arg (InfixOp ">" (Var "n") (Number 0))
+                             (Arg (BinaryOp ">" (Var "n") (Number 0))
                                   (Match (ConsP "True" [])
-                                       (Return (InfixOp "*" (Var "n") (App (Var "fact") (InfixOp "-" (Var "n") (Number 1)))) "fact n | n>0 = n*fact (n-1)"))))
+                                       (Return (BinaryOp "*" (Var "n") (App (Var "fact") (BinaryOp "-" (Var "n") (Number 1)))) (Just "fact n | n>0 = n*fact (n-1)")))))
                         (Match (VarP "n")
-                             (Return (Number 1) "fact n | otherwise = 1"))))
+                             (Return (Number 1) (Just "fact n | otherwise = 1"))))))]
         control = E (App (Var "fact") (Number 5))
         stack = []
     in
         (heap, control, stack)
            
-         
+{-         
 example7 : Conf
 example7 =
     let heap = Dict.singleton "factAcc"
@@ -161,7 +161,7 @@ example10
           expr = (App (Var "double") (AST.listLit [Number 1, Number 2, Number 3]))
       in
           (heap, E expr, [DeepEval expr Context.empty])
--}
+
 
 
 example11
@@ -176,7 +176,7 @@ example12
           control = E (Var "xs")
           stack = [DeepEval]
     in (heap, control, stack) 
-      
+-}      
            
       
 

@@ -865,13 +865,13 @@ prefixNeg
 infixApp : Parser Expr
 infixApp
     = succeed (\e1 f e2 -> BinaryOp f e1 e2)
-         |= delimited
+         |= application 
          |. spaces   
          |. symbol "`"
          |= identifier
          |. symbol "`"
          |. spaces   
-         |= delimited   
+         |= application 
              
 application : Parser Expr       
 application

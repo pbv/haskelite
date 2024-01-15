@@ -23,7 +23,7 @@
 	  "data Expr = Var Char | Num Int | Binop Op Expr Expr\n\n"+
 	  "-- An enumeration for the 4 basic arithmetic operations\n"+
 	  "data Op = Plus | Times | Minus | Div\n\n"+
-	  "-- An example expression: 3+y+2*x\n"+
+	  "-- An example expression: y+2*x\n"+
 	  "example = Binop Plus (Var 'y') (Binop Times (Num 2) (Var 'x'))\n\n"+
 	  "-- associations of variable to values\n"+
 	  "type Assocs = [(Char,Int)]\n\n"+

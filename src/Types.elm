@@ -103,38 +103,38 @@ generalize fvs ty
 -- set of all free type variables in a type, no repeat entries
 freeTyVars : Type -> List Tyvar
 freeTyVars ty
-    = nub (freeTyVarsAux ty)
+    = nub (freeTyVarsAux ty [])
 
 -- worker function      
-freeTyVarsAux : Type -> List Tyvar
-freeTyVarsAux ty
+freeTyVarsAux : Type -> List Tyvar -> List Tyvar
+freeTyVarsAux ty acc
     = case ty of
           TyGen _ ->
-              []
+              acc
           TyVar v ->
-              [v]
+              v::acc
           TyFun t1 t2 ->
-              freeTyVarsAux t1 ++ freeTyVarsAux t2
+              freeTyVarsAux t1 (freeTyVarsAux t2 acc)
           TyConst c ts ->
-              List.concatMap freeTyVarsAux ts
+              List.foldr freeTyVarsAux acc ts
 
 -- set of all generic vars in a type, no repeated entries
 genVars : Type -> List Int
 genVars ty
-    = nub (genVarsAux ty)
+    = nub (genVarsAux ty [])
 
 -- worker function
-genVarsAux : Type -> List Int
-genVarsAux ty
+genVarsAux : Type -> List Int -> List Int
+genVarsAux ty acc
     = case ty of
           TyVar _ ->
-              []
+              acc
           TyGen n ->
-              [n]
+              n::acc
           TyFun t1 t2 ->
-              genVarsAux t1 ++ genVarsAux t2
+              genVarsAux t1 (genVarsAux t2 acc)
           TyConst c ts ->
-              List.concatMap genVarsAux ts
+              List.foldr genVarsAux acc ts
 
 -- remove duplicate entries
 nub : List a -> List a

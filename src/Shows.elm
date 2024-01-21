@@ -6,16 +6,21 @@ module Shows exposing (..)
 import AST exposing (..)
 import Types  exposing (..)
 import Pretty
+import PrettyPrinter
 import Machine.Heap as Heap
 
+      
 showExpr : Expr -> String
-showExpr = Pretty.prettyExpr Pretty.defaultOpts Heap.empty
+showExpr
+    = PrettyPrinter.prettyExpr PrettyPrinter.defaultOpts Heap.empty
 
 showType : Type -> String
-showType = Pretty.prettyType
+showType t
+    = PrettyPrinter.prettyType t
 
 showPattern : Pattern -> String
-showPattern p = Pretty.toString (Pretty.prettyPattern p)
+showPattern p
+    = PrettyPrinter.prettyPattern p
            
 quote : String -> String
 quote name

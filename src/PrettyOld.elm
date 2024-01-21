@@ -3,7 +3,7 @@
   and machine configurations
   Pedro Vasconcelos 2021-23
 -}
-module Pretty exposing (..)
+module PrettyOld exposing (..)
 
 import AST exposing (Expr(..), Matching(..), Bind, Pattern(..), Name)
 import Types exposing (Type(..))

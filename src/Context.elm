@@ -1,6 +1,7 @@
 {-
-  Evaluation contexts for evaluating to full normal forms
-  Pedro Vasconcelos, 2021-23
+  Expression evaluation contexts;
+  these are used for forcing evaluation to weak/full normal form
+  Pedro Vasconcelos, 2021-24
 -} 
 module Context exposing (..)
 

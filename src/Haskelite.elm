@@ -12,7 +12,7 @@ import Machine.Types as Machine
 import Machine.Heap as Heap
 import Typecheck exposing (TyEnv, KindEnv)
 import Parser
-import Pretty
+import PrettyPrinter exposing (Options)
 import Prelude
 
 import Dict
@@ -58,7 +58,7 @@ type alias ReduceModel
       , previous : List Step       -- list of previous steps
       , next : Maybe Step          -- optional next step
       , flags : Flags              -- saved flags (to go back to editing)
-      , options : Pretty.Options   -- displaying options
+      , options : Options          -- displaying options
       }
     
 type Msg
@@ -68,7 +68,7 @@ type Msg
     | EditMode           -- go into editing mode
     | EvalMode           -- go into evaluation mode
     | Edit Flags         -- modify flags
-    | Toggle (Pretty.Options -> Pretty.Options) -- modify options
+    | Toggle (Options -> Options) -- modify options
 
 
      
@@ -238,16 +238,16 @@ checkbox b msg name =
         , text name
         ]
         
-toggleLists : Pretty.Options -> Pretty.Options
+toggleLists : Options -> Options
 toggleLists opts = { opts | prettyLists = not (opts.prettyLists) }
 
-toggleEnums : Pretty.Options -> Pretty.Options
+toggleEnums : Options -> Options
 toggleEnums opts = { opts | prettyEnums = not (opts.prettyEnums) }
                 
 
-renderStep  : Pretty.Options -> Int -> Int -> Step -> Html Msg
+renderStep  : Options -> Int -> Int -> Step -> Html Msg
 renderStep opts largest number (conf, info)
-    = case Pretty.prettyConf opts conf of
+    = case PrettyPrinter.prettyConf opts conf of
           Just txt ->
               div [class "line"]
                   [ span [class "linenumber"]
@@ -347,7 +347,7 @@ editUpdate msg model =
                         , next = Machine.next conf0
                         , previous = []
                         , flags = model.flags
-                        , options = Pretty.defaultOpts
+                        , options = PrettyPrinter.defaultOpts
 
                         }
                 Err msg1 ->

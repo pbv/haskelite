@@ -129,7 +129,7 @@ applySubst s e
               in Case e1 (applyAltsSubst s alts)
                       
           App e1 e2 ->
-              App (applySubst s e1)(applySubst s e2)
+              App (applySubst s e1) (applySubst s e2)
                   
           BinaryOp op e1 e2 ->
               BinaryOp op (applySubst s e1) (applySubst s e2)

@@ -12,12 +12,15 @@ import Machine.Types as Machine
 import Machine.Heap as Heap
 import Typecheck exposing (TyEnv, KindEnv)
 import Parser
-import Pretty
+import PrettyPrinter exposing (Options)
 import Prelude
 
 import Dict
 import Set exposing (Set)
 import List.Extra as List
+
+import Pretty exposing (Doc)
+import Pretty.Renderer as Pretty
 
 import Html exposing (..)
 import Html.Attributes exposing (type_, class, value, style, placeholder, checked,
@@ -58,7 +61,7 @@ type alias ReduceModel
       , previous : List Step       -- list of previous steps
       , next : Maybe Step          -- optional next step
       , flags : Flags              -- saved flags (to go back to editing)
-      , options : Pretty.Options   -- displaying options
+      , options : Options          -- displaying options
       }
     
 type Msg
@@ -68,7 +71,7 @@ type Msg
     | EditMode           -- go into editing mode
     | EvalMode           -- go into evaluation mode
     | Edit Flags         -- modify flags
-    | Toggle (Pretty.Options -> Pretty.Options) -- modify options
+    | Toggle (Options -> Options) -- modify options
 
 
      
@@ -217,18 +220,6 @@ handleKeyEvent ev
           _ ->
               Nothing
         
-{-        
-skippedNames : List Name -> Html a
-skippedNames names
-    = case names of
-          [] ->
-              span [] []
-          _ ->
-              span [] [ text "Skipping: ",
-                          code [] <|
-                           List.intersperse (text " ") (List.map text names) ]
--}          
-        
 
 checkbox : Bool -> msg -> String -> Html msg
 checkbox b msg name =
@@ -238,26 +229,28 @@ checkbox b msg name =
         , text name
         ]
         
-toggleLists : Pretty.Options -> Pretty.Options
+toggleLists : Options -> Options
 toggleLists opts = { opts | prettyLists = not (opts.prettyLists) }
 
-toggleEnums : Pretty.Options -> Pretty.Options
+toggleEnums : Options -> Options
 toggleEnums opts = { opts | prettyEnums = not (opts.prettyEnums) }
                 
 
-renderStep  : Pretty.Options -> Int -> Int -> Step -> Html Msg
+-- render a single numbered reduction line                   
+renderStep  : Options -> Int -> Int -> Step -> Html Msg
 renderStep opts largest number (conf, info)
-    = case Pretty.prettyConf opts conf of
-          Just txt ->
+    = case PrettyPrinter.prettyConf opts conf of
+          Just html ->
               div [class "line"]
                   [ span [class "linenumber"]
                         [text (rightAlign largest number ++ ". ")]
-                  , text txt
+                  , html
                   , div [class "info"] [text info]
                   ]
           Nothing ->
               span [] []
 
+                 
 -- right align a number; first argument is the largest number in the sequence
 -- use a Unicode non breakable space to prevent HTML from eating up the formating
 rightAlign : Int -> Int -> String
@@ -347,7 +340,7 @@ editUpdate msg model =
                         , next = Machine.next conf0
                         , previous = []
                         , flags = model.flags
-                        , options = Pretty.defaultOpts
+                        , options = PrettyPrinter.defaultOpts
 
                         }
                 Err msg1 ->

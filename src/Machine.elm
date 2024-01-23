@@ -498,13 +498,13 @@ outermostCont expr
 outermostRedex : Expr -> Maybe ExprCtx
 outermostRedex expr
     = case expr of
-          Cons tag args ->
-              outermostRedexArgs tag 0 args
+          Cons _ args ->
+              outermostRedexArgs 0 args
           _ ->
               Nothing
 
-outermostRedexArgs : Tag -> Int -> List Expr -> Maybe ExprCtx
-outermostRedexArgs tag i args
+outermostRedexArgs : Int -> List Expr -> Maybe ExprCtx
+outermostRedexArgs i args
     = case args of
           [] ->
               Nothing
@@ -512,11 +512,11 @@ outermostRedexArgs tag i args
               if isWhnf arg1 then
                   case outermostRedex arg1 of
                       Nothing ->
-                          outermostRedexArgs tag (i+1) rest
+                          outermostRedexArgs (i+1) rest
                       Just ctx1 ->
-                          Just (Monocle.compose (Context.cons tag i) ctx1)
+                          Just (Monocle.compose (Context.cons i) ctx1)
               else
-                  Just (Context.cons tag i)
+                  Just (Context.cons i)
                   
 
 -------------------------------------------------------------------------

@@ -661,7 +661,7 @@ infix4 = infixLeft  infix5 [ ("==", BinaryOp "==")
                            ] -- TODO: these should be non-associative
 
 infix3 = infixRight infix4 [ ("&&", \e1 e2 -> App (App (Var "&&") e1) e2) ]
-infix2 = infixRight infix3 [ ("||", \e1 e2 -> App (App (Var "||") e2) e2) ]
+infix2 = infixRight infix3 [ ("||", \e1 e2 -> App (App (Var "||") e1) e2) ]
 
 
 -- parse a given operator
@@ -1077,34 +1077,6 @@ whitespaceOrComment
           , Parser.multiComment "{-" "-}" Parser.Nestable
           , whitespace
           ]           
-
-{-      
-skipAnnotation : Parser (List String)
-skipAnnotation
-    = succeed String.words
-        |. symbol "--SKIP--"
-        |= Parser.getChompedString (Parser.Workaround.chompUntilEndOrAfter "\n")    
-
-annotationOrComment : Parser (List String)
-annotationOrComment
-    = oneOf
-      [ skipAnnotation
-      , succeed [] |. Parser.Workaround.lineCommentAfter "--"
-      , succeed [] |. Parser.multiComment "{-" "-}" Parser.Nestable
-      ]
-        
-skipAnnotations : Parser (List String)
-skipAnnotations
-    = succeed List.concat 
-      |= Parser.sequence
-         { start = ""
-         , end = ""
-         , separator = ""
-         , spaces = whitespace
-         , item = annotationOrComment
-         , trailing = Parser.Forbidden
-         }
--}
 
 -- whitespace, including newlines
 whitespace : Parser ()

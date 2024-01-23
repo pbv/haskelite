@@ -19,6 +19,9 @@ import Dict
 import Set exposing (Set)
 import List.Extra as List
 
+import Pretty exposing (Doc)
+import Pretty.Renderer as Pretty
+
 import Html exposing (..)
 import Html.Attributes exposing (type_, class, value, style, placeholder, checked,
                                  disabled, size, rows, cols, spellcheck, tabindex)
@@ -217,18 +220,6 @@ handleKeyEvent ev
           _ ->
               Nothing
         
-{-        
-skippedNames : List Name -> Html a
-skippedNames names
-    = case names of
-          [] ->
-              span [] []
-          _ ->
-              span [] [ text "Skipping: ",
-                          code [] <|
-                           List.intersperse (text " ") (List.map text names) ]
--}          
-        
 
 checkbox : Bool -> msg -> String -> Html msg
 checkbox b msg name =
@@ -245,19 +236,21 @@ toggleEnums : Options -> Options
 toggleEnums opts = { opts | prettyEnums = not (opts.prettyEnums) }
                 
 
+-- render a single numbered reduction line                   
 renderStep  : Options -> Int -> Int -> Step -> Html Msg
 renderStep opts largest number (conf, info)
     = case PrettyPrinter.prettyConf opts conf of
-          Just txt ->
+          Just html ->
               div [class "line"]
                   [ span [class "linenumber"]
                         [text (rightAlign largest number ++ ". ")]
-                  , text txt
+                  , html
                   , div [class "info"] [text info]
                   ]
           Nothing ->
               span [] []
 
+                 
 -- right align a number; first argument is the largest number in the sequence
 -- use a Unicode non breakable space to prevent HTML from eating up the formating
 rightAlign : Int -> Int -> String

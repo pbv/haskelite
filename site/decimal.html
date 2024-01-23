@@ -24,7 +24,7 @@
 	  "decimal n = decimalAux n []\n\n"+
 	  "decimalAux :: Int -> String -> String\n"+
 	  "decimalAux n acc\n"+
-	  "   | n>0 = decimalAux (div n 10) (digit (mod n 10):acc)\n"+
+	  "   | n>0 = decimalAux (n`div`10) (digit (n`mod`10):acc)\n"+
 	  "   | otherwise = acc\n\n"+
 	  "digit :: Int -> Char\n"+
 	  "digit d = chr (ord '0' + d)\n"

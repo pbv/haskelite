@@ -50,13 +50,13 @@ flip f x y = f y x
 otherwise :: Bool
 otherwise = True
 
-(&&) :: Bool -> Bool -> Bool
-False && _ = False
-True  && x = x
-
 (||) :: Bool -> Bool -> Bool
 False || x = x
 True  || _ = True
+
+(&&) :: Bool -> Bool -> Bool
+False && _ = False
+True  && x = x
 
 not :: Bool -> Bool
 not True = False
@@ -151,6 +151,14 @@ cycle xs = let xs' = xs++xs'
 
 iterate :: (a -> a) -> a -> [a]
 iterate f x = x : iterate f (f x)
+
+and :: [Bool] -> Bool
+and [] = True
+and (x:xs) = x && and xs
+
+or :: [Bool] -> Bool
+or [] = False
+or (x:xs) = x || or xs
 
 any :: (a -> Bool) -> [a] -> Bool
 any f [] = False

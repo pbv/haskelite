@@ -2,17 +2,20 @@
   Pretty-printer for Haskelite expressions, types and machine configurations
   Pedro Vasconcelos 2021-23
 -}
-module PrettyPrinter exposing (..)
+module PrettyPrinter exposing (Options, defaultOpts,
+                               prettyExpr, prettyPattern, prettyType, prettyConf)
 
 import AST exposing (Expr(..), Matching(..), Bind, Pattern(..), Name)
 import Types exposing (Type(..))
 import Machine.Types exposing (..)
 import Machine.Heap exposing (Heap)
 import Machine.Heap as Heap
-import Pretty exposing (Doc, string, char, space, join, parens, brackets, a,
-                            words, lines)
-import Set exposing (Set)
+import Pretty exposing (Doc, string, taggedString, char, space, join, parens,
+                            brackets, a, words, line, lines, nest)
+import Pretty.Renderer exposing (Renderer)
 
+import Html exposing (Html, Attribute)
+import Html.Attributes exposing (class)
    
 type alias Options
     = { prettyLists : Bool     -- should we prettify lists?
@@ -32,6 +35,10 @@ type alias PrettyCtx
       , options : Options
       }
 
+
+-- tags for code highlighting
+type Tag = Keyword | Literal | String | Constructor | Variable 
+    
 
 -- conditionally add parenthesis to a document
 parensIf : Bool -> Doc t -> Doc t
@@ -62,56 +69,68 @@ prettyPattern p
     = Pretty.pretty defaultLength (ppPattern p)
 
 --
--- configurations 
+-- render a configuration to HTML
 --
-prettyConf : Options -> Conf -> Maybe String
-prettyConf opts (heap, control, stack)
+prettyConf : Options -> Conf -> Maybe (Html msg)
+prettyConf opts conf
+    = case ppConf opts conf of
+          Just doc ->
+              Just <| Pretty.Renderer.pretty defaultLength htmlRenderer doc
+          Nothing ->
+              Nothing
+
+
+ppConf : Options -> Conf -> Maybe (Doc Tag)
+ppConf opts (heap, control, stack)
    = case (control, stack) of
          (E expr, _) ->
-             Just <| prettyCont opts heap stack expr
+             let ppCtx = { prec=0, heap=heap, options=opts }
+             in 
+             case continuationExpr stack expr of
+                 Ellipsis expr1 ->
+                     Just (string "... "  |> a (ppExpr ppCtx expr1))
+                 Final expr1 ->
+                     Just (ppExpr ppCtx expr1)
          _ ->
              Nothing
-             
                  
--- convert a continuation stack into a string
-prettyCont : Options -> Heap -> Stack -> Expr -> String
-prettyCont opts heap stack acc
+type Continuation = Ellipsis Expr | Final Expr
+
+-- convert a continuation stack into an expression
+continuationExpr : Stack -> Expr -> Continuation
+continuationExpr stack acc
     = case stack of
-          [] ->
-              prettyExpr opts heap acc
           (Update _::rest) ->
-              prettyCont opts heap rest acc
+              continuationExpr rest acc
           (PushArg arg::rest) ->
-              prettyCont opts heap rest (App acc arg)
+              continuationExpr rest (App acc arg)
           (ContBinary op e2::rest) ->
-              prettyCont opts heap rest (BinaryOp op acc e2)
+              continuationExpr rest (BinaryOp op acc e2)
           (RetBinary op e1::rest) ->
-              prettyCont opts heap rest (BinaryOp op e1 acc)
+              continuationExpr rest (BinaryOp op e1 acc)
           (RetUnary op::rest) ->
-              prettyCont opts heap rest (UnaryOp op acc)
-          MatchEnd::rest ->
-              prettyCont opts heap rest acc
-          DeepEval::rest ->
-              prettyCont opts heap rest acc
-          Continue expr ctx::rest ->
-              prettyCont opts heap rest (ctx.set acc expr)
-          (_::rest) ->
-              "... " ++ prettyExpr opts heap acc
-
-
-                
-              
-              
+              continuationExpr rest (UnaryOp op acc)
+          (MatchEnd::rest) ->
+              continuationExpr rest acc
+          (DeepEval::rest) ->
+              continuationExpr rest acc
+          (Continue expr ctx::rest) ->
+              continuationExpr rest (ctx.set acc expr)
+          [] ->
+              Final acc
+          _ ->
+              Ellipsis acc
+               
 -- functions to pretty-print to a document              
-
-ppExpr : PrettyCtx -> Expr -> Doc t
+ppExpr : PrettyCtx -> Expr -> Doc Tag
 ppExpr ctx e =
     case e of 
         Number n ->
-            parensIf (ctx.prec>0 && n<0) <| string <| String.fromInt n
+            parensIf (ctx.prec>0 && n<0) <|
+                taggedString (String.fromInt n) Literal
 
         Char c ->
-            string (prettyChar c)
+            taggedString (prettyChar c) String
 
         Var x ->
             if Heap.isIndirection x then
@@ -119,10 +138,12 @@ ppExpr ctx e =
                     Just e1 ->
                         ppExpr ctx e1
                     Nothing ->
-                        string (x ++ "?")
-                        -- dangling pointer; this should never happen!
+                        string x  -- dangling pointer; this should never happen!
             else
-                parensIf (AST.isOperator x) (string x)
+                if AST.isOperator x then
+                    parens (string x)
+                else
+                    taggedString x Variable
 
         Cons "," args ->
                parens <| join (string ",") <|
@@ -138,33 +159,34 @@ ppExpr ctx e =
                     Just l ->
                         case checkChars (e1::l) of
                             Just s ->
-                                string ("\"" ++ s ++ "\"")
+                                taggedString ("\"" ++ s ++ "\"") String
                             Nothing ->
                                 ppList ctx (e1::l)
                                 
                     Nothing ->
-                        parensIf (ctx.prec>0) <|
+                        parensIf (ctx.prec>0) 
                             (ppExpr {ctx|prec=1} e1
-                                |> a (char ':')
+                                |> a (taggedString ":" Constructor)
                                 |> a (ppExpr {ctx|prec=1} e2))
               else
-                parensIf (ctx.prec>0) <|
+                parensIf (ctx.prec>0) 
                     (ppExpr {ctx|prec=1} e1
-                         |> a (char ':')
+                         |> a (taggedString ":" Constructor)
                          |> a (ppExpr {ctx|prec=1} e2))
 
         Cons tag [] ->
-            string tag
+            taggedString tag Constructor
                     
         Cons tag args ->
             parensIf (ctx.prec>0) <|
-                words <| (string tag) ::
+                words <| (taggedString tag Constructor) ::
                           (List.map (ppExpr {ctx|prec=1}) args)
 
         BinaryOp op e1 e2 ->
-            parensIf (ctx.prec>0) <| -- if AST.isOperator op then
+            parensIf (ctx.prec>0) 
+                -- if AST.isOperator op then
                 (ppExpr {ctx|prec=1} e1
-                           |> a (string op)
+                           |> a (string (formatOperator op))
                            |> a (ppExpr {ctx|prec=1} e2))
                        {-
                    else
@@ -176,18 +198,18 @@ ppExpr ctx e =
                         -}
 
         UnaryOp op e1 ->
-            parensIf (ctx.prec>0) <|
+            parensIf (ctx.prec>0) 
                 (string op |> a space |> a (ppExpr {ctx|prec=1} e1))
 
         App (Var "enumFrom") e1 ->
             if ctx.options.prettyEnums then 
-                brackets <| (ppExpr {ctx|prec=0} e1 |> a (string ".."))
+                brackets (ppExpr {ctx|prec=0} e1 |> a (string ".."))
             else
                 ppApp ctx (Var "enumFrom") e1
 
         App (App (Var "enumFromThen") e1) e2 ->
             if ctx.options.prettyEnums then
-                brackets  <|
+                brackets  
                     (ppExpr {ctx|prec=0} e1
                            |> a  (char ',')
                            |> a (ppExpr {ctx|prec=0} e2)
@@ -197,7 +219,7 @@ ppExpr ctx e =
                 
         App (App (Var "enumFromTo") e1) e2 ->
             if ctx.options.prettyEnums then 
-                brackets <|
+                brackets 
                     (ppExpr {ctx|prec=0} e1
                          |> a (string "..")
                          |> a (ppExpr {ctx|prec=1} e2))
@@ -206,7 +228,7 @@ ppExpr ctx e =
                             
         App (App (App (Var "enumFromThenTo") e1) e2) e3 ->
             if ctx.options.prettyEnums then
-                brackets <|
+                brackets 
                     (ppExpr {ctx|prec=0} e1
                          |> a (char ',')
                          |> a (ppExpr {ctx|prec=0} e2)
@@ -219,7 +241,7 @@ ppExpr ctx e =
             if AST.isOperator op then
                 parensIf (ctx.prec>0) 
                     (ppExpr {ctx|prec=1} e1
-                        |> a (string op)
+                        |> a (string (formatOperator op))
                         |> a (ppExpr {ctx|prec=1} e2))
             else
                 parensIf (ctx.prec>0)
@@ -233,7 +255,7 @@ ppExpr ctx e =
         Lam _ optid match ->
             case collectArgs match [] of
                 (_, []) ->
-                    prettyLam ctx optid match
+                    ppLambda ctx optid match
                 (match1, args1) ->
                     let
                         expr1 = List.foldl (\x y->App y x)
@@ -242,33 +264,34 @@ ppExpr ctx e =
                         ppExpr ctx expr1
 
         Let binds e1 ->
-             string "let"
+             taggedString "let" Keyword
                  |> a space
-                 |> a (prettyBinds ctx binds)
-                 |> a space |> a (string "in") |> a space
+                 |> a (ppBinds ctx binds)
+                 |> a space |> a (taggedString "in" Keyword) |> a space
                  |> a (ppExpr {ctx|prec=0} e1)
 
      
         Case expr alts ->
             parensIf (ctx.prec>0) 
-                (string "case"
+                (taggedString "case" Keyword
                     |> a space
-                    |> a (ppExpr {ctx|prec=1} expr)
+                    |> a (ppExpr {ctx|prec=0} expr)
                     |> a space
-                    |> a (string "of")
+                    |> a (taggedString "of" Keyword)
                     |> a space
-                    |> a (prettyAlts {ctx|prec=1} alts))
+                    |> a (ppAlts {ctx|prec=0} alts))
                     
         IfThenElse e1 e2 e3 ->
             parensIf (ctx.prec>0)
-                (string "if"
+                (taggedString "if" Keyword
+                     |> a space
                      |> a (ppExpr {ctx|prec=0} e1)
                      |> a space
-                     |> a (string "then")
+                     |> a (taggedString "then" Keyword)
                      |> a space
                      |> a (ppExpr {ctx|prec=0} e2)
                      |> a space
-                     |> a (string "else")
+                     |> a (taggedString "else" Keyword)
                      |> a space
                      |> a (ppExpr {ctx|prec=0} e3))
 
@@ -277,15 +300,15 @@ ppExpr ctx e =
 
 
 
-ppList : PrettyCtx -> List Expr -> Doc t
+ppList : PrettyCtx -> List Expr -> Doc Tag
 ppList ctx exprs
-    = Pretty.brackets <|
-          Pretty.join (string ",") <|
+    = brackets <|
+          join (string ", ") <|
                List.map (ppExpr {ctx|prec=0}) exprs
 
                 
 -- pretty print a generic application
-ppApp : PrettyCtx -> Expr -> Expr -> Doc t
+ppApp : PrettyCtx -> Expr -> Expr -> Doc Tag
 ppApp ctx e0 e1
     = parensIf (ctx.prec>0) <|
          (ppExpr {ctx|prec=0} e0
@@ -305,20 +328,20 @@ collectArgs m args
 
 
 -- pretty print case alternatives
-prettyAlts : PrettyCtx -> List (Pattern,Expr) -> Doc t
-prettyAlts ctx alts
-    = lines (List.map (prettyAlt ctx) alts)
+ppAlts : PrettyCtx -> List (Pattern,Expr) -> Doc Tag
+ppAlts ctx alts
+    = join (string "; ") (List.map (ppAlt ctx) alts)
 
-prettyAlt : PrettyCtx -> (Pattern,Expr) -> Doc t
-prettyAlt ctx (patt,expr)
+ppAlt : PrettyCtx -> (Pattern,Expr) -> Doc Tag
+ppAlt ctx (patt,expr)
     = ppPattern patt
           |> a (string "->")
           |> a (ppExpr {ctx|prec=0} expr)
 
 
 -- pretty print a lambda
-prettyLam : PrettyCtx -> Maybe Name -> Matching -> Doc t
-prettyLam ctx optid m
+ppLambda : PrettyCtx -> Maybe Name -> Matching -> Doc Tag
+ppLambda ctx optid m
     = case optid of
           -- just use the binding name if there is one
           Just id ->
@@ -327,7 +350,7 @@ prettyLam ctx optid m
               -- otherwise check if it has any arguments
               case m of
                   Match p m1 ->
-                      parens <| (char '\\' |> a (prettyMatch ctx m))
+                      parens (char '\\' |> a (ppMatching ctx m))
                   Return e _ ->
                       ppExpr ctx e
                   _ ->
@@ -335,13 +358,13 @@ prettyLam ctx optid m
 
           
 -- pretty print a matching            
-prettyMatch : PrettyCtx -> Matching -> Doc t
-prettyMatch ctx m =
+ppMatching : PrettyCtx -> Matching -> Doc Tag
+ppMatching ctx m =
     case m of
         (Match p m1) ->
             ppPattern p
                  |> a space
-                 |> a (prettyMatch ctx m1)
+                 |> a (ppMatching ctx m1)
         (Return e _) ->
             string "->"
                   |> a (ppExpr {ctx|prec=0} e)
@@ -351,12 +374,12 @@ prettyMatch ctx m =
 
 
 -- pretty print a list of bindings
-prettyBinds : PrettyCtx -> List Bind -> Doc t
-prettyBinds ctx binds
-    = lines (List.map (prettyBind ctx) binds)
+ppBinds : PrettyCtx -> List Bind -> Doc Tag
+ppBinds ctx binds
+    = join (string "; ") (List.map (ppBind ctx) binds)
 
-prettyBind : PrettyCtx -> Bind -> Doc t
-prettyBind ctx bind
+ppBind : PrettyCtx -> Bind -> Doc Tag
+ppBind ctx bind
     = string (bind.name)
           |> a space
           |> a (char '=') 
@@ -367,7 +390,8 @@ prettyBind ctx bind
 -- format an infix operator, sometimes with spaces either side
 formatOperator : Name -> String
 formatOperator op
-    = if op=="&&" || op == "||"  then " " ++ op ++ " " else op
+    = if op=="&&" || op == "||"  then " "++op++ " "
+      else if AST.isOperator op then op else "`" ++op++"`"
                 
 
 -- pretty-print a type
@@ -409,7 +433,7 @@ showGenVar n
 
 
 -- pretty print a pattern                   
-ppPattern : Pattern -> Doc t
+ppPattern : Pattern -> Doc Tag
 ppPattern p =
     case p of
         DefaultP ->
@@ -419,9 +443,9 @@ ppPattern p =
         BangP x ->
             string ("!"++x)
         NumberP n ->
-            string (String.fromInt n)
+            taggedString (String.fromInt n) Literal
         CharP c ->
-            string (prettyChar c)
+            taggedString (prettyChar c) String
                 
         ConsP "," ps ->
             parens <|
@@ -433,13 +457,13 @@ ppPattern p =
         ConsP ":" [p1,p2] ->
             parens <|
                 (ppPattern p1
-                       |> a (char ':')
+                       |> a (taggedString ":" Constructor)
                        |> a (ppPattern p2))
         ConsP tag [] ->
-            string tag
+            taggedString tag Constructor
         ConsP tag ps ->
             parens <|
-                words <| (string tag :: List.map ppPattern ps)
+                words <| (taggedString tag Constructor :: List.map ppPattern ps)
 
 
 -- check if an cons expression has an evaluated spine
@@ -463,7 +487,6 @@ checkChars es =
     else
         Nothing
 
-
 isChar : Expr -> Bool
 isChar e =
     case e of
@@ -476,10 +499,7 @@ getChar e =
         Char c -> c
         _ -> '?'   -- this never happens!
 
-      
-
-
-
+    
 -- pretty print a character
 prettyChar : Char -> String
 prettyChar c
@@ -498,3 +518,37 @@ escapeChar delimiter c
                       String.fromChar c
                   else
                       "\\" ++ String.fromInt n
+
+
+-- an HTML renderer;
+-- use CodeMirror CSS tags for consistency
+htmlRenderer : Renderer Tag (List (Html msg)) (Html msg)
+htmlRenderer =
+    { outer = (\elems -> Html.span [class "cm-s-default"] (List.reverse elems))
+    , init = []
+    , tagged = htmlTagged
+    , untagged = htmlUntagged
+    , newline = identity
+    }
+
+htmlTagged : Tag -> String -> List (Html msg) -> List (Html msg)
+htmlTagged tag str lst =
+    (Html.span (tagToAttributes tag) [Html.text str]) :: lst
+
+htmlUntagged : String -> List (Html msg) -> List (Html msg)
+htmlUntagged str lst
+    = (Html.text str) :: lst
+        
+tagToAttributes : Tag -> List (Attribute msg)
+tagToAttributes tag
+    = case tag of
+          Keyword ->
+              [class "cm-keyword"]
+          Variable ->
+              [class "cm-variable"]
+          Constructor ->
+              [class "cm-variable-2"]
+          Literal ->
+              [class "cm-number"]
+          String ->
+              [class "cm-string"]          

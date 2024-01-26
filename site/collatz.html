@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Insertion sort of a list of integers</title>
+    <title>The Collatz sequence</title>
     <link rel='stylesheet' href='lib/codemirror.css'>
     <link rel="stylesheet" href="lib/screen.css">
     <script type='text/javascript' src='lib/codemirror.js'></script>
@@ -12,28 +12,25 @@
   </head>
 
   <body>
-    <h1>Insertion sort of a list of integers</h1>
-    <p>Sort a list of integers using sucessive insertions.
-    <a href="index.html">Back</a></p>
+    <h1>The Collatz sequence</h1>
+    <p>Computing the <a href="https://en.wikipedia.org/wiki/Collatz_conjecture">Collatz sequence</a> starting from a given integer.
+      <a href="index.html">Back</a></p>
+
     <div id="haskelite"/>
-    <script>
+    <script type='text/javascript'>
       var decls =
-	  "-- insertion sort\n"+
-	  "isort :: [Int] -> [Int]\n"+
-	  "isort [] = []\n"+
-	  "isort (x:xs) = insert x (isort xs)\n\n"+
-	  "-- insert a value into a sorted list\n"+
-          "insert :: Int -> [Int] -> [Int]\n"+
-	  "insert x [] = [x]\n"+
-	  "insert x (y:ys) | x<=y = x:y:ys\n"+
-	  "                | otherwise = y:insert x ys\n\n";
-      var app = Elm.Haskelite.init({
+	  "collatz :: Int -> [Int]\n"+
+	  "collatz 1 = [1]\n"+
+	  "collatz n\n"+
+	  "     | n`mod`2 == 0 = n : collatz (n`div`2)\n"+
+	  "     | otherwise    = n : collatz (3*n+1)\n\n";
+      
+      Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
-	  flags: { expression:"isort [5,3,1,2,4]",
-		   declarations: decls
-		 }
+	  flags: { expression:"collatz 25", declarations: decls }
       });
     </script>
+
     <hr>
     <div class="credits">
     Pedro Vasconcelos, 2024.<br>
@@ -42,3 +39,5 @@
     </div>
   </body>
 </html>
+
+

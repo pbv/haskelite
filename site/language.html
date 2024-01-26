@@ -20,7 +20,8 @@ variables, arithmetic operations (+, -, *, div, mod), comparisons (==,
 <=, etc.), tuples, lists, enumerations (e.g. [1..10]),
 lambda-expressions, let and where local bindings, case
 expressions.</p>
-<p>Let and where bindings can only define single variables, not patterns.</p>
+<p>Let and where bindings can only define single variables, not
+patterns.</p>
 
        
 <h2>Data type definitions</h2>
@@ -40,17 +41,6 @@ to compare functions).</p>
 matching over integers, characters, lists and tuples, boolean guards,
 and recursive definitions.</p>
 
-<!-- DISABLED FOR NOW
-    <p>You can ommit evaluation steps for particular functions (either user-defined
-      or from the prelude) using <code>--SKIP--</code> comments at the begining of the definitions; for example:
-      <pre>
-       --SKIP-- compare ++ 
-      </pre>
-      means that the evaluation should skip steps
-      envolving <code>compare</code> and <code>++</code>;
-      this can be useful to hide evaluation details and focus on other functions.
-    </p>     
--->
 
 <h2>Standard Prelude</h2>
 
@@ -75,6 +65,7 @@ reverse :: [a] -> [a]          -- NB: defined as naive reverse
 init :: [a] -> [a]
 last :: [a] -> a  
 sum, product :: [Int] -> Int
+and, or :: [Bool] -> Bool
 take, drop :: Int -> [a] -> [a]
 maximum, minimum :: [a] -> a   -- NB: too polymorphic!
 concat :: [[a]] -> [a]
@@ -92,8 +83,24 @@ takeWhile, dropWhile :: (a -> Bool) -> [a] -> [a]
 any, all :: (a -> Bool) -> [a] -> Bool
 chr :: Int -> Char
 ord :: Char -> Int
-isAlpha, isDigit, isAlphaNum, isUpper, isLower :: Char -> Bool    
+isAlpha, isDigit, isAlphaNum, isUpper, isLower :: Char -> Bool
 </pre>
+
+<h2>Evaluation</h2>
+
+<p>You can force evaluation to weak normal form using bang patterns (!)
+in variable patterns. Alternatively, to force evaluation to full
+normal form you can use the following built-in function:</p>
+<pre>
+force :: a -> a     -- evaluate to full normal form  
+</pre>
+<p>This behaves like identity function, except that it evaluates the
+  argument fully.</p>
+<p>Note that <code>force</code> will loose sharing in normal forms,
+  e.g. a pair <code>(x,x)</code> with two identical (shared) values
+  will be expanded into a pair with copies of the normal form of <code>x</code>.
+</p>
+
 
 <h2>Not implemented</h2>
 
@@ -101,13 +108,15 @@ The following Haskell 98 features are <em>not</em> (yet) implemented:
 
 <ul>
 <li>modules
-<li>type classes
+<li>type classes 
 <li>record syntax
-<li>the numeric tower (Float, Integer, Double, etc.)
+<li>the numeric tower (Float, Integer, Double, Racional, etc.)
 <li>list comprehensions
+<li>declaring operators
+<li>monadic operators and do-notation
 </ul>
 
 <hr>
 <div class="credits">
-Pedro Vasconcelos, 2023
+Pedro Vasconcelos, 2024
 </div>

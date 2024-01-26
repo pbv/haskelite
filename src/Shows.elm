@@ -9,10 +9,11 @@ import Pretty
 import PrettyPrinter
 import Machine.Heap as Heap
 
+defaultOpts = { prettyLists = True, prettyEnums = False, layout = False }
       
 showExpr : Expr -> String
 showExpr
-    = PrettyPrinter.prettyExpr PrettyPrinter.defaultOpts Heap.empty
+    = PrettyPrinter.prettyExpr defaultOpts Heap.empty
 
 showType : Type -> String
 showType t

@@ -701,6 +701,7 @@ initialTypeEnv
       , ("isDigit", TyFun tyChar tyBool)
       , ("isAlpha", TyFun tyChar tyBool)
       , ("isAlphaNum", TyFun tyChar tyBool)
+      , ("force", TyFun a a)
       ]
 
 

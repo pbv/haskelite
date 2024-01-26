@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Checking Prime numbers</title>
+    <link rel='stylesheet' href='lib/codemirror.css'>
+    <link rel="stylesheet" href="lib/screen.css">
+    <script type='text/javascript' src='lib/codemirror.js'></script>
+    <script type='text/javascript' src='lib/haskell.js'></script>
+    <script type='text/javascript' src='js/code-editor.js'></script>
+    <script type='text/javascript' src='js/haskelite-min.js'></script>
+  </head>
+
+  <body>
+    <h1>Checking Prime numbers</h1>
+    <p>Checking if an integer number is prime by trial divisions.
+      <a href="index.html">Back</a></p>
+
+    <div id="haskelite"/>
+    <script type='text/javascript'>
+      var decls =
+	  "-- a number is Prime iff it is greater than 1\n"+
+	  "-- and it is it's own smallest proper divisor\n"+
+	  "isPrime :: Int -> Bool\n"+
+	  "isPrime n = n>1 && leastDiv n == n\n\n"+
+	  "-- find the smallest proper divisor greater than 2\n"+
+	  "-- check candidates only until sqrt n\n"+
+	  "leastDiv :: Int -> Int\n"+
+	  "leastDiv n = loop 2\n"+
+	  "    where loop d\n"+
+	  "             | d*d>n = n\n"+
+	  "             | n`mod`d==0 = d\n"+
+	  "             | otherwise = loop (d+1)\n";
+      Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression:"isPrime 13", declarations: decls }
+      });
+    </script>
+
+    <hr>
+    <div class="credits">
+    Pedro Vasconcelos, 2023.<br>
+    Powered by <a href="https://elm-lang.org/">Elm</a> and
+    <a href="https://codemirror.net/">CodeMirror</a>.
+    </div>
+  </body>
+</html>
+
+

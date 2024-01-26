@@ -63,7 +63,10 @@ transition conf
           (heap, E (Error msg), _::_) ->
               Just (heap, E (Error msg), [])
 
-          -- applications and constructors
+          -- primitive to force full evaluation
+          (heap, E (App (Var "force") e2), stack) ->
+              Just (heap, E e2, DeepEval::stack)
+          -- applications and constructors                  
           (heap,  E (App e1 e2), stack) ->
               Just (heap, E e1, PushArg e2::stack)
 
@@ -108,7 +111,8 @@ transition conf
                   let
                       (loc, heap1) = Heap.newIndirection heap e1
                   in
-                      Just (heap1, M (translateCase (Var loc) alts) [], MatchEnd::stack)
+                      Just (heap1, M (translateCase (Var loc) alts) [],
+                                MatchEnd::stack)
                       
           -- if-then-else
           (heap, E (IfThenElse e1 e2 e3), stack) ->

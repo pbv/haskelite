@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Inserting a value into a binary search tree</title>
+    <title>Sort a list using a binary search tree</title>
     <link rel='stylesheet' href='lib/codemirror.css'>
     <link rel="stylesheet" href="lib/screen.css">
     <script type='text/javascript' src='lib/codemirror.js'></script>
@@ -12,8 +12,9 @@
   </head>
 
   <body>
-    <h1>Inserting a value into a binary search tree</h1>
-    <p>Inserting a value into a binary search tree. <a href="index.html">Back</a></p>
+    <h1>Sort a list using a binary search tree</h1>
+    <p>Sort a list of values by inserting them into a binary search tree (BST)
+      and then flattening the resulting tree. <a href="index.html">Back</a></p>
     <div id="haskelite"/>
     <script>
       var decls =
@@ -25,25 +26,35 @@
           "insert :: a -> BST a -> BST a\n"+
 	  "insert x Leaf = Node x Leaf Leaf\n"+
 	  "insert x (Node y left right)\n"+
-	  "         | x<y = Node y (insert x left) right\n"+
-	  "         | x>y = Node y left (insert x right)\n"+
-	  "         | otherwise = Node y left right\n\n"+
+	  "         | x<=y      = Node y (insert x left) right\n"+
+	  "         | otherwise = Node y left (insert x right)\n\n"+
 	  "-- transform a list into a BST;\n"+
-	  "-- the resulting tree is ordered and has no repeated elements\n"+
-	  "insertList :: [a] -> BST a\n"+
-	  "insertList [] = Leaf\n"+
-	  "insertList (x:xs) = insert x (insertList xs)\n\n";
+	  "makeTree :: [a] -> BST a\n"+
+	  "makeTree [] = Leaf\n"+
+	  "makeTree (x:xs) = insert x (makeTree xs)\n\n"+
+	  "-- flatten a BST into a list\n"+
+	  "flatten :: BST a -> [a]\n"+
+	  "flatten tree = flattenAcc tree []\n\n"+
+	  "-- worker function using an accumulator\n"+
+	  "flattenAcc :: BST a -> [a] -> [a]\n"+
+	  "flattenAcc Leaf acc = acc\n"+
+	  "flattenAcc (Node x l r) acc = flattenAcc l (x:(flattenAcc r acc))\n\n"+
+	  "-- Tree sort algorithm;\n"+
+	  "-- make a tree and flatten back to list\n"+
+	  "treeSort :: [a] -> [a]\n"+
+	  "treeSort xs = flatten (makeTree xs)\n";
+
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
 	  flags: {
-	      expression:"insertList [3,1,4,2]",
+	      expression:"treeSort [3,1,4,2]",
 	      declarations: decls
 	  }
       });
     </script>
     <hr>
     <div class="credits">
-    Pedro Vasconcelos, 2023.<br>
+    Pedro Vasconcelos, 2024.<br>
     Powered by <a href="https://elm-lang.org/">Elm</a> and
     <a href="https://codemirror.net/">CodeMirror</a>.
     </div>

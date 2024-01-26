@@ -12,7 +12,7 @@ import Machine.Types as Machine
 import Machine.Heap as Heap
 import Typecheck exposing (TyEnv, KindEnv)
 import Parser
-import PrettyPrinter exposing (Options)
+import PrettyPrinter 
 import Prelude
 
 import Dict
@@ -63,6 +63,17 @@ type alias ReduceModel
       , flags : Flags              -- saved flags (to go back to editing)
       , options : Options          -- displaying options
       }
+
+type alias Options
+    = { prettyLists : Bool     -- should we prettify lists?
+      , prettyEnums : Bool     -- should we prettify Prelude enum functions?
+      , layout : Bool
+      }
+
+defaultOpts : Options
+defaultOpts
+    = { prettyLists = True, prettyEnums = True, layout = True }
+
     
 type Msg
     = Previous           -- undo one evaluation step
@@ -187,11 +198,15 @@ reduceView model =
                            , disabled (model.next == Nothing)
                            , onClick Next] [text "Next >"]
                            ]
-                 , span [style "padding-left" "20px"] []
-                 , checkbox model.options.prettyLists
-                            (Toggle toggleLists) "Pretty-print lists"
-                 , checkbox model.options.prettyEnums
-                           (Toggle toggleEnums) "Pretty-print enumerations"
+                 , span [class "options"] [
+                         label [] [text "Pretty-printing"]                         
+                       ,  checkbox model.options.prettyLists
+                             (Toggle toggleLists) "lists"
+                       , checkbox model.options.prettyEnums
+                             (Toggle toggleEnums) "enumerations"
+                       , checkbox model.options.layout
+                             (Toggle toggleLayout) "layout"
+                       ]
                  ]
         ]
 
@@ -234,32 +249,23 @@ toggleLists opts = { opts | prettyLists = not (opts.prettyLists) }
 
 toggleEnums : Options -> Options
 toggleEnums opts = { opts | prettyEnums = not (opts.prettyEnums) }
-                
+
+toggleLayout : Options -> Options
+toggleLayout opts = { opts | layout = not (opts.layout) }
+                   
 
 -- render a single numbered reduction line                   
 renderStep  : Options -> Int -> Int -> Step -> Html Msg
 renderStep opts largest number (conf, info)
-    = case PrettyPrinter.prettyConf opts conf of
+    = let step = {conf=conf, number=number, largest=largest}
+      in case PrettyPrinter.prettyConfStep opts step of
           Just html ->
               div [class "line"]
-                  [ span [class "linenumber"]
-                        [text (rightAlign largest number ++ ". ")]
-                  , html
-                  , div [class "info"] [text info]
-                  ]
+                  [ html, div [class "info"] [text info] ]
           Nothing ->
               span [] []
 
-                 
--- right align a number; first argument is the largest number in the sequence
--- use a Unicode non breakable space to prevent HTML from eating up the formating
-rightAlign : Int -> Int -> String
-rightAlign largest number
-    = String.padLeft (decimalDigits largest) '\u{00a0}' (String.fromInt number)
-
--- get the number of decimal digits          
-decimalDigits : Int -> Int
-decimalDigits n = ceiling (logBase 10.0 (max 1 (toFloat n)+1))
+                
                   
 
 update : Msg -> Model -> (Model, Cmd Msg)
@@ -340,8 +346,7 @@ editUpdate msg model =
                         , next = Machine.next conf0
                         , previous = []
                         , flags = model.flags
-                        , options = PrettyPrinter.defaultOpts
-
+                        , options = defaultOpts
                         }
                 Err msg1 ->
                     Editing {model | parsed = Err msg1}

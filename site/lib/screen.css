@@ -47,7 +47,7 @@ input.editline {
     padding: 5px 5px;
     border-radius: 6px;    
     position: absolute;
-    right: 0px; 
+    right: 0px;  
     z-index: 1;
 }
 
@@ -59,6 +59,7 @@ input.editline {
     border-radius: 6px;
     position: absolute;
     top: 20px;
+    right: 0px; 
     z-index: 1;
 }
 
@@ -75,6 +76,10 @@ input.editline {
 .navbar {
     padding: 0px 5px;
     margin: 5px 5px;
+}
+
+.options {
+    margin-left: 20px;
 }
 
 .credits {

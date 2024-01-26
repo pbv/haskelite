@@ -44,6 +44,9 @@ undefined = error "undefined"
 id :: a -> a
 id x = x
 
+const :: a -> b -> a
+const x y = x
+
 flip :: (a -> b -> c) -> b -> a -> c
 flip f x y = f y x
 
@@ -104,8 +107,10 @@ length (_:xs) = 1 + length xs
 (x:xs) ++ ys = x:(xs++ys)
 
 reverse :: [a] -> [a]
-reverse [] = []
-reverse (x:xs) = reverse xs ++ [x]
+reverse xs = reverseAcc xs []
+
+reverseAcc [] acc = acc
+reverseAcc (x:xs) acc = reverseAcc xs (x:acc)
 
 sum :: [Int] -> Int
 sum [] = 0
@@ -123,7 +128,7 @@ maximum (x:xs) = max x (maximum xs)
 
 minimum :: [a] -> a
 minimum [] = error "minimum: empty list"
-minimum [x]= x
+minimum [x] = x
 minimum (x:xs) = min x (minimum xs) 
 
 take :: Int -> [a] -> [a]
@@ -218,11 +223,20 @@ enumFromTo i j | i<=j = i : enumFromTo (i+1) j
                | otherwise = []
 
 enumFromThen :: Int -> Int -> [Int]
-enumFromThen !n0 !n1 = n0 : enumFromThen n1 (2*n1-n0) 
+enumFromThen n0 n1 = go n0 
+     where step = n1-n0
+           go !k = k : go (k+step) 
+           
 
 enumFromThenTo :: Int -> Int -> Int -> [Int]
-enumFromThenTo n0 n1 k | n0<=k = n0 : enumFromThenTo n1 (2*n1-n0) k
-                       | otherwise = []
+enumFromThenTo n0 n1 k 
+    | step>0 = upto n0 
+    | otherwise = downto n0 
+    where step = n1-n0
+          upto !n | n<=k = n : upto (n+step)
+                  | otherwise = []
+          downto !n | n>=k = n : downto (n+step)
+                    | otherwise = []
 
 lookup :: a -> [(a,b)] -> Maybe b
 lookup _ [] = Nothing

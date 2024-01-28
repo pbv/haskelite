@@ -35,6 +35,7 @@ type alias PrettyCtx
         -- methods for handling layout
       , separators : String -> List (Doc Tag) -> Doc Tag
       , line : Doc Tag
+      , tightline : Doc Tag
       , lines : List (Doc Tag) -> Doc Tag
       }
 
@@ -48,6 +49,7 @@ makeCtx opts heap
       , separators = if opts.layout then Pretty.separators
                      else \sep -> Pretty.join (string sep)
       , line = if opts.layout then Pretty.line else Pretty.space
+      , tightline = if opts.layout then Pretty.tightline else Pretty.empty
       , lines = if opts.layout then Pretty.lines else Pretty.words
       }
     
@@ -181,12 +183,13 @@ ppExpr ctx e =
                     Just e1 ->
                         ppExpr ctx e1
                     Nothing ->
-                        string x   -- dangling pointer; this should never happen!
+                        ppExpr ctx (AST.Error (AST.stringLit "dangling pointer"))
+                       -- this should never happen!
             else
                 if AST.isOperator x then
                     parens (string x)
                 else
-                    taggedString x Variable
+                    taggedString (Heap.getName x) Variable
 
         Cons "," args ->
                group (parens <| ctx.separators ", " <|
@@ -221,7 +224,11 @@ ppExpr ctx e =
             taggedString tag Constructor
                     
         Cons tag args ->
-            parensIf (ctx.prec>0) <| group (ppCons ctx tag args)
+            if ctx.prec>0 then
+                -- add a tightline to move the closing parenthesis to next line
+                parens (group (ppCons ctx tag args |> a ctx.tightline))
+            else
+                group (ppCons ctx tag args)
 
         BinaryOp op e1 e2 ->
             parensIf (ctx.prec>0) 
@@ -337,24 +344,24 @@ ppExpr ctx e =
 
 ppCons : PrettyCtx -> String -> List Expr -> Doc Tag
 ppCons ctx cons args
-    = hang 4 ((taggedString cons Constructor)
-             |> a space     
-             |> a (ctx.lines (List.map (ppExpr {ctx|prec=1}) args)))
+    = group (hang 4 ((taggedString cons Constructor)
+             |> a space
+             |> a (ctx.lines (List.map (ppExpr {ctx|prec=1}) args))))
                 
 
 ppList : PrettyCtx -> List Expr -> Doc Tag
 ppList ctx exprs
-    = brackets <| nest 1 <| join (string ", ") (List.map (ppExpr {ctx|prec=0}) exprs)
+    = brackets <|
+      join (string ", ") (List.map (ppExpr {ctx|prec=0}) exprs)
 
                 
 -- pretty print a generic application
 ppApp : PrettyCtx -> Expr -> Expr -> Doc Tag
 ppApp ctx e0 e1
     = let (fun, args) = collectArgs e0 [e1]
-      in parensIf (ctx.prec>0) 
-          (group (hang 4 ((ppExpr {ctx|prec=0} fun)
-                       |> a space
-                       |> a (words (List.map (ppExpr {ctx|prec=1}) args)))))
+      in parensIf (ctx.prec>0) <|
+          (words ((ppExpr {ctx|prec=0} fun)::
+                      (List.map (ppExpr {ctx|prec=1}) args)))
 
 -- auxiliary function to collect arguments to an application
 collectArgs : Expr -> List Expr -> (Expr, List Expr)

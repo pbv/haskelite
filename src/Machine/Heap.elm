@@ -41,12 +41,24 @@ fromBinds binds
 update : Name -> Expr -> Heap -> Heap
 update name newExpr heap =
     { heap | store = Dict.insert name newExpr heap.store }
-    
-      
+
+
+
+-- remove suffix from location to get the source code name
+getName : Name -> Name
+getName loc
+    = case String.split "$" loc of
+          [] ->
+              loc
+          (prefix::_) ->
+              prefix
+                   
 isIndirection : Name -> Bool
 isIndirection =
     String.startsWith "$"
 
+        
+        
 -- a new indirection for a non-recursive binding
 -- introduced to implement lazy evaluatiom
 newIndirection : Heap -> Expr -> (Name, Heap)
@@ -67,12 +79,13 @@ newBindings heap binds
         names = List.map .name binds
         exprs = List.map .expr binds
         suffix = String.fromInt heap.counter
-        locs =  List.map (\x -> x ++ "_" ++ suffix) names
-        subst = Dict.fromList <|
-                List.map2 (\name loc -> (name,Var loc)) names locs
-        store1 = Dict.fromList <|
-                 List.map2 (\loc expr -> (loc, AST.applySubst subst expr)) locs exprs
-        newHeap = { store = Dict.union heap.store store1
+        locs =  List.map (\x -> x ++ "$" ++ suffix) names
+        subst = Dict.fromList <| List.map2 (\name loc -> (name,Var loc)) names locs
+        store1 = List.foldl
+                 (\(loc,expr) -> Dict.insert loc (AST.applySubst subst expr))
+                 heap.store 
+                    <| List.map2 Tuple.pair locs exprs
+        newHeap = { store = store1
                   , counter = 1 + heap.counter
                   }
       in

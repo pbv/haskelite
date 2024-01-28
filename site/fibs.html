@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fibonnacci sequence</title>
+    <link rel='stylesheet' href='lib/codemirror.css'>
+    <link rel="stylesheet" href="lib/screen.css">
+    <script type='text/javascript' src='lib/codemirror.js'></script>
+    <script type='text/javascript' src='lib/haskell.js'></script>
+    <script type='text/javascript' src='js/code-editor.js'></script>
+    <script type='text/javascript' src='js/haskelite-min.js'></script>
+  </head>
+
+  <body>
+    <h1>Fibonnacci sequence</h1>
+    <p>Computing the
+      first <a href="https://en.wikipedia.org/wiki/Fibonacci_sequence">Fibonnacci
+      numbers</a> using a self-referencing infinite list.
+      <a href="index.html">Back</a></p>
+
+    <p>To ensure full laziness, we explicitly write all definitions in
+    <a href="https://en.wikipedia.org/wiki/A-normal_form">A-normal
+       form</a>; this way sub-expressions are maximally shared and
+       computing the n-th element takes O(n) steps.
+       </p>
+
+    <div id="haskelite"/>
+    <script type='text/javascript'>
+      var decls =
+	  "-- the infinite list of Fibonnacci numbers\n"+
+	  "fibs :: [Int]\n"+
+	  "fibs   = 0:fibs'\n"+
+	  "fibs'  = 1:fibs''\n"+
+	  "fibs'' = zipWith (+) fibs fibs'\n\n"+
+	  "-- zipWith with explicit sharing\n"+
+	  "zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]\n"+
+	  "zipWith f (x:xs) (y:ys) = let z = f x y\n"+
+          "                              zs = zipWith f xs ys\n"+
+          "                            in z:zs\n"+
+	  "zipWith _ _      _      = []\n";
+
+      Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression:"take 10 fibs", declarations: decls }
+      });
+    </script>
+
+    <hr>
+    <div class="credits">
+    Pedro Vasconcelos, 2023.<br>
+    Powered by <a href="https://elm-lang.org/">Elm</a> and
+    <a href="https://codemirror.net/">CodeMirror</a>.
+    </div>
+  </body>
+</html>
+
+

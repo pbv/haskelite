@@ -2,7 +2,7 @@
   Standard definitions for Haskelite
   This is a subset of the Haskell 98 prelude
 
-  Pedro Vasconcelos, 2021-23
+  Pedro Vasconcelos, 2021-24
 -}
 module Prelude exposing (prelude)
 
@@ -148,6 +148,10 @@ concat (xs:xss) = xs ++ concat xss
 repeat :: a -> [a]
 repeat x = let xs = x:xs 
            in xs
+
+replicate :: Int -> a -> [a]
+replicate 0 _ = []
+replicate n x = x : replicate (n-1) x
 
 cycle :: [a] -> [a]
 cycle [] = error "cycle: empty list"

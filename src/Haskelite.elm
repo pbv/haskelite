@@ -1,7 +1,7 @@
 {-
   Haskelite, a single-step interpreter for a subset of Haskell.
   Main module exporting the interactive HTML element
-  Pedro Vasconcelos, 2021-23
+  Pedro Vasconcelos, 2021-24
 -}
 module Haskelite exposing (main)
 
@@ -45,7 +45,9 @@ type Model
 
 type alias EditModel
     = { flags : Flags                    -- user inputs
-      , parsed : Result String Program   -- result of parsing and typechecking
+      , parsedExpr : Result String Expr     -- results of parsing
+      , parsedDecls : Result String Module
+      , typeChecked : Result String (Maybe Program) -- result of type checking
       , prelude : List Bind              -- prelude definitions
       , kindEnv : KindEnv                -- kind and type environments
       , typeEnv : TyEnv                  -- for primitives and prelude
@@ -60,7 +62,7 @@ type alias ReduceModel
     = { current : Step             -- current configuration
       , previous : List Step       -- list of previous steps
       , next : Maybe Step          -- optional next step
-      , flags : Flags              -- saved flags (to go back to editing)
+      , flags : Flags              -- saved inputs (to go back to editing)
       , options : Options          -- displaying options
       }
 
@@ -81,7 +83,8 @@ type Msg
     | Reset              -- reset evaluation
     | EditMode           -- go into editing mode
     | EvalMode           -- go into evaluation mode
-    | Edit Flags         -- modify flags
+    | EditExpr String    -- modify expression
+    | EditDecls String   -- modify declarations
     | Toggle (Options -> Options) -- modify options
 
 
@@ -105,26 +108,36 @@ initModel flags
     = case Prelude.prelude of
           Err msg ->
               Panic msg
-          Ok (binds, kenv, tenv) ->  
+          Ok (binds, kenv, tenv) ->
               let
-                  result = parseAndTypecheck kenv tenv flags
+                  result1 = HsParser.parseExpr flags.expression
+                  result2 = HsParser.parseModule flags.declarations
+                  result3 = typecheck kenv tenv result1 result2
               in
                   Editing
                   { flags = flags
-                  , parsed = result
+                  , parsedExpr = result1
+                  , parsedDecls = result2
+                  , typeChecked = result3
                   , prelude = binds
                   , kindEnv =  kenv
                   , typeEnv = tenv
                   }
 
--- parse and typecheck use expression and function declararations
--- the first argument is the prelude
-parseAndTypecheck : KindEnv -> TyEnv -> Flags -> Result String Program
-parseAndTypecheck kenv tenv flags
-    = HsParser.parseProgram flags.expression flags.declarations |>
-      Result.andThen (\prog -> Typecheck.tcMain kenv tenv prog |>
-                      Result.andThen (\_ -> Ok prog))
-        
+
+-- typecheck if parsing was succesful                  
+typecheck : KindEnv -> TyEnv ->
+            (Result String Expr) ->
+            (Result String Module) -> Result String (Maybe Program)
+typecheck kenv tenv parsedExpr parsedDecls
+    = case (parsedExpr, parsedDecls) of
+          (Ok expr, Ok decls) ->
+              Typecheck.tcMain kenv tenv (LetProg decls expr) |>
+              Result.andThen (\_ -> Ok (Just (LetProg decls expr)))
+          _ ->
+             Ok Nothing  -- ok, nothing to check yet
+
+          
 view : Model -> Html Msg
 view model =
     case model of
@@ -145,28 +158,43 @@ editingView model =
     in 
     div [] [ Editor.codeEditor
                  [ Editor.editorValue model.flags.declarations
-                 , Editor.onEditorChanged (\str -> Edit {oldflags|declarations=str}) ]
+                 , Editor.onEditorChanged EditDecls ]
                  []
+           , case model.parsedDecls of
+                 Err msg ->
+                     if model.flags.declarations == "" then
+                         span [] []
+                     else
+                         span [class "error"] [text msg]
+                 _ ->
+                     span [] []                             
            , br [] []
            , span [] [ span [class "editline"] [text ">>> "]
                      , input [ placeholder "Enter an expression"
                              , value model.flags.expression
                              , spellcheck False
                              , class "editline"
-                             , onInput (\str -> Edit {oldflags | expression=str})
+                             , onInput EditExpr
                              ]  []
                      , button
                            [ class "navbar", onClick EvalMode ]
                            [ text "Evaluate" ]
                      ]
            , br [] []
-           , case model.parsed of
-                 Err msg -> if model.flags.expression == "" &&
-                               model.flags.declarations == "" then
-                                span [] []
-                             else
-                                span [class "error"] [text msg]
-                 _ -> span [] []
+           , case model.parsedExpr of
+                 Err msg
+                     -> if model.flags.expression == ""  then
+                            span [] []
+                        else
+                            span [class "error"] [text msg]
+                 _ ->
+                     span [] []
+           , case model.typeChecked of
+                 Err msg ->
+                     span [class "error"] [text msg]
+                 _ ->
+                     span [] []
+
            ]
 
 reduceView : ReduceModel -> Html Msg
@@ -330,14 +358,27 @@ reduceUpdate msg model =
 editUpdate : Msg -> EditModel -> Model 
 editUpdate msg model =
     case msg of
-        Edit flags ->
-            let result = HsParser.parseProgram flags.expression flags.declarations
-            in
-                Editing { model | flags=flags, parsed=result }
+        EditExpr str ->
+            let result = HsParser.parseExpr str
+            in Editing { model |
+                         flags = { expression = str
+                                 , declarations = model.flags.declarations }
+                       , parsedExpr = result
+                       , typeChecked = Ok Nothing
+                       }
+        EditDecls str ->
+            let result = HsParser.parseModule str
+            in Editing { model |
+                         flags = { expression = model.flags.expression
+                                 , declarations = str }
+                       , parsedDecls = result
+                       , typeChecked = Ok Nothing
+                       }
         
         EvalMode ->
-            case parseAndTypecheck model.kindEnv model.typeEnv model.flags of
-                Ok (LetProg mod expr) ->
+            case (typecheck model.kindEnv model.typeEnv
+                      model.parsedExpr model.parsedDecls) of
+                Ok (Just (LetProg mod expr)) ->
                     let
                         heap0 = Heap.fromBinds (model.prelude ++ mod.binds)
                         conf0 = Machine.start heap0 expr
@@ -348,8 +389,10 @@ editUpdate msg model =
                         , flags = model.flags
                         , options = defaultOpts
                         }
+                Ok Nothing ->
+                    Editing { model | typeChecked = Ok Nothing }
                 Err msg1 ->
-                    Editing {model | parsed = Err msg1}
+                    Editing {model | typeChecked = Err msg1}
         _ ->
             Editing model
                        

@@ -1,6 +1,6 @@
 {-
   Parser for Haskelite, a small subset of Haskell
-  Pedro Vasconcelos, 2021-2023
+  Pedro Vasconcelos, 2021-2024
 -}
 module HsParser exposing (..)
 
@@ -18,14 +18,15 @@ import Set exposing (Set)
 import Dict exposing (Dict)
 import List.Extra as List
 
-parseProgram : String -> String -> Result String AST.Program
-parseProgram inputExpr inputDecls
-    = Result.mapError deadEndsToString <|
-        (Parser.run topExprEnd inputExpr |>
-          Result.andThen (\expr ->
-                            Parser.run toplevelModule inputDecls |>
-                            Result.andThen (\mod -> Ok (LetProg mod expr))))
 
+parseModule : String -> Result String Module
+parseModule input
+    = Result.mapError deadEndsToString (Parser.run toplevelModule input)
+
+parseExpr : String -> Result String Expr
+parseExpr input
+    = Result.mapError deadEndsToString (Parser.run topExprEnd input)
+            
 ----------------------------------------------------------------
 -- modules and declarations
 ----------------------------------------------------------------

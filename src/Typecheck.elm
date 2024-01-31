@@ -701,6 +701,7 @@ initialTypeEnv
       , ("isDigit", TyFun tyChar tyBool)
       , ("isAlpha", TyFun tyChar tyBool)
       , ("isAlphaNum", TyFun tyChar tyBool)
+      , ("show", TyFun tyInt tyString) -- only for integers
       , ("force", TyFun a a)
       ]
 

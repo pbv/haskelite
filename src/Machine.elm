@@ -335,6 +335,8 @@ applyPrimitive1 op e
               Number (Char.toCode c)
           ("chr", Number n) ->
               Char (Char.fromCode n)
+          ("show", Number n) ->
+              AST.stringLit (String.fromInt n)
           _  ->
               Error (AST.stringLit "invalid primitive arguments")
 
@@ -539,7 +541,8 @@ initializeHeap heap
                              "div", "mod", "compare" ]
          ++
       List.map prefixOp ["negate", "ord", "chr", "toUpper", "toLower",
-                         "isLower", "isUpper", "isAlpha", "isDigit", "isAlphaNum"]
+                         "isLower", "isUpper", "isAlpha", "isDigit", "isAlphaNum",
+                         "show" ]
 
 
 prefixOp :  Name -> (Name, Expr)

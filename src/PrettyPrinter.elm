@@ -35,7 +35,6 @@ type alias PrettyCtx
         -- methods for handling layout
       , separators : String -> List (Doc Tag) -> Doc Tag
       , line : Doc Tag
-      , tightline : Doc Tag
       , lines : List (Doc Tag) -> Doc Tag
       }
 
@@ -49,7 +48,6 @@ makeCtx opts heap
       , separators = if opts.layout then Pretty.separators
                      else \sep -> Pretty.join (string sep)
       , line = if opts.layout then Pretty.line else Pretty.space
-      , tightline = if opts.layout then Pretty.tightline else Pretty.empty
       , lines = if opts.layout then Pretty.lines else Pretty.words
       }
     
@@ -61,7 +59,13 @@ type alias ConfStep =
           
     
 -- tags for expression highlighting
-type Tag = Keyword | Literal | String | Constructor | Variable | Linenumber
+type Tag = Keyword
+         | Literal
+         | String
+         | Constructor
+         | Variable
+         | Linenumber
+         | Exception
     
 -- conditionally add parenthesis to a document
 parensIf : Bool -> Doc t -> Doc t
@@ -124,11 +128,13 @@ rightAlign largest number
 decimalDigits : Int -> Int
 decimalDigits n = ceiling (logBase 10.0 (max 1 (toFloat n)+1))
 
-                  
+
+-- pretty print a configuration
+-- TODO: refactor this definiton
 ppConf : Options -> Conf -> Maybe (Doc Tag)
 ppConf opts (heap, control, stack)
-   = case (control, stack) of
-         (E expr, _) ->
+   = case control of
+         (E expr) ->
              let ppCtx = makeCtx opts heap 
              in 
              case unwindStack stack expr of
@@ -139,6 +145,18 @@ ppConf opts (heap, control, stack)
                      in Just (taggedString ellipsis Linenumber
                              |> a space     
                              |> a (align (ppExpr ppCtx expr1)))
+         (M (Return expr _) _) ->
+             let ppCtx = makeCtx opts heap 
+             in 
+             case unwindStack stack expr of
+                 ([], expr1) ->
+                     Just (ppExpr ppCtx expr1)
+                 (stk,expr1) ->
+                     let ellipsis = String.repeat (List.length stk) "."
+                     in Just (taggedString ellipsis Linenumber
+                             |> a space     
+                             |> a (align (ppExpr ppCtx expr1)))
+             
          _ ->
              Nothing
                  
@@ -151,12 +169,16 @@ unwindStack stack acc
               unwindStack rest acc
           (PushArg arg::rest) ->
               unwindStack rest (App acc arg)
-          (ContBinary op e2::rest) ->
+          (ContBinary1 op e2::rest) ->
               unwindStack rest (BinaryOp op acc e2)
-          (RetBinary op e1::rest) ->
-              unwindStack rest (BinaryOp op e1 acc)
-          (RetUnary op::rest) ->
+          (ContBinary2 op e1::rest) ->
+              unwindStack rest (BinaryOp op e1 acc) 
+          (RetBinary op::rest) ->
+              unwindStack rest acc
+          (ContUnary op::rest) ->
               unwindStack rest (UnaryOp op acc)
+          (RetUnary op::rest) ->
+              unwindStack rest acc              
           (MatchEnd::rest) ->
               unwindStack rest acc
           (DeepEval::rest) ->
@@ -183,7 +205,7 @@ ppExpr ctx e =
                     Just e1 ->
                         ppExpr ctx e1
                     Nothing ->
-                        ppExpr ctx (AST.Error (AST.stringLit "dangling pointer"))
+                        ppExpr ctx (AST.Exception "dangling pointer")
                        -- this should never happen!
             else
                 if AST.isOperator x then
@@ -336,8 +358,8 @@ ppExpr ctx e =
                         |> a (taggedString "else" Keyword)
                         |> a (nest 4 (ctx.line |> a (ppExpr {ctx|prec=0} e3)))))
 
-        Error e1 ->
-            string "error" |> a space |> a (ppExpr ctx e1)
+        AST.Exception msg ->
+            taggedString ("exception: " ++ msg) Exception
 
 
 ppCons : PrettyCtx -> String -> List Expr -> Doc Tag
@@ -619,3 +641,5 @@ tagToAttributes tag
               [class "cm-string"]
           Linenumber ->
               [class "linenumber"]
+          Exception ->
+              [class "exception"]

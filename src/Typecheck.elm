@@ -360,8 +360,9 @@ tcExpr kenv tenv expr
           UnaryOp op e1 ->
               tcExpr kenv tenv (App (Var op) e1)
 
-          Error e1 ->
-              tcExpr kenv tenv (App (Var "error") e1)
+          Exception _ ->
+              Tc.freshType                 -- error admits any type
+
 
 
 extend : Name -> Type -> TyEnv -> TyEnv

@@ -1,6 +1,7 @@
 .error   {
-    color: red;
+    color: #a00;
     font-family: monospace;
+    font-style: oblique;
 }
 
 .editline {
@@ -84,5 +85,14 @@ input.editline {
 
 .credits {
     padding-top: 10px;
+    font-style: oblique;
+}
+
+.exception {    
+    padding-top: 4px;
+    padding-bottom: 4px;
+    padding-left: 4px;
+    padding-right: 4px;
+    color: #a00;
     font-style: oblique;
 }

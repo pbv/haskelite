@@ -50,7 +50,10 @@ getControl (_, control, _) = control
 
 getStack : Conf -> Stack
 getStack (_, _, stack) = stack           
-                      
+
+-- check for final configuration
+checkFinal : Conf -> Bool
+checkFinal (_, _, stack) = List.isEmpty stack
                          
                          
 --                
@@ -60,8 +63,8 @@ transition : Conf -> Maybe Conf
 transition conf
     = case conf of
           -- short circuit errors
-          (heap, E (Error msg), _::_) ->
-              Just (heap, E (Error msg), [])
+          (heap, E (Exception msg), _::_) ->
+              Just (heap, E (Exception msg), [])
 
           -- primitive to force full evaluation
           (heap, E (App (Var "force") e2), stack) ->
@@ -136,21 +139,32 @@ transition conf
 
           -- primitive operations
           (heap, E (BinaryOp op e1 e2), stack) ->
-              Just (heap, E e1, (ContBinary op e2)::stack)
+              Just (heap, E e1, (ContBinary1 op e2)::stack)
+
+          (heap, E (UnaryOp "error" e1), stack) ->
+              Just (heap, E e1, DeepEval::ContUnary "error"::stack)
                   
           (heap, E (UnaryOp op e1), stack) ->
-              Just (heap, E e1, (RetUnary op)::stack)
+              Just (heap, E e1, (ContUnary op)::stack)
 
           -- the remaining expression evaluation rules
           -- should apply only to whnfs
-          (heap, E w1, (ContBinary op e2)::stack) ->
-              Just (heap, E e2, (RetBinary op w1)::stack)
-                        
-          (heap, E w2, (RetBinary op w1)::stack) ->
-              Just (heap, E (applyPrimitive2 op w1 w2), stack)
+          (heap, E w1, (ContBinary1 op e2)::stack) ->
+              Just (heap, E e2, (ContBinary2 op w1)::stack)
 
-          (heap, E w, (RetUnary op)::stack) ->
-              Just (heap, E (applyPrimitive1 op w), stack)
+          (heap, E w2, (ContBinary2 op w1)::stack) ->
+              case applyPrimitive2 op w1 w2 of
+                  Exception msg ->
+                      Just (heap, E (Exception msg), [])
+                  result ->
+                      Just (heap, E result, (RetBinary op::stack))
+                        
+          (heap, E w, (ContUnary op)::stack) ->
+              case applyPrimitive1 op w of
+                  Exception msg ->
+                      Just (heap, E (Exception msg), [])
+                  result ->
+                      Just (heap, E result, (RetUnary op::stack))
                   
           -- update variable
           (heap, E w, Update y::stack) ->
@@ -218,7 +232,7 @@ transition conf
               Just (heap, M m args, stack)
 
           (heap, M Fail _, MatchEnd::stack) ->
-              Just (heap, E (Error (AST.stringLit "non-exaustive patterns")), [])
+              Just (heap, E (Exception "non-exaustive patterns"), [])
                   
           -- deal with alternatives
           (heap, M (Alt m1 m2) args, stack) ->
@@ -235,6 +249,11 @@ transition conf
               in
                   Just (heap1, M (AST.applyMatchSubst s m1) args, stack)
 
+          (heap, E w, RetBinary _::stack) ->
+              Just (heap, E w, stack)
+
+          (heap, E w, RetUnary _::stack) ->
+              Just (heap, E w, stack)
                   
           -- deep evaluation
           -- NB: this does not preserve sharing
@@ -282,12 +301,12 @@ applyPrimitive2 op e1 e2
               if v2 /= 0 then
                    Number (v1 // v2)
                else
-                   Error (AST.stringLit "division by zero")
+                   Exception "division by zero"
           ("mod", Number v1, Number v2) ->
               if v2 /= 0 then
                    Number (modBy v2 v1)
                else
-                   Error (AST.stringLit "division by zero")
+                   Exception "division by zero"
           ("compare", _, _) ->
               structuralCmp e1 e2
           ("==", _, _) ->
@@ -307,7 +326,7 @@ applyPrimitive2 op e1 e2
               orderingCase (structuralCmp e1 e2)
                   AST.falseCons AST.falseCons AST.trueCons              
           _ ->
-              Error (AST.stringLit "invalid primitive arguments")
+              Exception "invalid primitive arguments"
 
 
 -- apply a unary primitive
@@ -337,8 +356,11 @@ applyPrimitive1 op e
               Char (Char.fromCode n)
           ("show", Number n) ->
               AST.stringLit (String.fromInt n)
+          ("error", msg) ->
+              -- at this point we know msg must be fully evaluated
+              AST.Exception (AST.stringUnlit msg)
           _  ->
-              Error (AST.stringLit "invalid primitive arguments")
+              Exception "invalid primitive arguments"
 
 
 --                
@@ -375,9 +397,9 @@ structuralEq e1 e2
               else
                   AST.falseCons
           (Lam _ _ _, Lam _ _ _) ->
-              Error (AST.stringLit "can't compare functions")
+              Exception "can't compare functions"
           _ ->
-              Error (AST.stringLit "invalid arguments to equality")
+              Exception "invalid arguments to equality"
 
 structuralEqList : List Expr -> List Expr -> Expr
 structuralEqList args1 args2
@@ -390,7 +412,7 @@ structuralEqList args1 args2
               App (App (Var "&&") (BinaryOp "==" e1 e2)) (structuralEqList rest1 rest2)
           --  this case shouldn't happen because the constructor tags match
           (_, _) ->
-              Error (AST.stringLit "shouldn't happen")
+              Exception "shouldn't happen"
 
 
 
@@ -411,9 +433,9 @@ structuralCmp e1 e2
                   GT ->
                       Cons "GT" []
           (Lam _ _ _, Lam _ _ _) ->
-              Error (AST.stringLit "can't compare functions")
+              Exception "can't compare functions"
           _ ->
-              Error (AST.stringLit "invalid arguments to structuralCmp")
+              Exception "invalid arguments to structuralCmp"
 
 structuralCmpList : List Expr -> List Expr -> Expr
 structuralCmpList args1 args2
@@ -429,7 +451,7 @@ structuralCmpList args1 args2
                   , (ConsP "GT" [], Cons "GT" [])
                   ]
           (_, _) ->
-              Error (AST.stringLit "shouldn't happen")
+              Exception "shouldn't happen"
                   
 
 -- compare constructor tags
@@ -449,8 +471,8 @@ compareCons t1 t2
 orderingCase : Expr -> Expr -> Expr -> Expr -> Expr
 orderingCase expr ltBranch eqBranch gtBranch
     = case expr of
-          Error msg ->
-              Error msg
+          Exception msg ->
+              Exception msg
           Cons "LT" [] ->
               ltBranch
           Cons "EQ" [] ->
@@ -535,14 +557,14 @@ initializeHeap heap
                                       (Match (VarP "y")
                                            (Return (Cons ":" [Var "x",Var "y"])
                                                 Nothing)
-                                      ))) 
+                                      )))
       ] ++
       List.map infixOp [ "+", "-", "*", "<", ">", "<=", ">=",
                              "div", "mod", "compare" ]
          ++
       List.map prefixOp ["negate", "ord", "chr", "toUpper", "toLower",
                          "isLower", "isUpper", "isAlpha", "isDigit", "isAlphaNum",
-                         "show" ]
+                         "show", "error" ]
 
 
 prefixOp :  Name -> (Name, Expr)
@@ -574,32 +596,25 @@ sizeLimit : Int
 sizeLimit = 100
       
 --            
--- a labelled transition step ignoring silent transitions
--- 1st argument is the set of functions to skip 
-next : Conf -> Maybe (Conf, Info)
-next conf0
+-- a labelled transition step ignoring silent steps
+labelledTransition : Conf -> Maybe (Conf, Info)
+labelledTransition conf0
     = let size0 = confSize conf0
-      in 
-          nextAux (size0 + sizeLimit) conf0
+      in  transition conf0 |> Maybe.andThen (labelledWorker (size0+sizeLimit))
 
 -- worker function with an iteration limit
--- the 2nd argument is limit counter for "silent" transitions
-nextAux :  Int -> Conf -> Maybe (Conf, Info)
-nextAux limit conf0
-    = if confSize conf0 < limit then
-          case transition conf0 of
+-- the 1st argument is a limit counter 
+labelledWorker :  Int -> Conf -> Maybe (Conf, Info)
+labelledWorker limit conf
+    = if confSize conf < limit then
+          case justification conf of
+              Just info ->
+                  Just (conf, info)
               Nothing ->
-                  Nothing
-              Just conf1 ->
-                  case justification conf0 of
-                      Just info ->
-                          Just (conf1, info)
-                      Nothing ->
-                          nextAux limit conf1
+                  transition conf |> Maybe.andThen (labelledWorker limit)
       else
-          Just (conf0, "continue evaluation?")
+          Just (conf, "continue evaluation?")
 
-                          
 
 
 -- size metric for a configuration
@@ -626,9 +641,9 @@ stackSize stk = List.sum (List.map contSize stk)
 contSize : Cont -> Int
 contSize cont
     = case cont of
-          ContBinary _ expr ->
+          ContBinary1 _ expr ->
               exprSize expr
-          RetBinary _ expr ->
+          ContBinary2 _ expr ->
               exprSize expr
           Continue expr _ ->
               exprSize expr
@@ -640,31 +655,25 @@ contSize cont
 justification : Conf -> Maybe Info
 justification (heap, control, stack)
     = case (control, stack) of
-         (E v1, ((RetBinary op v2)::_)) ->
-             if isWhnf v1 then 
-                 Just ("primitive " ++ op)
-             else
-                 Nothing
+         (E w, ((RetBinary op)::_)) ->
+             Just ("primitive " ++ op)
          (E w, ((RetUnary op)::_)) ->
              if isWhnf w then 
                  Just ("primitive " ++ op)
              else
                  Nothing
-{-
-         (E w, Update x::rest) ->
-             if isWhnf w then 
-                 Just ("updated " ++ x)
-             else
-                 Nothing
--}
+
          (M (Return expr info) [], MatchEnd::_) ->
              info
-
-         (E (Error msg), _) ->
+                 
+         (E (Exception msg), _) ->
              Just "runtime error"
 
          (M Fail _, MatchEnd::_) ->
              Just "pattern match failure"
+
+         (E w, []) ->
+             Just "final result"
 
          _ ->
              Nothing

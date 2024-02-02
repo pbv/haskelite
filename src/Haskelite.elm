@@ -61,7 +61,6 @@ type alias Step
 type alias ReduceModel
     = { current : Step             -- current configuration
       , previous : List Step       -- list of previous steps
-      , next : Maybe Step          -- optional next step
       , flags : Flags              -- saved inputs (to go back to editing)
       , options : Options          -- displaying options
       }
@@ -72,6 +71,15 @@ type alias Options
       , layout : Bool
       }
 
+-- check for final evaluation step    
+isFinal : ReduceModel -> Bool
+isFinal model
+    = Machine.checkFinal (Tuple.first model.current)
+
+isInit : ReduceModel -> Bool
+isInit model
+    = List.isEmpty model.previous
+      
 defaultOpts : Options
 defaultOpts
     = { prettyLists = True, prettyEnums = True, layout = True }
@@ -214,18 +222,17 @@ reduceView model =
                  List.map2 (renderStep model.options linecount)
                        (List.reverse <| List.range 0 (linecount-1)) model.previous
         , div [] [ span [] [ button [ class "navbar"
-                           , disabled (not (List.isEmpty model.previous))
+                           , disabled (isInit model)
                            , onClick EditMode] [text "Edit"]
                   , button [ class "navbar"
                            , onClick Reset
                            ] [text "Reset"]
                   , button [ class "navbar"
-                           , disabled (List.isEmpty model.previous)
+                           , disabled (isInit model)
                            , onClick Previous] [text "< Prev"]
                   , button [ class "navbar"
-                           , disabled (model.next == Nothing)
+                           , disabled (isFinal model)
                            , onClick Next] [text "Next >"]
-                           ]
                  , span [class "options"] [
                          label [] [text "Pretty-printing"]                         
                        ,  checkbox model.options.prettyLists
@@ -234,6 +241,7 @@ reduceView model =
                              (Toggle toggleEnums) "enumerations"
                        , checkbox model.options.layout
                              (Toggle toggleLayout) "layout"
+                            ]
                        ]
                  ]
         ]
@@ -313,36 +321,24 @@ reduceUpdate msg model =
         Previous ->
             case model.previous of
                 (last :: rest) ->
-                    Reducing
-                    { model
-                        | current = last
-                        , next = Just model.current
-                        , previous = rest
-                    }
+                    Reducing { model | current = last, previous = rest }
                 [] ->
                     Reducing model
 
         Next ->
-            case model.next of
+            case Machine.labelledTransition (Tuple.first model.current) of
                 Just new ->
-                    Reducing
-                    { model
-                        | current = new
-                        , next = Machine.next (Tuple.first new)
-                        , previous = model.current :: model.previous
-                    }
+                    Reducing { model | current = new
+                             , previous = model.current :: model.previous
+                             }
                 Nothing ->
                     Reducing model
-                        
+
+                       
         Reset ->
             case List.last model.previous of
                 Just start ->
-                    Reducing
-                    { model
-                        | current = start
-                        , next = Machine.next (Tuple.first start)
-                        , previous = []
-                    }
+                    Reducing { model | current = start, previous = [] }
                 Nothing ->
                     Reducing model
         EditMode ->
@@ -384,7 +380,7 @@ editUpdate msg model =
                         conf0 = Machine.start heap0 expr
                     in Reducing
                         { current = (conf0, "initial expression")
-                        , next = Machine.next conf0
+                        -- , next = Machine.labelledTransition conf0
                         , previous = []
                         , flags = model.flags
                         , options = defaultOpts

@@ -36,8 +36,7 @@ type Expr
     | BinaryOp Name Expr Expr            -- binary primitive operations
     | UnaryOp Name Expr                  -- unary primitive operations
     | IfThenElse Expr Expr Expr
-    | Error Expr                       -- runtime errors;
-                                       -- argument should be an evaluated string
+    | Exception String                   -- runtime errors
 
       
 -- * matchings
@@ -145,7 +144,7 @@ applySubst s e
               e
           Char _ ->
               e
-          Error _ ->
+          Exception _ ->
               e
 
                   
@@ -287,7 +286,20 @@ listLit = List.foldr (\x xs -> Cons ":" [x,xs]) (Cons "[]" [])
 
 stringLit : String -> Expr
 stringLit s = listLit (List.map Char <| String.toList s)
-          
+
+stringUnlit : Expr -> String
+stringUnlit expr
+    = stringUnlist expr []
+              
+stringUnlist : Expr -> List Char -> String
+stringUnlist expr acc
+    = case expr of
+          Cons ":" [Char c, rest] ->
+              stringUnlist rest (c::acc)
+          _ ->
+              String.fromList (List.reverse acc)
+
+              
 tupleLit : List Expr -> Expr
 tupleLit args
     = case args of
@@ -300,7 +312,7 @@ tupleLit args
           [e1,e2,e3] ->
               Cons ",," [e1, e2, e3]
           _ ->
-              Error (stringLit "invalid tuple")
+              Exception "invalid tuple"
 
 listPattern : List Pattern -> Pattern
 listPattern =

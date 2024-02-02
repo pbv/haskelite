@@ -20,14 +20,15 @@
     <script>
       var decls =
 	  "decimal :: Int -> String\n"+
-	  "decimal 0 = \"0\"\n"+
-	  "decimal n = decimalAux n []\n\n"+
-	  "decimalAux :: Int -> String -> String\n"+
-	  "decimalAux n acc\n"+
-	  "   | n>0 = decimalAux (n`div`10) (digit (n`mod`10):acc)\n"+
-	  "   | otherwise = acc\n\n"+
-	  "digit :: Int -> Char\n"+
-	  "digit d = chr (ord '0' + d)\n"
+	  "decimal n = map digitToChar (digits n [])\n\n"+
+	  "-- obtain the digits recursively;\n"+
+	  "-- the second argument is an accumulator for the digits\n"+
+	  "digits :: Int -> [Int] -> [Int]\n"+
+	  "digits 0 acc = acc\n"+
+	  "digits n acc = digits (n`div`10) ((n`mod`10):acc)\n\n"+
+	  "-- convert a number from 0 to 9 to a character\n"+
+	  "digitToChar :: Int -> Char\n"+
+	  "digitToChar d = chr (ord '0' + d)\n";
    
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),

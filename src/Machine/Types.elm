@@ -24,8 +24,10 @@ type Cont
     | PushAlt ArgStack Matching
     | PushPat ArgStack Pattern Matching
       -- continuations for primitive operations
-    | ContBinary Name Expr
-    | RetBinary Name Expr
+    | ContBinary1 Name Expr
+    | ContBinary2 Name Expr
+    | ContUnary Name 
+    | RetBinary Name
     | RetUnary Name
       -- for full normal form evaluation
     | DeepEval

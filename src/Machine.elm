@@ -299,7 +299,12 @@ applyPrimitive2 op e1 e2
               Number (v1 * v2)
           ("div", Number v1, Number v2) ->
               if v2 /= 0 then
-                   Number (v1 // v2)
+                  -- truncate towards -infinity following the Haskell standard
+                  let r = v1 // v2
+                  in Number (if r<0 then 
+                                 r-1
+                             else
+                                 r)
                else
                    Exception "division by zero"
           ("mod", Number v1, Number v2) ->

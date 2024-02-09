@@ -9,7 +9,7 @@ import Pretty
 import PrettyPrinter
 import Machine.Heap as Heap
 
-defaultOpts = { prettyLists = True, prettyEnums = False, layout = False }
+defaultOpts = { prettyLists = True, prettyEnums = False, layout = False, justifications = False }
       
 showExpr : Expr -> String
 showExpr

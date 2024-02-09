@@ -64,13 +64,15 @@ type alias ReduceModel
       , flags : Flags              -- saved inputs (to go back to editing)
       , options : Options          -- displaying options
       }
-
+  
 type alias Options
     = { prettyLists : Bool     -- should we prettify lists?
       , prettyEnums : Bool     -- should we prettify Prelude enum functions?
       , layout : Bool
+      , justifications : Bool  -- show jusfications inline/hover
       }
 
+    
 -- check for final evaluation step    
 isFinal : ReduceModel -> Bool
 isFinal model
@@ -82,7 +84,11 @@ isInit model
       
 defaultOpts : Options
 defaultOpts
-    = { prettyLists = True, prettyEnums = True, layout = True }
+    = { prettyLists = True
+      , prettyEnums = True
+      , layout = True
+      , justifications = True
+      }
 
     
 type Msg
@@ -216,10 +222,10 @@ reduceView model =
         -- current line always visible when scrolling is needed
          div [ class "lines" ]
              <|  [ div [class "current"]
-                       [ renderStep model.options linecount linecount model.current ]
+                       [ renderStep model.options linecount model.current ]
                  ]
                  ++
-                 List.map2 (renderStep model.options linecount)
+                 List.map2 (renderStep model.options)
                        (List.reverse <| List.range 0 (linecount-1)) model.previous
         , div [] [ span [] [ button [ class "navbar"
                            , disabled (isInit model)
@@ -241,6 +247,8 @@ reduceView model =
                              (Toggle toggleEnums) "enumerations"
                        , checkbox model.options.layout
                              (Toggle toggleLayout) "layout"
+                       , checkbox model.options.justifications 
+                             (Toggle toggleJustifications) "justifications"
                             ]
                        ]
                  ]
@@ -288,16 +296,24 @@ toggleEnums opts = { opts | prettyEnums = not (opts.prettyEnums) }
 
 toggleLayout : Options -> Options
 toggleLayout opts = { opts | layout = not (opts.layout) }
-                   
 
--- render a single numbered reduction line                   
-renderStep  : Options -> Int -> Int -> Step -> Html Msg
-renderStep opts largest number (conf, info)
-    = let step = {conf=conf, number=number, largest=largest}
-      in case PrettyPrinter.prettyConfStep opts step of
+toggleJustifications : Options -> Options
+toggleJustifications opts = { opts | justifications = not (opts.justifications) }
+                    
+
+-- render a single reduction step
+renderStep  : Options -> Int -> Step -> Html Msg
+renderStep opts step (conf, info) 
+      = case PrettyPrinter.prettyConfStep opts conf step of
           Just html ->
-              div [class "line"]
-                  [ html, div [class "info"] [text info] ]
+              if  opts.justifications then
+                  div [class "line"]
+                      [ div [class "info2"] [text ("{ " ++  info ++ " }")]
+                      , html ]
+                     
+              else
+                  div [class "line"]
+                      [ html, div [class "info"] [text info] ]
           Nothing ->
               span [] []
 
@@ -380,7 +396,6 @@ editUpdate msg model =
                         conf0 = Machine.start heap0 expr
                     in Reducing
                         { current = (conf0, "initial expression")
-                        -- , next = Machine.labelledTransition conf0
                         , previous = []
                         , flags = model.flags
                         , options = defaultOpts

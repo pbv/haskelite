@@ -34,6 +34,8 @@ cons i =
     }
           
 
+
+{-    
 -- contexts for application nodes
 appL : ExprCtx
 appL =
@@ -90,4 +92,4 @@ binopR =
                         _ ->
                             e
     }
-    
+-}    

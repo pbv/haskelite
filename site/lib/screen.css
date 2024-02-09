@@ -15,7 +15,7 @@ input.editline {
 .lines   {
     font-family: monospace;
     padding: 2em;
-    margin: 1em 1em;
+    margin: 1em 1em; 
     cursor: default;
     height: 340px;
     overflow-y: auto;
@@ -29,6 +29,7 @@ input.editline {
     position: relative;
     display: block;
     border-bottom: 2px solid transparent;
+    margin-bottom: 0.25ex;
 }
 
 .linenumber {
@@ -43,25 +44,22 @@ input.editline {
 
 .line .info   {
     visibility: hidden;
+    font-style: oblique;
     background-color: black;
     color: white;
     padding: 5px 5px;
+    border: solid 1px;
     border-radius: 6px;    
     position: absolute;
     right: 0px;  
     z-index: 1;
 }
 
-.current .tooltip   {
-    visibility: hidden;
-    background-color: black;
-    color: white;
-    padding: 5px 5px;
-    border-radius: 6px;
-    position: absolute;
-    top: 20px;
-    right: 0px; 
-    z-index: 1;
+.line .info2 {
+    font-style: oblique;
+    color: #606060;
+    margin-left: 2em;
+    margin-bottom: 0.25ex;
 }
 
 

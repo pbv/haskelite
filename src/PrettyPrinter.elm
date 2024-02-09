@@ -2,8 +2,8 @@
   Pretty-printer for Haskelite expressions, types and machine configurations
   Pedro Vasconcelos 2021--24
 -}
-module PrettyPrinter exposing (prettyExpr, prettyPattern,
-                               prettyType, prettyConfStep)
+module PrettyPrinter exposing (prettyExpr, prettyPattern, prettyType,
+                                   prettyConfStep)
 
 import AST exposing (Expr(..), Matching(..), Bind, Pattern(..), Name)
 import Types exposing (Type(..))
@@ -20,8 +20,9 @@ import Html.Attributes exposing (class)
    
 type alias Options
     = { prettyLists : Bool     -- should we prettify lists?
-      , prettyEnums : Bool     -- should we prettify Prelude enum functions?
-      , layout : Bool
+      , prettyEnums : Bool     -- should we prettify prelude enum* functions?
+      , layout : Bool          -- use layout?
+      , justifications : Bool  -- show justifications inline?
       }
 
 type alias Prec                -- precedence for placing parenthesis
@@ -51,12 +52,7 @@ makeCtx opts heap
       , lines = if opts.layout then Pretty.lines else Pretty.words
       }
     
-type alias ConfStep =
-    { conf : Conf
-    , number : Int
-    , largest : Int
-    }
-          
+         
     
 -- tags for expression highlighting
 type Tag = Keyword
@@ -97,27 +93,29 @@ prettyPattern p
 --
 -- render a configuration to HTML
 --
-prettyConfStep : Options -> ConfStep -> Maybe (Html msg)
-prettyConfStep opts conf
-    = case ppConfStep opts conf of
+prettyConfStep : Options -> Conf -> Int -> Maybe (Html msg)
+prettyConfStep opts conf step
+    = case ppConfStep opts conf step of
           Just doc ->
               Just <| Pretty.Renderer.pretty defaultLength htmlRenderer doc
           Nothing ->
               Nothing
 
--- pretty print a numbered configuration step                  
-ppConfStep : Options -> ConfStep -> Maybe (Doc Tag)
-ppConfStep opts step
-    = case ppConf opts step.conf of
+-- pretty print a configuration step
+ppConfStep : Options -> Conf -> Int -> Maybe (Doc Tag)
+ppConfStep opts conf step
+    = case ppConf opts conf of
           Just doc ->
-              let counter = rightAlign step.largest step.number ++ "."
-              in Just (taggedString counter Linenumber
-                      |> a space
-                      |> a (align doc))
+              if step>0 then 
+                  Just (taggedString "=" Linenumber
+                       |> a space
+                       |> a (align doc))
+              else
+                  Just (space |> a space |> a (align doc))
           Nothing ->
               Nothing
                   
-
+{-
 -- right align a number; first argument is the largest number in the sequence
 -- use a Unicode non breakable space to prevent HTML from eating up the formating
 rightAlign : Int -> Int -> String
@@ -127,7 +125,7 @@ rightAlign largest number
 -- get the number of decimal digits          
 decimalDigits : Int -> Int
 decimalDigits n = ceiling (logBase 10.0 (max 1 (toFloat n)+1))
-
+-}
 
 -- pretty print a configuration
 -- TODO: refactor this definiton

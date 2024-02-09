@@ -841,8 +841,6 @@ makeTuple args
 makeApp : Expr -> List Expr -> Expr
 makeApp e0 args
     = case (e0, args) of
-          --(Var "error", [msg]) ->
-          --    Error msg
           (Cons tag args1, args2) ->
               Cons tag (args1 ++ args2)
           _ ->

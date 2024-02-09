@@ -7,7 +7,7 @@
 -}
 module Tc exposing (Tc, run, eval, pure, fail, explain, andThen,
                     get, put, modify, traverse, traverse_, simplify,
-                    freshType, freshTypes, freshVar, freshInst, unify)
+                    freshType, freshTypes, freshVar, freshVars, freshInst, unify)
 
 import Dict exposing (Dict)
 import Set
@@ -48,7 +48,7 @@ andThen f m
       (State.andThen 
       (\r -> case r of
                  Ok v -> fromTc (f v)
-                 Err e -> State.state (Err e)
+                 Err err -> State.state (Err err)
       ) (fromTc m))
 
 
@@ -92,11 +92,32 @@ traverse_ f lst
           (v::vs) ->
               f v |> andThen (\_ -> traverse_ f vs)
 
+freshVar : Tc Tyvar
+freshVar = get |>
+            andThen
+            (\s -> let c = s.varcount
+                   in put { s | varcount = 1 + c }
+                   |> andThen (\_ -> pure (mkVar c)))
       
+freshVars : Int -> Tc (List Tyvar)
+freshVars n
+    = get |>
+      andThen
+      (\s -> let c = s.varcount
+             in put { s | varcount = n + c }
+             |> andThen (\_ -> pure (List.map mkVar (List.range c (n+c-1)))))
+                
 freshType : Tc Type
 freshType
     = freshVar |> andThen (\v -> pure (TyVar v))
 
+freshTypes : Int -> Tc (List Type)
+freshTypes n
+    = freshVars n |>
+      andThen (\vs -> pure (List.map TyVar vs))
+      
+     
+{-      
 freshTypes : Int -> Tc (List Type)
 freshTypes n
     = if n<=0 then
@@ -104,13 +125,9 @@ freshTypes n
       else
           freshType |> andThen (\v -> freshTypes (n-1) |>
                                     andThen (\vs -> pure (v::vs)))
+-}
+
       
-freshVar : Tc Tyvar
-freshVar = get |>
-            andThen
-            (\s -> let c = s.varcount
-                   in put { s | varcount = 1 + c }
-                   |> andThen (\_ -> pure (mkVar c)))
 
 
 
@@ -140,14 +157,11 @@ freshInst_ r ty
 
           TyVar _ ->
               ty
-
-
-          
+       
                           
 mkVar : Int -> String
 mkVar n
-    = "t" ++ String.fromInt n
-
+    = "a" ++ String.fromInt n
 
 -- unify two types; the first argument is the pretty-printing function
 unify : (Type -> String) -> Type -> Type -> Tc ()

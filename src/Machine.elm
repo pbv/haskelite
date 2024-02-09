@@ -361,9 +361,6 @@ applyPrimitive1 op e
               Char (Char.fromCode n)
           ("show", Number n) ->
               AST.stringLit (String.fromInt n)
-          ("error", msg) ->
-              -- at this point we know msg must be fully evaluated
-              AST.Exception (AST.stringUnlit msg)
           _  ->
               Exception "invalid primitive arguments"
 

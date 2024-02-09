@@ -39,7 +39,7 @@ unifyAux s t1 t2 eqs
                   unifyEqs (extend x t2 s) eqs
                         
           (TyConst c1 ts1, TyConst c2 ts2) ->
-              if c1 == c2 && List.length ts1 == List.length ts2 then
+              if c1 == c2 then -- then length ts1 == length ts2
                   unifyEqs s (List.map2 Tuple.pair ts1 ts2 ++ eqs)
               else
                   Err (Mismatch t1 t2)                                    

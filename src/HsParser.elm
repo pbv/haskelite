@@ -564,7 +564,12 @@ integer = Parser.chompWhile Char.isDigit
 pattern : Parser Pattern
 pattern =
     oneOf
-    [ succeed (\id -> if id == "_" then DefaultP else VarP id)
+    [ backtrackable <|
+          succeed AsP
+           |= identifier
+           |. symbol "@"
+           |= lazy (\_ -> pattern)
+    , succeed (\id -> if id == "_" then DefaultP else VarP id)
            |= identifier
     , succeed BangP
            |. symbol "!"

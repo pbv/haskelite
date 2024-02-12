@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Remove consecutive duplicates</title>
+    <link rel='stylesheet' href='lib/codemirror.css'>
+    <link rel="stylesheet" href="lib/screen.css">
+    <script type='text/javascript' src='lib/codemirror.js'></script>
+    <script type='text/javascript' src='lib/haskell.js'></script>
+    <script type='text/javascript' src='js/code-editor.js'></script>
+    <script type='text/javascript' src='js/haskelite-min.js'></script>
+  </head>
+
+  <body>
+    <h1>Remove consecutive duplicates</h1>
+    <p>Remove consecutive duplicate elements from a list.
+      <a href="index.html">Back</a></p>
+    <div id="haskelite"/>
+
+    <script>
+      var decls =
+	  "-- uses an \"as-pattern\" to match xs with a non-empty list\n"+
+	  "-- and extract the first element\n"+
+	  "nodups (x:xs@(y:_)) | x==y = nodups xs\n"+
+	  "nodups (x:xs) = x : nodups xs\n"+
+	  "nodups [] = []\n";
+   
+      var app = Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression:"nodups \"Mississippi\"", declarations: decls }
+      });
+    </script>
+    <hr>
+    <div class="credits">
+    Pedro Vasconcelos, 2023.<br>
+    Powered by <a href="https://elm-lang.org/">Elm</a> and
+    <a href="https://codemirror.net/">CodeMirror</a>.
+    </div>
+  </body>
+</html>

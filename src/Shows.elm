@@ -22,6 +22,7 @@ showType t
 showPattern : Pattern -> String
 showPattern p
     = PrettyPrinter.prettyPattern p
+
            
 quote : String -> String
 quote name

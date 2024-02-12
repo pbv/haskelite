@@ -2,8 +2,7 @@
   Pretty-printer for Haskelite expressions, types and machine configurations
   Pedro Vasconcelos 2021--24
 -}
-module PrettyPrinter exposing (prettyExpr, prettyPattern, prettyType,
-                                   prettyConfStep)
+module PrettyPrinter exposing (prettyExpr, prettyPattern, prettyType, prettyConfStep)
 
 import AST exposing (Expr(..), Matching(..), Bind, Pattern(..), Name)
 import Types exposing (Type(..))
@@ -171,11 +170,11 @@ unwindStack stack acc
               unwindStack rest (BinaryOp op acc e2)
           (ContBinary2 op e1::rest) ->
               unwindStack rest (BinaryOp op e1 acc) 
-          (RetBinary op::rest) ->
+          (RetBinary op _ _ ::rest) ->
               unwindStack rest acc
           (ContUnary op::rest) ->
               unwindStack rest (UnaryOp op acc)
-          (RetUnary op::rest) ->
+          (RetUnary op _ ::rest) ->
               unwindStack rest acc              
           (MatchEnd::rest) ->
               unwindStack rest acc
@@ -544,6 +543,10 @@ ppPattern p =
         ConsP tag ps ->
             parens <|
                 words <| (taggedString tag Constructor :: List.map ppPattern ps)
+        AsP var pat -> 
+            taggedString var Variable
+                |> a (string "@")
+                |> a (ppPattern pat)
 
 
 -- check if an cons expression has an evaluated spine

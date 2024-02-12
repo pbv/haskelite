@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Insert values into a binary search tree</title>
+    <title>Flattening a binary search tree</title>
     <link rel='stylesheet' href='lib/codemirror.css'>
     <link rel="stylesheet" href="lib/screen.css">
     <script type='text/javascript' src='lib/codemirror.js'></script>
@@ -12,32 +12,27 @@
   </head>
 
   <body>
-    <h1>Insert values into a binary search tree</h1>
-    <p>Inserting a list of values into a binary search tree (BST).
-       <a href="index.html">Back</a></p>
+    <h1>Flattening a binary search tree</h1>
+    <p>Flatten a binary search tree (BST) into a ordered list
+      using infix traversal. <a href="index.html">Back</a></p>
     <div id="haskelite"/>
     <script>
       var decls =
 	  "-- A recursive data type for Binary Search Trees (BST) of 'a's\n"+
 	  "data BST a = Leaf | Node a (BST a) (BST a)\n\n"+
-	  "-- Insert a value into an ordered search tree\n"+
-	  "-- NB: this function is polymorphic on 'a'\n"+
-	  "-- but will not work all types!\n"+
-          "insert :: a -> BST a -> BST a\n"+
-	  "insert x Leaf = Node x Leaf Leaf\n"+
-	  "insert x (Node y left right)\n"+
-	  "         | x<=y      = Node y (insert x left) right\n"+
-	  "         | otherwise = Node y left (insert x right)\n\n"+
-	  "-- make a BST from a list of values;\n"+
-	  "-- this could also be expressed as a foldr\n"+
-	  "makeTree :: [a] -> BST a\n"+
-	  "makeTree [] = Leaf\n"+
-	  "makeTree (x:xs) = insert x (makeTree xs)\n\n";
+	  "-- flatten a tree into a list\n"+
+	  "-- if the tree respects the BST property, the result list will be ordered\n"+ 
+	  "flatten :: BST a -> [a]\n"+
+	  "flatten Leaf = []\n"+
+	  "flatten (Node x left right) = flatten left ++ [x] ++ flatten right\n\n"+
+	  "-- an example BST\n"+
+	  "example = Node 3 (Node 2 (Node 1 Leaf Leaf) Leaf) (Node 5 (Node 4 Leaf Leaf) (Node 6 Leaf Leaf))\n";
+
 
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
 	  flags: {
-	      expression:"makeTree [3,1,4,2]",
+	      expression: "flatten example",
 	      declarations: decls
 	  }
       });

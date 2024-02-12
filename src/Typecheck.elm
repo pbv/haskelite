@@ -457,6 +457,10 @@ tcPattern tenv patt ty
               unify ty tyChar |>
               andThen (\_ -> pure tenv)
 
+          (AsP var patt1) ->
+              let tenv1 = extend var ty tenv
+              in tcPattern tenv1 patt1 ty 
+
 
 
 -- typecheck patterns arguments to a a constructor pattern

@@ -51,9 +51,10 @@ type Matching
 
 -- * patterns      
 type Pattern
-    = DefaultP                  -- ignore (_)
+    = DefaultP                  -- wildcard (_)
     | VarP Name                 -- variables
     | BangP Name                -- bang pattern (for strict evaluation)
+    | AsP Name Pattern          -- as pattern (x@pat)
     | NumberP Int               -- number pattern
     | CharP Char                -- character pattern
     | ConsP Tag (List Pattern)  -- constructors
@@ -202,6 +203,8 @@ patternVars patt
               [x]
           ConsP c ps ->
               List.concatMap patternVars ps
+          AsP x p ->
+              x :: patternVars p
           _ ->
               []
                       

@@ -19,10 +19,8 @@ import Monocle.Optional as Monocle
 isWhnf : Expr -> Bool
 isWhnf expr =
     case expr of
-        Lam 0 _ m ->      --- AST.matchingArity m == 0
-            False
-        Lam _ _ m ->
-            True          ---  AST.matchingArity m > 0
+        Lam arity _ m ->
+            arity > 0                
         Number _ ->
             True
         Char _ ->
@@ -40,7 +38,7 @@ isVar expr =
             True
         _ ->
             False
-              
+
 
 getHeap : Conf -> Heap
 getHeap (heap,_,_) = heap
@@ -78,11 +76,7 @@ transition conf
 
           -- saturated lambda: go into matching evaluation
           (heap, E (Lam 0 optname m), stack) ->
-              case optname of
-                  Just fun ->
-                      Just (heap, M m [], MatchEnd::stack)
-                  Nothing ->
-                      Just (heap, M m [], MatchEnd::stack)
+              Just (heap, M m [], MatchEnd::stack)
 
           -- apply argument to non-saturated lambda
           (heap, E (Lam _ optname m), PushArg e1::rest) ->
@@ -157,14 +151,14 @@ transition conf
                   Exception msg ->
                       Just (heap, E (Exception msg), [])
                   result ->
-                      Just (heap, E result, (RetBinary op::stack))
+                      Just (heap, E result, (RetBinary op w1 w2::stack))
                         
           (heap, E w, (ContUnary op)::stack) ->
               case applyPrimitive1 op w of
                   Exception msg ->
                       Just (heap, E (Exception msg), [])
                   result ->
-                      Just (heap, E result, (RetUnary op::stack))
+                      Just (heap, E result, (RetUnary op w::stack))
                   
           -- update variable
           (heap, E w, Update y::stack) ->
@@ -186,6 +180,11 @@ transition conf
                   m2 = AST.applyMatchSubst (Dict.singleton x e1) m1
               in
                   Just (heap, M m2 args, stack)
+
+          -- as-patterns
+          (heap, M (Match (AsP x pat) m1) args, stack) ->
+              Just (heap, M (Match (VarP x) (Arg (Var x) (Match pat m1))) args, stack)
+
                       
           -- match a constructor or a strict (bang) pattern 
           (heap, M (Match p1 m1) (e1::args), stack) ->
@@ -193,10 +192,11 @@ transition conf
                       
           -- decompose a constructor 
           (heap, E (Cons c0 es), (PushPat args (ConsP c1 ps) m1)::stack) ->
-              if c0 == c1 && List.length es == List.length ps then
-                  let (heap1, es1) = normalizeConsArgs heap es
+              if c0 == c1 then -- then |es| == |ps| because of well-typing  
+                  let
+                      (heap1, es1) = normalizeConsArgs heap es
                   in 
-                  Just (heap1, M (matchCons es1 ps m1) args, stack) 
+                      Just (heap1, M (matchCons es1 ps m1) args, stack) 
               else
                   Just (heap, M Fail [], stack)
 
@@ -249,10 +249,10 @@ transition conf
               in
                   Just (heap1, M (AST.applyMatchSubst s m1) args, stack)
 
-          (heap, E w, RetBinary _::stack) ->
+          (heap, E w, RetBinary _ _ _::stack) ->
               Just (heap, E w, stack)
 
-          (heap, E w, RetUnary _::stack) ->
+          (heap, E w, RetUnary _ _::stack) ->
               Just (heap, E w, stack)
                   
           -- deep evaluation
@@ -657,11 +657,11 @@ contSize cont
 justification : Conf -> Maybe Info
 justification (heap, control, stack)
     = case (control, stack) of
-         (E w, ((RetBinary op)::_)) ->
-             Just ("primitive " ++ op)
-         (E w, ((RetUnary op)::_)) ->
+         (E w, ((RetBinary op e1 e2)::_)) ->
+             Just (showPrim2 op e1 e2 w)
+         (E w, ((RetUnary op e1)::_)) ->
              if isWhnf w then 
-                 Just ("primitive " ++ op)
+                 Just (showPrim1 op e1 w)
              else
                  Nothing
 
@@ -702,26 +702,18 @@ translateCase e0 alts
 
 
 
-{-
-showPrim2 : Name -> Expr -> Expr -> String
-showPrim2 op v1 v2
-    = case (v1,v2) of
-          (Number x1, Number x2) ->
-              String.fromInt x1 ++ op ++ String.fromInt x2
-          (Char x1, Char x2) ->
-              String.fromChar x1 ++ op ++ String.fromChar x2
-          _ ->
-              op
+showPrim2 : Name -> Expr -> Expr -> Expr -> String
+showPrim2 op e1 e2 e3
+    = if isWhnf e3 then
+          Shows.showExpr (BinaryOp op e1 e2) ++ " = " ++  Shows.showExpr e3
+      else
+          Shows.showExpr (BinaryOp op e1 e2)          
 
+showPrim1 : Name -> Expr -> Expr -> String
+showPrim1 op e1 e2
+    = if isWhnf e2 then
+          Shows.showExpr (UnaryOp op e1) ++ " = " ++ Shows.showExpr e2
+      else
+          Shows.showExpr (UnaryOp op e1)           
 
-showPrim1 : Name -> Expr -> String
-showPrim1 op v1
-    = case  v1 of
-          Number x1 ->
-              op ++ " " ++ String.fromInt x1
-          Char x1 ->
-              op ++ " " ++ String.fromChar x1
-          _ ->
-              op
--}
 

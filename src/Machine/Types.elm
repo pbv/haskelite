@@ -27,8 +27,8 @@ type Cont
     | ContBinary1 Name Expr
     | ContBinary2 Name Expr
     | ContUnary Name 
-    | RetBinary Name
-    | RetUnary Name
+    | RetBinary Name Expr Expr 
+    | RetUnary Name Expr 
       -- for full normal form evaluation
     | DeepEval
     | Continue Expr ExprCtx

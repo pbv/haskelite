@@ -60,6 +60,13 @@ checkFinal (_, _, stack) = List.isEmpty stack
 transition : Conf -> Maybe Conf
 transition conf
     = case conf of
+          -- consume intermediate states used for pretty-printing
+          (heap, E w, RetBinary _ _ _::stack) ->
+              Just (heap, E w, stack)
+
+          (heap, E w, RetUnary _ _::stack) ->
+              Just (heap, E w, stack)
+                  
           -- short circuit errors
           (heap, E (Exception msg), _::_) ->
               Just (heap, E (Exception msg), [])
@@ -249,11 +256,6 @@ transition conf
               in
                   Just (heap1, M (AST.applyMatchSubst s m1) args, stack)
 
-          (heap, E w, RetBinary _ _ _::stack) ->
-              Just (heap, E w, stack)
-
-          (heap, E w, RetUnary _ _::stack) ->
-              Just (heap, E w, stack)
                   
           -- deep evaluation
           -- NB: this does not preserve sharing
@@ -412,8 +414,8 @@ structuralEqList args1 args2
               BinaryOp "==" e1 e2
           (e1::rest1, e2::rest2) ->
               App (App (Var "&&") (BinaryOp "==" e1 e2)) (structuralEqList rest1 rest2)
-          --  this case shouldn't happen because the constructor tags match
-          (_, _) ->
+          _ ->
+              --  this case shouldn't happen because the constructor tags match
               Exception "shouldn't happen"
 
 
@@ -615,7 +617,7 @@ labelledWorker limit conf
               Nothing ->
                   transition conf |> Maybe.andThen (labelledWorker limit)
       else
-          Just (conf, "continue evaluation?")
+          Just (conf, "continue?")
 
 
 
@@ -660,11 +662,7 @@ justification (heap, control, stack)
          (E w, ((RetBinary op e1 e2)::_)) ->
              Just (showPrim2 op e1 e2 w)
          (E w, ((RetUnary op e1)::_)) ->
-             if isWhnf w then 
-                 Just (showPrim1 op e1 w)
-             else
-                 Nothing
-
+             Just (showPrim1 op e1 w)
          (M (Return expr info) [], MatchEnd::_) ->
              info
                  
@@ -696,7 +694,10 @@ translateCase e0 alts
     = let
         body = List.foldr
                  (\(patt,expr) rest ->
-                      Alt (Match patt (Return expr (Just ("case " ++ Shows.showPattern patt)))) rest)
+                      let info = ("case " ++ Shows.showPattern patt ++
+                                 "->" ++  Shows.showExpr expr)
+                      in 
+                          Alt (Match patt (Return expr (Just info))) rest)
                    Fail alts
       in Arg e0 body
 
@@ -707,13 +708,13 @@ showPrim2 op e1 e2 e3
     = if isWhnf e3 then
           Shows.showExpr (BinaryOp op e1 e2) ++ " = " ++  Shows.showExpr e3
       else
-          Shows.showExpr (BinaryOp op e1 e2)          
+          "definition of " ++ Shows.showExpr (BinaryOp op e1 e2)          
 
 showPrim1 : Name -> Expr -> Expr -> String
 showPrim1 op e1 e2
     = if isWhnf e2 then
           Shows.showExpr (UnaryOp op e1) ++ " = " ++ Shows.showExpr e2
       else
-          Shows.showExpr (UnaryOp op e1)           
+          "definition of " ++ Shows.showExpr (UnaryOp op e1)           
 
 

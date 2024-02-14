@@ -23,6 +23,8 @@ type Cont
     | MatchEnd 
     | PushAlt ArgStack Matching
     | PushPat ArgStack Pattern Matching
+      -- for bang patterns
+    | PushBang ArgStack Matching
       -- continuations for primitive operations
     | ContBinary1 Name Expr
     | ContBinary2 Name Expr

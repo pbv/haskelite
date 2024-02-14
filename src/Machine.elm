@@ -15,11 +15,11 @@ import Shows
 
 import Monocle.Optional as Monocle
 
-      
+-- check if an expression is in weak head normal form      
 isWhnf : Expr -> Bool
 isWhnf expr =
     case expr of
-        Lam arity _ m ->
+        Lam arity _ _ ->
             arity > 0                
         Number _ ->
             True
@@ -31,14 +31,23 @@ isWhnf expr =
             False
 
 
-isVar : Expr -> Bool
-isVar expr =
+-- check if an expression is *atomic*, i.e.
+-- if we can safely share it without losing laziness
+isAtomic : Expr -> Bool
+isAtomic expr =
     case expr of
         Var _ ->
+            True
+        Number _ ->
+            True
+        Char _ ->
+            True
+        Cons _ [] ->
             True
         _ ->
             False
 
+              
 
 getHeap : Conf -> Heap
 getHeap (heap,_,_) = heap
@@ -53,7 +62,29 @@ getStack (_, _, stack) = stack
 checkFinal : Conf -> Bool
 checkFinal (_, _, stack) = List.isEmpty stack
                          
-                         
+
+
+-- normalize an argument, possibly allocating a new indirection                
+normalizeArg : Heap -> Expr -> (Heap, Expr)
+normalizeArg heap expr
+    = if isAtomic expr then
+          (heap, expr)
+      else
+          let (loc, heap1) = Heap.newIndirection heap expr
+          in (heap1, Var loc) 
+
+-- normalize a list of arguments 
+normalizeArgs : Heap -> List Expr -> (Heap, List Expr)
+normalizeArgs heap args
+    = case args of
+          [] ->
+              (heap, [])
+          (arg::rest) ->
+              let (heap1, arg1) = normalizeArg heap arg
+                  (heap2, rest1) = normalizeArgs heap1 rest
+              in (heap2, arg1::rest1)
+
+                           
 --                
 -- a small-step transition of the machine
 -- first argument is the set of functions to skip over
@@ -86,18 +117,12 @@ transition conf
               Just (heap, M m [], MatchEnd::stack)
 
           -- apply argument to non-saturated lambda
-          (heap, E (Lam _ optname m), PushArg e1::rest) ->
-              -- put into A-normal form if necessary:
-              -- check if we neeed to update the result of evaluating `e1'
-              if isVar e1 || isWhnf e1 then
-                  -- no indirection needed
-                  Just (heap, E (AST.lambda optname (Arg e1 m)), rest)
-              else
-                  -- create a new indirection to the expression
-                  let
-                      (loc, heap1) = Heap.newIndirection heap e1
-                  in
-                      Just (heap1, E (AST.lambda optname (Arg (Var loc) m)), rest)  
+          (heap, E (Lam _ optname m), PushArg e0::rest) ->
+              -- put into normal form if necessary
+              let
+                  (heap1, e1) = normalizeArg heap e0
+              in 
+                  Just (heap1, E (AST.lambda optname (Arg e1 m)), rest)
 
           -- local bindings
           (heap, E (Let binds e1), stack) ->
@@ -107,23 +132,18 @@ transition conf
                   Just (heap1, E (AST.applySubst s e1), stack)
 
           -- case expressions
-          (heap, E (Case e1 alts), stack) ->
-              if isVar e1 || isWhnf e1 then
-                  -- no indirection needed
-                  Just (heap, M (translateCase e1 alts) [], MatchEnd::stack)
-              else
-                  let
-                      (loc, heap1) = Heap.newIndirection heap e1
-                  in
-                      Just (heap1, M (translateCase (Var loc) alts) [],
-                                MatchEnd::stack)
+          (heap, E (Case e0 alts), stack) ->
+              let
+                  (heap1, e1) = normalizeArg heap e0
+              in 
+                  Just (heap1, M (translateCase e1 alts) [], MatchEnd::stack)
                       
           -- if-then-else
           (heap, E (IfThenElse e1 e2 e3), stack) ->
               Just (heap, M (translateIfThenElse e1 e2 e3) [], MatchEnd::stack)
 
           (heap, E (Var y), stack) ->
-              case Heap.get y heap of
+              case Heap.get y heap of                  
                   Just expr ->
                       if isWhnf expr then
                           Just (heap, E expr, stack)
@@ -136,7 +156,7 @@ transition conf
                           -- PRETTY-PRINT INDIRECTIONS!
                           Just (heap, E expr, Update y::stack)
                   _ ->
-                      Nothing
+                      Just (panic ("dangling variable: "++y))
 
           -- primitive operations
           (heap, E (BinaryOp op e1 e2), stack) ->
@@ -167,51 +187,58 @@ transition conf
                   result ->
                       Just (heap, E result, (RetUnary op w::stack))
                   
-          -- update variable
+          -- update a variable
+          -- at this point we know w must be in wnhf
           (heap, E w, Update y::stack) ->
-              if isWhnf w then
+              -- if isWhnf w then
                   let
                       heap1 = Heap.update y w heap
                   in
                       Just (heap1, E w, stack)
-              else
-                  Nothing
+              -- else
+              --    Nothing
 
           -- ignore an argument
-          (heap, M (Match DefaultP m1) (e1::args), stack) ->
+          (heap, M (Match DefaultP m1) (arg1::args), stack) ->
               Just (heap, M m1 args, stack)
                       
           -- bind a variable
-          (heap, M (Match (VarP x) m1) (e1::args), stack) ->
+          (heap, M (Match (VarP x) m1) (arg1::args), stack) ->
               let
-                  m2 = AST.applyMatchSubst (Dict.singleton x e1) m1
+                  m2 = AST.applyMatchSubst (Dict.singleton x arg1) m1
               in
                   Just (heap, M m2 args, stack)
 
-          -- as-patterns
+          -- match as-patterns
           (heap, M (Match (AsP x pat) m1) args, stack) ->
               Just (heap, M (Match (VarP x) (Arg (Var x) (Match pat m1))) args, stack)
 
+          -- match bang-patterns
+          (heap, M (Match (BangP x) m0) (arg0::args), stack) ->
+              let
+                  (heap1, arg1) = normalizeArg heap arg0
+                  m1 = AST.applyMatchSubst (Dict.singleton x arg1) m0
+              in 
+                  Just (heap1, E arg1, (PushBang args m1)::stack)
                       
-          -- match a constructor or a strict (bang) pattern 
-          (heap, M (Match p1 m1) (e1::args), stack) ->
-              Just (heap, E e1, (PushPat args p1 m1)::stack)
+          -- match a constructor, number or char pattern
+          (heap, M (Match patt m1) (arg1::args), stack) ->
+              Just (heap, E arg1, (PushPat args patt m1)::stack)
                       
           -- decompose a constructor 
           (heap, E (Cons c0 es), (PushPat args (ConsP c1 ps) m1)::stack) ->
-              if c0 == c1 then -- then |es| == |ps| because of well-typing  
+              if c0 == c1 then
+                  -- |es| == |ps| must hold because of well-typing  
                   let
-                      (heap1, es1) = normalizeConsArgs heap es
+                      (heap1, es1) = normalizeArgs heap es
                   in 
                       Just (heap1, M (matchCons es1 ps m1) args, stack) 
               else
                   Just (heap, M Fail [], stack)
 
-          (heap, E w, (PushPat args (BangP x) m1)::stack) ->
-              let
-                  m2 = AST.applyMatchSubst (Dict.singleton x w) m1
-              in
-                  Just (heap, M m2 args, stack)                          
+          (heap, E w, (PushBang args m1)::stack) ->
+              -- ignore the weak normal form because we have already named it
+              Just (heap, M m1 args, stack) 
 
           -- match numbers
           (heap, E (Number n), (PushPat args (NumberP k) m1)::stack) ->
@@ -367,23 +394,6 @@ applyPrimitive1 op e
               Exception "invalid primitive arguments"
 
 
---                
--- normalize constructor arguments to A-normal form
--- i.e., introduce indirections for arguments that are not whnfs or variables
---
-normalizeConsArgs : Heap -> List Expr -> (Heap, List Expr)
-normalizeConsArgs heap args
-    = case args of
-          [] ->
-              (heap, [])
-          (arg1::rest) ->
-              if isVar arg1 || isWhnf arg1 then
-                  let (heap1, rest1) = normalizeConsArgs heap rest
-                  in (heap1, arg1::rest1)
-              else
-                  let (loc, heap1) = Heap.newIndirection heap arg1
-                      (heap2, rest1) = normalizeConsArgs heap1 rest
-                  in (heap2, Var loc::rest1)
 
 -- polymorphic structural equality (==)
 -- assumes arguments are already in whnf but *not* full normal form
@@ -550,7 +560,11 @@ outermostRedexArgs i args
               else
                   Just (Context.cons i)
                   
-
+-- abort with an internal error
+panic : String -> Conf
+panic msg
+    = (Heap.empty, E (Exception msg), [])
+                      
 -------------------------------------------------------------------------
 -- initialize a heap with bindings for primitive operations
 -------------------------------------------------------------------------

@@ -318,7 +318,7 @@ tcExpr kenv tenv expr
                   Nothing ->
                       fail ("undefined variable: " ++ Shows.quote v)
                           
-          Cons tag args ->
+          Cons _ tag args ->
               case Dict.get tag tenv of
                   Just ty ->
                       Tc.freshInst ty |>

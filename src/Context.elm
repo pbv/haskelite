@@ -24,12 +24,12 @@ empty = { getOption = \expr -> Just expr
 cons : Int -> ExprCtx
 cons i =
     { getOption = \e -> case e of
-                            Cons _ args ->
+                            Cons _ _ args ->
                                 .getOption (Monocle.list i) args
                             _ -> Nothing
     , set = \n e -> case e of
-                        Cons tag args ->
-                            Cons tag (.set (Monocle.list i) n args)
+                        Cons flag tag args ->
+                            Cons flag tag (.set (Monocle.list i) n args)
                         _ -> e
     }
           

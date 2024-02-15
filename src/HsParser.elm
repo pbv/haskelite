@@ -68,6 +68,8 @@ checkBind bind
               Ok ()
           
 -- should we record names of bindings?
+-- TODO: do we really need this?
+-- why not just always record names?
 type alias Naming
     = Name -> Maybe Name
 
@@ -174,12 +176,14 @@ topDeclaration
       ]
 
 
--- local declarations; type declarations not allowed
+-- local declarations;
+-- type declarations not allowed
+-- infix declaration not allowed to avoid ambiguity with patterns!
 declaration : Parser Decl
 declaration
     = oneOf
       [ backtrackable typeSignature
-      , backtrackable infixEquation 
+      -- , backtrackable infixEquation 
       , prefixEquation
       ]
 
@@ -389,9 +393,9 @@ makeGuard guard expr info
           -- shortcircuit redundant conditions
           Var "otherwise" ->
               Return expr (Just info)
-          Cons "True" [] ->
+          Cons _ "True" [] ->
               Return expr (Just info)
-          Cons "False" [] ->
+          Cons _ "False" [] ->
               Fail
           _ ->
               Arg guard (Match (ConsP "True" []) (Return expr (Just info)))
@@ -494,21 +498,6 @@ delimitedType
             } |>
           andThen makeTupleType
       ]
-              {-
-      , succeed TyConst
-             |. symbol "("
-             |= upperIdentifier
-             |. spaces   
-             |= Parser.sequence
-                { start = ""
-                , end = ""
-                , separator = ""
-                , spaces = spaces
-                , item = lazy (\_ -> typeExpr)
-                , trailing = Parser.Forbidden
-                }
-      ]
--}
 
 makeTupleType : List Type -> Parser Type
 makeTupleType ts
@@ -655,7 +644,7 @@ topExpr = infix2
 infix7 = infixLeft  applicativeExpr [ ("*", BinaryOp "*") ]
 infix6 = infixLeft  infix7  [ ("+", BinaryOp "+")
                             , ("-", BinaryOp "-") ]
-infix5 = infixRight infix6 [ (":", \e1 e2 -> Cons ":" [e1,e2])
+infix5 = infixRight infix6 [ (":", \e1 e2 -> Cons False ":" [e1,e2])
                            , ("++", \e1 e2 -> App (App (Var "++") e1) e2)
                            ]
 infix4 = infixLeft  infix5 [ ("==", BinaryOp "==")
@@ -754,7 +743,7 @@ delimited =
           |= charLiteral
     , succeed stringToList
           |= stringLiteral
-    , succeed (\tag -> Cons tag [])
+    , succeed (\tag -> Cons True tag [])
           |= upperIdentifier
     , backtrackable <|
         succeed Var
@@ -830,13 +819,13 @@ makeTuple : List Expr -> Parser Expr
 makeTuple args
     = case args of
           [] ->
-              succeed (Cons "()" [])
+              succeed (Cons True "()" [])
           [e] ->
               succeed e   -- no singleton tuple
           [e1,e2] ->
-              succeed (Cons "," args)
+              succeed (Cons False "," args)
           [e1,e2,e3] ->
-              succeed (Cons ",," args)
+              succeed (Cons False ",," args)
           _ ->
               problem "tuple with maximum 3 elements"
 
@@ -846,8 +835,8 @@ makeTuple args
 makeApp : Expr -> List Expr -> Expr
 makeApp e0 args
     = case (e0, args) of
-          (Cons tag args1, args2) ->
-              Cons tag (args1 ++ args2)
+          (Cons _ tag args1, args2) ->
+              Cons False tag (args1 ++ args2)
           _ ->
               makeApp_ e0 args
                   
@@ -963,7 +952,7 @@ caseAlt
 -- a sequence of indented bindings
 bindings : Parser (List Bind)
 bindings
-    = succeed (collectBinds ignoreNames)
+    = succeed (collectBinds recordNames)
          |= indentedDeclList 
       |> andThen (\binds -> case checkBinds binds of
                                 Err msg ->

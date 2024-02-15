@@ -200,25 +200,23 @@ ppExpr ctx e =
             if Heap.isIndirection x then
                 case Heap.get x ctx.heap of
                     Just e1 ->
-                        ppExpr ctx e1
+                        ppExpr {ctx|heap=Heap.delete x ctx.heap}  e1
                     Nothing ->
-                        ppExpr ctx (AST.Exception "dangling pointer")
-                       -- this should never happen!
+                        taggedString x Exception
             else
                 if AST.isOperator x then
                     parens (string x)
                 else
                     taggedString x Variable
 
-        Cons "," args ->
+        Cons _ "," args ->
                group (parens <| ctx.separators ", " <|
                           List.map (ppExpr {ctx|prec=0}) args)
-        Cons ",," args ->
+        Cons _ ",," args ->
                 group (parens <| ctx.separators ", " <|
                              List.map (ppExpr {ctx|prec=0}) args)
 
-
-        Cons ":" [e1, e2] ->
+        Cons _ ":" [e1, e2] ->
             if ctx.prettyLists then
                 case checkSpine e2 of
                     Just l ->
@@ -239,10 +237,10 @@ ppExpr ctx e =
                          |> a (taggedString ":" Constructor)
                          |> a (ppExpr {ctx|prec=1} e2))
 
-        Cons tag [] ->
+        Cons _ tag [] ->
             taggedString tag Constructor
                     
-        Cons tag args ->
+        Cons _ tag args ->
             parensIf (ctx.prec>0) (group (ppCons ctx tag args))
 
         BinaryOp op e1 e2 ->
@@ -257,56 +255,6 @@ ppExpr ctx e =
             parensIf (ctx.prec>0) 
                 (string op |> a space |> a (ppExpr {ctx|prec=1} e1))
 
-        App (Var "enumFrom") e1 ->
-            if ctx.prettyEnums then 
-                brackets (ppExpr {ctx|prec=0} e1 |> a (string ".."))
-            else
-                ppApp ctx (Var "enumFrom") e1
-
-        App (App (Var "enumFromThen") e1) e2 ->
-            if ctx.prettyEnums then
-                brackets  
-                    (ppExpr {ctx|prec=0} e1
-                           |> a  (char ',')
-                           |> a (ppExpr {ctx|prec=0} e2)
-                           |> a (string ".."))
-            else
-               ppApp ctx (App (Var "enumFromThen") e1) e2 
-                
-        App (App (Var "enumFromTo") e1) e2 ->
-            if ctx.prettyEnums then 
-                brackets 
-                    (ppExpr {ctx|prec=0} e1
-                         |> a (string "..")
-                         |> a (ppExpr {ctx|prec=1} e2))
-            else
-                ppApp ctx (App (Var "enumFromTo") e1) e2
-                            
-        App (App (App (Var "enumFromThenTo") e1) e2) e3 ->
-            if ctx.prettyEnums then
-                brackets 
-                    (ppExpr {ctx|prec=0} e1
-                         |> a (char ',')
-                         |> a (ppExpr {ctx|prec=0} e2)
-                         |> a (string "..")
-                         |> a (ppExpr {ctx|prec=0} e3))
-            else
-                ppApp ctx  (App (App (Var "enumFromThenTo") e1) e2) e3 
-           
-        App (App (Var op) e1) e2 ->
-            if AST.isOperator op then
-                parensIf (ctx.prec>0) 
-                    (ppExpr {ctx|prec=1} e1
-                        |> a space
-                        |> a (string (formatOperator op))
-                        |> a space
-                        |> a (ppExpr {ctx|prec=1} e2))
-            else
-                parensIf (ctx.prec>0)
-                    (ppExpr {ctx|prec=0} (App (Var op) e1)
-                        |> a space
-                        |> a (ppExpr {ctx|prec=1} e2))
-
         App e0 e1 ->
             ppApp ctx e0 e1
                 
@@ -315,11 +263,7 @@ ppExpr ctx e =
                 (_, []) ->
                     ppLambda ctx optid match
                 (match1, args1) ->
-                    let
-                        expr1 = List.foldl (\x y->App y x)
-                                           (AST.lambda optid match1)  args1
-                    in 
-                        ppExpr ctx expr1
+                    ppApp1 ctx (AST.lambda optid match1) args1
 
         Let binds e1 ->
              parensIf (ctx.prec>0)
@@ -381,21 +325,91 @@ ppList ctx exprs
 -- pretty print a generic application
 ppApp : PrettyCtx -> Expr -> Expr -> Doc Tag
 ppApp ctx e0 e1
-    = let (fun, args) = collectArgs e0 [e1]
-      in parensIf (ctx.prec>0) <|
-          (group (hang 4 ((ppExpr {ctx|prec=0} fun)
-                      |> a space
-                      |> a (ctx.lines (List.map (ppExpr {ctx|prec=1}) args)))))
+    = let (fun, args) = collectArgs ctx.heap e0 [e1]
+      in ppApp1 ctx fun args
 
+ppApp1 : PrettyCtx -> Expr -> List Expr -> Doc Tag
+ppApp1 ctx fun args
+    = case (nameOf fun,args) of
+          -- special cases for enums
+          (Just "enumFrom", [e1]) ->
+              if ctx.prettyEnums then
+                  brackets (ppExpr {ctx|prec=0} e1 |> a (string " .."))
+              else
+                  ppApp2 ctx fun args
+          (Just "enumFromTo", [e1,e2]) ->
+              if ctx.prettyEnums then
+                  brackets 
+                    (ppExpr {ctx|prec=0} e1
+                         |> a (string " .. ")
+                         |> a (ppExpr {ctx|prec=0} e2))                  
+              else
+                  ppApp2 ctx fun args
+          (Just "enumFromThen", [e1,e2]) ->
+              if ctx.prettyEnums then
+                brackets  
+                    (ppExpr {ctx|prec=0} e1
+                           |> a  (char ',')
+                           |> a (ppExpr {ctx|prec=0} e2)
+                           |> a (string " .."))                  
+              else
+                  ppApp2 ctx fun args
+          (Just "enumFromThenTo", [e1,e2,e3]) ->
+              if ctx.prettyEnums then
+                  brackets 
+                    (ppExpr {ctx|prec=0} e1
+                         |> a (char ',')
+                         |> a (ppExpr {ctx|prec=0} e2)
+                         |> a (string " .. ")
+                         |> a (ppExpr {ctx|prec=0} e3))
+              else
+                  ppApp2 ctx fun args
+
+          -- special cases for binary operators
+          (Just op, [arg1, arg2]) ->
+              if AST.isOperator op then
+                  ppExpr ctx (BinaryOp op arg1 arg2)
+              else
+                  ppApp2 ctx fun args
+          _ ->
+              ppApp2 ctx fun args
+
+-- fetch the name for a function (if any)                  
+nameOf : Expr -> Maybe Name
+nameOf expr 
+    = case expr of
+          (Var name) ->
+              Just name
+          (Lam _ (Just name) _) ->
+              Just name
+          _ ->
+              Nothing
+                  
+ppApp2 : PrettyCtx -> Expr -> List Expr -> Doc Tag                  
+ppApp2 ctx fun args
+    = parensIf (ctx.prec>1) <|
+          group (hang 4 ((ppExpr {ctx|prec=0} fun)
+                    |> a space
+                    |> a (ctx.lines (List.map (ppExpr {ctx|prec=1}) args))))
+                  
+                  
+              
 -- auxiliary function to collect arguments to an application
-collectArgs : Expr -> List Expr -> (Expr, List Expr)
-collectArgs e acc
+collectArgs : Heap -> Expr -> List Expr -> (Expr, List Expr)
+collectArgs heap e acc
     = case e of
+          Var x ->
+              case Heap.get x heap of
+                  Nothing ->
+                      (e, acc)
+                  Just ex ->
+                      collectArgs (Heap.delete x heap) ex acc
+                          
           App e1 arg ->
-              collectArgs e1 (arg::acc)
+              collectArgs heap e1 (arg::acc)
           _ ->
               (e, acc)
-           
+                  
 -- auxiliary function to collect arguments to a matching
 collectMatchingArgs : Matching -> List Expr -> (Matching, List Expr)
 collectMatchingArgs m acc
@@ -423,8 +437,11 @@ ppLambda : PrettyCtx -> Maybe Name -> Matching -> Doc Tag
 ppLambda ctx optid m
     = case optid of
           -- just use the binding name if there is one
-          Just id ->
-              string id
+          Just name ->
+              if AST.isOperator name then
+                  parens (string name)
+              else
+                  taggedString name Variable
           Nothing ->
               -- otherwise check if it has any arguments
               case m of
@@ -433,7 +450,7 @@ ppLambda ctx optid m
                   Return e _ ->
                       ppExpr ctx e
                   _ ->
-                      string "<unimplemented>"
+                      taggedString "<unimplemented>" Exception
 
           
 -- pretty print a matching            
@@ -554,9 +571,9 @@ ppPattern p =
 checkSpine : Expr -> Maybe (List Expr)
 checkSpine e
     = case e of
-          Cons "[]" [] ->
+          Cons _ "[]" [] ->
               Just []
-          Cons ":" [hd,tl] ->
+          Cons _ ":" [hd,tl] ->
                       checkSpine tl
                       |> Maybe.andThen (\l -> Just (hd::l))
           _ ->
@@ -566,7 +583,7 @@ checkSpine e
 checkChars : List Expr -> Maybe String
 checkChars es =
     if List.all isChar es then
-        Just (String.concat (List.map (getChar >> escapeChar '"') es))
+        Just (String.concat (List.map getChar es))
     else
         Nothing
 
@@ -576,11 +593,11 @@ isChar e =
         Char _ -> True
         _ -> False
             
-getChar : Expr -> Char
+getChar : Expr -> String
 getChar e =
     case e of
-        Char c -> c
-        _ -> '?'   -- this never happens!
+        Char c -> escapeChar '"' c
+        _ -> ""   -- this should not happen!
 
     
 -- pretty print a character

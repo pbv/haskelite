@@ -25,8 +25,8 @@ isWhnf expr =
             True
         Char _ ->
             True
-        Cons _ _ ->
-            True
+        Cons flag _ _ ->
+            flag
         _ ->
             False
 
@@ -42,7 +42,7 @@ isAtomic expr =
             True
         Char _ ->
             True
-        Cons _ [] ->
+        Cons _ _ [] ->
             True
         _ ->
             False
@@ -65,31 +65,32 @@ checkFinal (_, _, stack) = List.isEmpty stack
 
 
 -- normalize an argument, possibly allocating a new indirection                
-normalizeArg : Heap -> Expr -> (Heap, Expr)
+normalizeArg : Heap -> Expr -> (Expr, Heap)
 normalizeArg heap expr
     = if isAtomic expr then
-          (heap, expr)
+          (expr, heap)
       else
-          let (loc, heap1) = Heap.newIndirection heap expr
-          in (heap1, Var loc) 
+          let (name, heap1) = Heap.newIndirection heap expr
+          in (Var name, heap1)
+                             
 
 -- normalize a list of arguments 
-normalizeArgs : Heap -> List Expr -> (Heap, List Expr)
+normalizeArgs : Heap -> List Expr -> (List Expr, Heap)
 normalizeArgs heap args
     = case args of
           [] ->
-              (heap, [])
+              ([], heap)
           (arg::rest) ->
-              let (heap1, arg1) = normalizeArg heap arg
-                  (heap2, rest1) = normalizeArgs heap1 rest
-              in (heap2, arg1::rest1)
+              let (exp, heap1) = normalizeArg heap arg
+                  (exps, heap2) = normalizeArgs heap1 rest
+              in (exp::exps, heap2)
 
                            
 --                
 -- a small-step transition of the machine
 -- first argument is the set of functions to skip over
 transition : Conf -> Maybe Conf
-transition conf
+transition conf 
     = case conf of
           -- consume intermediate states used for pretty-printing
           (heap, E w, RetBinary _ _ _::stack) ->
@@ -107,34 +108,40 @@ transition conf
               Just (heap, E e2, DeepEval::stack)
           -- applications and constructors                  
           (heap,  E (App e1 e2), stack) ->
-              Just (heap, E e1, PushArg e2::stack)
+              let
+                  (arg, heap1) = normalizeArg heap e2
+              in 
+                  Just (heap1, E e1, PushArg arg::stack)
 
-          (heap, E (Cons c args), PushArg arg::stack) ->
-              Just (heap, E (Cons c (args ++ [arg])), stack)
-
+          -- normalize constructor arguments
+          (heap, E (Cons False c args), stack) ->
+              let (args1, heap1) = normalizeArgs heap args
+              in Just (heap1, E (Cons True c args1), stack)
+                           
+          -- add a new argument to constructor
+          -- we know argument in PushArg has been normalized
+          (heap, E (Cons True c args), PushArg arg::stack) ->
+              Just (heap, E (Cons True c (args ++ [arg])), stack)
+                  
           -- saturated lambda: go into matching evaluation
           (heap, E (Lam 0 optname m), stack) ->
               Just (heap, M m [], MatchEnd::stack)
 
           -- apply argument to non-saturated lambda
-          (heap, E (Lam _ optname m), PushArg e0::rest) ->
-              -- put into normal form if necessary
-              let
-                  (heap1, e1) = normalizeArg heap e0
-              in 
-                  Just (heap1, E (AST.lambda optname (Arg e1 m)), rest)
+          (heap, E (Lam _ optname m), PushArg e1::rest) ->
+              Just (heap, E (AST.lambda optname (Arg e1 m)), rest)
 
           -- local bindings
           (heap, E (Let binds e1), stack) ->
               let
-                  (s, heap1) = Heap.newBindings heap binds 
+                  (subst, heap1) = Heap.newBindings heap binds 
               in
-                  Just (heap1, E (AST.applySubst s e1), stack)
+                  Just (heap1, E (AST.applySubst subst e1), stack)
 
           -- case expressions
           (heap, E (Case e0 alts), stack) ->
               let
-                  (heap1, e1) = normalizeArg heap e0
+                  (e1, heap1) = normalizeArg heap e0
               in 
                   Just (heap1, M (translateCase e1 alts) [], MatchEnd::stack)
                       
@@ -143,7 +150,7 @@ transition conf
               Just (heap, M (translateIfThenElse e1 e2 e3) [], MatchEnd::stack)
 
           (heap, E (Var y), stack) ->
-              case Heap.get y heap of                  
+              case Heap.get y heap of
                   Just expr ->
                       if isWhnf expr then
                           Just (heap, E expr, stack)
@@ -205,9 +212,10 @@ transition conf
           -- bind a variable
           (heap, M (Match (VarP x) m1) (arg1::args), stack) ->
               let
-                  m2 = AST.applyMatchSubst (Dict.singleton x arg1) m1
+                  (loc,heap1) = Heap.newIndirection heap arg1
+                  m2 = AST.applyMatchSubst (Dict.singleton x loc) m1
               in
-                  Just (heap, M m2 args, stack)
+                  Just (heap1, M m2 args, stack)
 
           -- match as-patterns
           (heap, M (Match (AsP x pat) m1) args, stack) ->
@@ -216,21 +224,21 @@ transition conf
           -- match bang-patterns
           (heap, M (Match (BangP x) m0) (arg0::args), stack) ->
               let
-                  (heap1, arg1) = normalizeArg heap arg0
-                  m1 = AST.applyMatchSubst (Dict.singleton x arg1) m0
+                  (loc, heap1) = Heap.newIndirection heap arg0
+                  m1 = AST.applyMatchSubst (Dict.singleton x loc) m0
               in 
-                  Just (heap1, E arg1, (PushBang args m1)::stack)
+                  Just (heap1, E (Var loc), (PushBang args m1)::stack)
                       
           -- match a constructor, number or char pattern
           (heap, M (Match patt m1) (arg1::args), stack) ->
               Just (heap, E arg1, (PushPat args patt m1)::stack)
                       
           -- decompose a constructor 
-          (heap, E (Cons c0 es), (PushPat args (ConsP c1 ps) m1)::stack) ->
+          (heap, E (Cons True c0 es), (PushPat args (ConsP c1 ps) m1)::stack) ->
               if c0 == c1 then
                   -- |es| == |ps| must hold because of well-typing  
                   let
-                      (heap1, es1) = normalizeArgs heap es
+                      (es1, heap1) = normalizeArgs heap es
                   in 
                       Just (heap1, M (matchCons es1 ps m1) args, stack) 
               else
@@ -405,7 +413,7 @@ structuralEq e1 e2
               compareOp (v1 == v2)
           (Char c1, Char c2) ->
               compareOp (c1 == c2)
-          (Cons c1 args1, Cons c2 args2) ->
+          (Cons _ c1 args1, Cons _ c2 args2) ->
               if c1 == c2 then
                   structuralEqList args1 args2
               else
@@ -438,14 +446,14 @@ structuralCmp e1 e2
               orderingOp (compare v1 v2)
           (Char c1, Char c2) ->
               orderingOp (compare c1 c2)
-          (Cons c1 args1, Cons c2 args2) ->
+          (Cons _ c1 args1, Cons _ c2 args2) ->
               case compareCons c1 c2 of
                   EQ ->
                       structuralCmpList args1 args2
                   LT ->
-                      Cons "LT" []
+                      Cons True "LT" []
                   GT ->
-                      Cons "GT" []
+                      Cons True "GT" []
           (Lam _ _ _, Lam _ _ _) ->
               Exception "can't compare functions"
           _ ->
@@ -455,14 +463,14 @@ structuralCmpList : List Expr -> List Expr -> Expr
 structuralCmpList args1 args2
     = case (args1, args2) of
           ([], []) ->
-              Cons "EQ" []
+              Cons True "EQ" []
           ([e1],[e2]) ->
               BinaryOp "compare" e1 e2
           (e1::rest1, e2::rest2) ->
               Case (BinaryOp "compare" e1 e2)
                   [ (ConsP "EQ" [], structuralCmpList rest1 rest2)
-                  , (ConsP "LT" [], Cons "LT" [])
-                  , (ConsP "GT" [], Cons "GT" [])
+                  , (ConsP "LT" [], Cons True "LT" [])
+                  , (ConsP "GT" [], Cons True "GT" [])
                   ]
           (_, _) ->
               Exception "shouldn't happen"
@@ -487,11 +495,11 @@ orderingCase expr ltBranch eqBranch gtBranch
     = case expr of
           Exception msg ->
               Exception msg
-          Cons "LT" [] ->
+          Cons _ "LT" [] ->
               ltBranch
-          Cons "EQ" [] ->
+          Cons _ "EQ" [] ->
               eqBranch
-          Cons "GT" [] ->
+          Cons _ "GT" [] ->
               gtBranch
           _ ->
               Case expr [ (ConsP "LT" [], ltBranch)
@@ -510,9 +518,9 @@ compareOp c
 orderingOp : Order -> Expr
 orderingOp c
     = case c of
-          LT -> AST.Cons "LT" []
-          EQ -> AST.Cons "EQ" []
-          GT -> AST.Cons "GT" []
+          LT -> AST.Cons True "LT" []
+          EQ -> AST.Cons True "EQ" []
+          GT -> AST.Cons True "GT" []
                   
 -----------------------------------------------------------------------
 -- reduction to full normal form
@@ -540,7 +548,9 @@ outermostCont expr
 outermostRedex : Expr -> Maybe ExprCtx
 outermostRedex expr
     = case expr of
-          Cons _ args ->
+          Cons False _ _ ->
+              Just Context.empty
+          Cons True _ args ->
               outermostRedexArgs 0 args
           _ ->
               Nothing
@@ -571,9 +581,9 @@ panic msg
 initializeHeap : Heap -> Heap
 initializeHeap heap
     = Heap.insertFromList heap <|
-      [ (":", AST.lambda Nothing (Match (VarP "x")
+      [ (":", AST.lambda (Just ":") (Match (VarP "x")
                                       (Match (VarP "y")
-                                           (Return (Cons ":" [Var "x",Var "y"])
+                                           (Return (Cons True ":" [Var "x",Var "y"])
                                                 Nothing)
                                       )))
       ] ++
@@ -587,12 +597,12 @@ initializeHeap heap
 
 prefixOp :  Name -> (Name, Expr)
 prefixOp op
-    = (op, AST.lambda Nothing
+    = (op, AST.lambda (Just op)
            (Match (VarP "x") (Return (UnaryOp op (Var "x")) Nothing)))
 
           
 infixOp : Name -> (Name, Expr)
-infixOp op = (op, AST.lambda Nothing
+infixOp op = (op, AST.lambda (Just op)
                    (Match (VarP "x")
                        (Match (VarP "y")
                            (Return (BinaryOp op (Var "x") (Var "y"))
@@ -609,9 +619,9 @@ start heap0 expr
     = (initializeHeap heap0, E expr, [DeepEval])
 
 -- size expansion limit;
--- this is used to prevent infinite evaluation
+-- this is used to prevent loops in evaluation
 sizeLimit : Int
-sizeLimit = 100
+sizeLimit = 500
       
 --            
 -- a labelled transition step ignoring silent steps
@@ -640,31 +650,38 @@ confSize : Conf -> Int
 confSize (heap, control, stack)
     = case control of
           E expr ->
-              exprSize expr + stackSize stack
+              exprSize heap expr + stackSize heap stack
           _ ->
-              stackSize stack
+              stackSize heap stack
               
 -- compute normal form expression sizes
-exprSize : Expr -> Int
-exprSize expr
+exprSize : Heap -> Expr -> Int
+exprSize heap expr
     = case expr of
-          Cons tag args ->
-              1 + List.sum (List.map exprSize args)
+          Cons _ tag args ->
+              1 + List.sum (List.map (exprSize heap) args)
+          Var x ->
+              -- follow the heap pointers at most once
+              case Heap.get x heap of
+                  Just expr1 ->
+                      exprSize (Heap.delete x heap) expr1
+                  Nothing ->
+                      1
           _ ->
               1
 
-stackSize : Stack -> Int
-stackSize stk = List.sum (List.map contSize stk)
+stackSize : Heap -> Stack -> Int
+stackSize heap stk = List.sum (List.map (contSize heap) stk)
 
-contSize : Cont -> Int
-contSize cont
+contSize : Heap -> Cont -> Int
+contSize heap cont
     = case cont of
           ContBinary1 _ expr ->
-              exprSize expr
+              exprSize heap expr
           ContBinary2 _ expr ->
-              exprSize expr
+              exprSize heap expr
           Continue expr _ ->
-              exprSize expr
+              exprSize heap expr
           _ ->
               1
 

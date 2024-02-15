@@ -32,7 +32,9 @@ type Expr
     | Var Name
     | Number Int
     | Char Char
-    | Cons Tag (List Expr)
+      -- boolean flag to signal if constructor is normalized
+      -- only normalized constructors are whnfs
+    | Cons Bool Tag (List Expr)
     | BinaryOp Name Expr Expr            -- binary primitive operations
     | UnaryOp Name Expr                  -- unary primitive operations
     | IfThenElse Expr Expr Expr
@@ -90,9 +92,9 @@ type alias Module
 type Program
     = LetProg Module Expr
      
--- term substitutions
+-- name substitutions
 type alias Subst
-    = Dict Name Expr
+    = Dict Name Name
       
 -- get the identifier associated with a declaration      
 declName : Decl -> Maybe Name
@@ -112,7 +114,7 @@ applySubst s e
           Var x ->
               case Dict.get x s of
                   Nothing -> e
-                  Just e1 -> e1
+                  Just y -> Var y
                              
           Lam arity optname m ->
               Lam arity optname (applyMatchSubst s m)
@@ -125,8 +127,7 @@ applySubst s e
                   Let binds1 (applySubst s1 e0)
 
           Case e0 alts ->
-              let e1 = applySubst s e0
-              in Case e1 (applyAltsSubst s alts)
+              Case (applySubst s e0) (applyAltsSubst s alts)
                       
           App e1 e2 ->
               App (applySubst s e1) (applySubst s e2)
@@ -135,8 +136,8 @@ applySubst s e
               BinaryOp op (applySubst s e1) (applySubst s e2)
           UnaryOp op e1 ->
               UnaryOp op (applySubst s e1)
-          Cons c args ->
-              Cons c (List.map (applySubst s) args)
+          Cons n c args ->
+              Cons n c (List.map (applySubst s) args)
 
           IfThenElse e1 e2 e3 ->
               IfThenElse (applySubst s e1) (applySubst s e2) (applySubst s e3)
@@ -274,10 +275,10 @@ operatorChar c =
 
 -- AST constructors
 trueCons : Expr
-trueCons = Cons "True" []
+trueCons = Cons True "True" []
 
 falseCons : Expr           
-falseCons = Cons "False" []           
+falseCons = Cons True "False" []           
 
 lambda : Maybe Name -> Matching -> Expr
 lambda optname m
@@ -285,7 +286,7 @@ lambda optname m
             
 -- smart constructors for literal lists, strings and tuples
 listLit : List Expr -> Expr
-listLit = List.foldr (\x xs -> Cons ":" [x,xs]) (Cons "[]" [])
+listLit = List.foldr (\x xs -> Cons False ":" [x,xs]) (Cons True "[]" [])
 
 stringLit : String -> Expr
 stringLit s = listLit (List.map Char <| String.toList s)
@@ -297,7 +298,7 @@ stringUnlit expr
 stringUnlist : Expr -> List Char -> String
 stringUnlist expr acc
     = case expr of
-          Cons ":" [Char c, rest] ->
+          Cons _ ":" [Char c, rest] ->
               stringUnlist rest (c::acc)
           _ ->
               String.fromList (List.reverse acc)
@@ -307,13 +308,13 @@ tupleLit : List Expr -> Expr
 tupleLit args
     = case args of
           [] ->
-              Cons "()" []
+              Cons True "()" []
           [e] ->
               e   -- no singleton tuple
           [e1,e2] ->
-              Cons "," args
+              Cons False "," args
           [e1,e2,e3] ->
-              Cons ",," [e1, e2, e3]
+              Cons False ",," [e1, e2, e3]
           _ ->
               Exception "invalid tuple"
 

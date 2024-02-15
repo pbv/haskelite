@@ -206,7 +206,7 @@ foldl f z (x:xs) = foldl f (f z x) xs
 
 -- from Data.List
 foldl' :: (a -> b -> a) -> a -> [b] -> a
-foldl' f !z [] = z
+foldl' f z [] = z
 foldl' f !z (x:xs) = foldl' f (f z x) xs
 
 takeWhile :: (a -> Bool) -> [a] -> [a]
@@ -227,20 +227,20 @@ enumFromTo i j | i<=j = i : enumFromTo (i+1) j
                | otherwise = []
 
 enumFromThen :: Int -> Int -> [Int]
-enumFromThen n0 n1 = go n0 
-     where step = n1-n0
-           go !k = k : go (k+step) 
-           
+enumFromThen !n0 !n1 = n0 : enumFromThen n1 (n1+n1-n0)
 
 enumFromThenTo :: Int -> Int -> Int -> [Int]
 enumFromThenTo n0 n1 k 
-    | step>0 = upto n0 
-    | otherwise = downto n0 
+    | step>0 = enumStepUpTo n0 step k
+    | otherwise = enumStepDownTo n0 step k
     where step = n1-n0
-          upto !n | n<=k = n : upto (n+step)
-                  | otherwise = []
-          downto !n | n>=k = n : downto (n+step)
-                    | otherwise = []
+
+enumStepUpTo n step k | n<=k = n : enumStepUpTo (n+step) step k
+                      | otherwise = []
+
+enumStepDownTo n step k | n>=k = n : enumStepDownTo (n+step) step k
+                        | otherwise = []
+                       
 
 lookup :: a -> [(a,b)] -> Maybe b
 lookup _ [] = Nothing

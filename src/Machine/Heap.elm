@@ -10,25 +10,29 @@ import Dict exposing (Dict)
 type alias Heap 
     = { store : Dict Name Expr   -- mapping from name to expressions
       , indirections : Int       -- counter for indirections
-      , bound : Int            -- counter for let/where bound variables
+      , bounds : Int             -- counter for let/where bound variables
       }
 
 empty : Heap
 empty =
     { store = Dict.empty
     , indirections = 0
-    , bound = 0
+    , bounds = 0
     }
 
 get : Name -> Heap -> Maybe Expr
 get name heap =
     Dict.get name heap.store
 
+delete : Name -> Heap -> Heap
+delete name heap =
+    { heap | store = Dict.remove name heap.store }
+        
 fromList : List (Name,Expr) -> Heap
 fromList pairs
     = { store = Dict.fromList pairs
       , indirections = 0
-      , bound = 0
+      , bounds = 0
       }
 
 insertFromList : Heap -> List (Name,Expr) -> Heap
@@ -38,7 +42,7 @@ insertFromList
 fromBinds : List Bind -> Heap
 fromBinds binds
     = { store = Dict.fromList (List.map (\b -> (b.name, b.expr)) binds)
-      , bound = 0
+      , bounds = 0
       , indirections = 0
       }
       
@@ -51,17 +55,15 @@ isIndirection : Name -> Bool
 isIndirection =
     String.startsWith "$"
 
-        
-        
--- a new indirection for a non-recursive binding
--- introduced to implement lazy evaluatiom
+            
+-- create a new indirection for argument normalization
 newIndirection : Heap -> Expr -> (Name, Heap)
 newIndirection heap expr
     = let
         loc = String.append "$" (String.fromInt heap.indirections)
         newHeap = { store = Dict.insert loc expr heap.store
                   , indirections = 1 + heap.indirections
-                  , bound = heap.bound
+                  , bounds = heap.bounds
                   }
       in
           (loc, newHeap)        
@@ -73,15 +75,15 @@ newBindings heap binds
     = let
         names = List.map .name binds
         exprs = List.map .expr binds
-        suffix = String.fromInt heap.bound
-        locs =  List.map (\x -> x ++ "_" ++ suffix) names
-        subst = Dict.fromList <| List.map2 (\name loc -> (name,Var loc)) names locs
+        suffix = String.fromInt heap.bounds
+        locs =  List.map (\x -> x ++ "$" ++ suffix) names
+        subst = Dict.fromList (List.map2 Tuple.pair names locs)
         store1 = List.foldl
-                 (\(loc,expr) -> Dict.insert loc (AST.applySubst subst expr))
-                 heap.store 
-                    <| List.map2 Tuple.pair locs exprs
+                    (\(loc,expr) -> Dict.insert loc (AST.applySubst subst expr))
+                    heap.store 
+                    (List.map2 Tuple.pair locs exprs)
         newHeap = { store = store1
-                  , bound = 1 + heap.bound
+                  , bounds = 1 + heap.bounds
                   , indirections = heap.indirections
                   }
       in

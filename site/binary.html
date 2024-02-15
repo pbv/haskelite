@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Convert an integer into binary</title>
+    <link rel='stylesheet' href='lib/codemirror.css'>
+    <link rel="stylesheet" href="lib/screen.css">
+    <script type='text/javascript' src='lib/codemirror.js'></script>
+    <script type='text/javascript' src='lib/haskell.js'></script>
+    <script type='text/javascript' src='js/code-editor.js'></script>
+    <script type='text/javascript' src='js/haskelite-min.js'></script>
+  </head>
+
+  <body>
+    <h1>Convert an integer into binary</h1>
+    <p>Converting an integer into decimal using successive divisions and
+      an accumulator. <a href="index.html">Back</a></p>
+    <div id="haskelite"/>
+
+    <script>
+      var decls =
+	  "binary :: Int -> String\n"+
+	  "binary n = map digitToChar (digits n [])\n\n"+
+	  "-- obtain the digits recursively;\n"+
+	  "-- the second argument is an accumulator for the digits\n"+
+	  "digits :: Int -> [Int] -> [Int]\n"+
+	  "digits 0 acc = acc\n"+
+	  "digits n acc = digits (n`div`2) ((n`mod`2):acc)\n\n"+
+	  "-- convert a binary digit to a character\n"+
+	  "digitToChar :: Int -> Char\n"+
+	  "digitToChar 0 = '0'\n"+
+	  "digitToChar 1 = '1'\n";
+   
+      var app = Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression:"binary 13", declarations: decls }
+      });
+    </script>
+    <hr>
+    <div class="credits">
+    Pedro Vasconcelos, 2023.<br>
+    Powered by <a href="https://elm-lang.org/">Elm</a> and
+    <a href="https://codemirror.net/">CodeMirror</a>.
+    </div>
+  </body>
+</html>

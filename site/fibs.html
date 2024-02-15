@@ -21,12 +21,13 @@
     <div id="haskelite"/>
     <script type='text/javascript'>
       var decls =
-	  "-- The infinite list of Fibonnacci numbers\n"+
-	  "-- the first two numbers are 0 and 1;\n"+
-	  "-- every number after that is the sum of the previous two\n"+
-	  "-- WARNING: this is very clever solution that only makes sense if you think recursively!\n"+
-	  "-- because of lazy evaluation it is also efficient:\n"+
-	  "-- it behaves like a Dynamic Programming solution that memorizes previous Fibonacci numbers\n"+
+	  "-- The infinite list of Fibonnacci numbers:\n"+
+	  "-- * the first two numbers are 0 and 1;\n"+
+	  "-- * every number after that is the sum of the previous two\n"+
+	  "-- This is very clever solution that only makes sense if you think recursively!\n"+
+	  "-- Because of lazy evaluation it is also efficient:\n"+
+	  "-- it memorizes previously computed Fibonacci numbers\n"+
+	  "-- similarly to a dynamic programming solution in an imperative language\n"+
 	  "fibs :: [Int]\n"+
 	  "fibs = 0 : 1 : zipWith (+) fibs (tail fibs)\n\n";
 	  

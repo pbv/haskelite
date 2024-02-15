@@ -197,13 +197,10 @@ transition conf
           -- update a variable
           -- at this point we know w must be in wnhf
           (heap, E w, Update y::stack) ->
-              -- if isWhnf w then
-                  let
-                      heap1 = Heap.update y w heap
-                  in
-                      Just (heap1, E w, stack)
-              -- else
-              --    Nothing
+              let
+                  heap1 = Heap.update y w heap
+              in
+                  Just (heap1, E w, stack)
 
           -- ignore an argument
           (heap, M (Match DefaultP m1) (arg1::args), stack) ->
@@ -398,6 +395,8 @@ applyPrimitive1 op e
               Char (Char.fromCode n)
           ("show", Number n) ->
               AST.stringLit (String.fromInt n)
+          ("error", str) ->
+              Exception (AST.stringUnlit str)
           _  ->
               Exception "invalid primitive arguments"
 
@@ -739,13 +738,13 @@ showPrim2 op e1 e2 e3
     = if isWhnf e3 then
           Shows.showExpr (BinaryOp op e1 e2) ++ " = " ++  Shows.showExpr e3
       else
-          "definition of " ++ Shows.showExpr (BinaryOp op e1 e2)          
+          "definition of " ++ op 
 
 showPrim1 : Name -> Expr -> Expr -> String
 showPrim1 op e1 e2
     = if isWhnf e2 then
           Shows.showExpr (UnaryOp op e1) ++ " = " ++ Shows.showExpr e2
       else
-          "definition of " ++ Shows.showExpr (UnaryOp op e1)           
+          "definition of " ++ op 
 
 

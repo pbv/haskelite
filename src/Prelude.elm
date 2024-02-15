@@ -141,6 +141,11 @@ drop 0 xs = xs
 drop n [] = []
 drop n (x:xs) = drop (n-1) xs
 
+(!!) :: [a] -> Int -> a
+(x:_) !! 0 = x
+(_:xs) !! n = xs !! (n-1)
+[] !! _ = error "!!: invalid index"
+
 concat :: [[a]] -> [a]
 concat [] = []
 concat (xs:xss) = xs ++ concat xss
@@ -240,8 +245,7 @@ enumStepUpTo n step k | n<=k = n : enumStepUpTo (n+step) step k
 
 enumStepDownTo n step k | n>=k = n : enumStepDownTo (n+step) step k
                         | otherwise = []
-                       
-
+                      
 lookup :: a -> [(a,b)] -> Maybe b
 lookup _ [] = Nothing
 lookup x ((y,v):rest) | x == y = Just v

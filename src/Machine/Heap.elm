@@ -27,6 +27,10 @@ get name heap =
 delete : Name -> Heap -> Heap
 delete name heap =
     { heap | store = Dict.remove name heap.store }
+
+size : Heap -> Int
+size heap =
+    Dict.size heap.store
         
 fromList : List (Name,Expr) -> Heap
 fromList pairs

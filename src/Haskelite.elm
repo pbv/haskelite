@@ -228,7 +228,6 @@ reduceView model =
                  List.map2 (renderStep model.options)
                        (List.reverse <| List.range 0 (linecount-1)) model.previous
         , div [] [ span [] [ button [ class "navbar"
-                           , disabled (isInit model)
                            , onClick EditMode] [text "Edit"]
                   , button [ class "navbar"
                            , onClick Reset
@@ -310,7 +309,6 @@ renderStep opts step (conf, info)
                   div [class "line"]
                       [ div [class "info2"] [text ("{ " ++  info ++ " }")]
                       , html ]
-                     
               else
                   div [class "line"]
                       [ html, div [class "info"] [text info] ]

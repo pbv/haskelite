@@ -33,7 +33,7 @@ parseExpr input
 
 toplevelModule : Parser Module
 toplevelModule
-    = succeed (collectDeclarations recordNames)
+    = succeed collectDeclarations
                  |= topDeclList
                  |. Parser.end
       |> andThen (\mod ->
@@ -70,6 +70,7 @@ checkBind bind
 -- should we record names of bindings?
 -- TODO: do we really need this?
 -- why not just always record names?
+{-
 type alias Naming
     = Name -> Maybe Name
 
@@ -80,19 +81,20 @@ recordNames
 ignoreNames : Naming
 ignoreNames
     = always Nothing
-              
+-}
+
 -- collect toplevel declarations by identifier and make single bindings
-collectDeclarations : Naming -> List Decl -> Module
-collectDeclarations naming decls
+collectDeclarations :  List Decl -> Module
+collectDeclarations decls
     = let ddecls = List.filterMap checkData decls
           adecls = List.filterMap checkAlias decls
-          binds = collectBinds naming decls
+          binds = collectBinds decls
       in { dataDecls = ddecls, aliasDecls = adecls, binds = binds }
 
 
-collectBinds : Naming -> List Decl -> List Bind
-collectBinds naming decls
-    = List.filterMap (makeBind naming) <|
+collectBinds : List Decl -> List Bind
+collectBinds decls
+    = List.filterMap makeBind <|
       List.groupWhile (\d1 d2 -> AST.declName d1==AST.declName d2) decls
 
 
@@ -109,22 +111,22 @@ checkAlias decl
           Alias d -> Just d
           _ -> Nothing
           
-makeBind : Naming -> (Decl, List Decl) -> Maybe Bind
-makeBind naming pair =
+makeBind : (Decl, List Decl) -> Maybe Bind
+makeBind pair =
     case pair of
         (TypeSig id ty, rest) ->
             let m = collectAlts rest
             in 
             Just { name = id,
                    typeSig = Just ty,
-                   expr = AST.lambda (naming id) m
+                   expr = AST.lambda (Just id) m
                  }
         (Equation id match, rest) ->
             let m = collectAlts (Equation id match::rest)
             in 
             Just { name = id,
                    typeSig = Nothing,
-                   expr = AST.lambda (naming id) m
+                   expr = AST.lambda (Just id) m
                  }
         _ ->
             Nothing
@@ -641,8 +643,9 @@ topExprEnd
 topExpr : Parser Expr
 topExpr = infix2
 
-infix7 = infixLeft  applicativeExpr [ ("*", BinaryOp "*") ]
-infix6 = infixLeft  infix7  [ ("+", BinaryOp "+")
+infix9 = infixLeft applicativeExpr [ ("!!", \e1 e2 -> App (App (Var "!!") e1) e2) ]
+infix7 = infixLeft infix9 [ ("*", BinaryOp "*") ]
+infix6 = infixLeft infix7  [ ("+", BinaryOp "+")
                             , ("-", BinaryOp "-") ]
 infix5 = infixRight infix6 [ (":", \e1 e2 -> Cons False ":" [e1,e2])
                            , ("++", \e1 e2 -> App (App (Var "++") e1) e2)
@@ -952,7 +955,7 @@ caseAlt
 -- a sequence of indented bindings
 bindings : Parser (List Bind)
 bindings
-    = succeed (collectBinds recordNames)
+    = succeed collectBinds
          |= indentedDeclList 
       |> andThen (\binds -> case checkBinds binds of
                                 Err msg ->

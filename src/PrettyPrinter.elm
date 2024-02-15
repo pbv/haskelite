@@ -50,9 +50,8 @@ makeCtx opts heap
       , line = if opts.layout then Pretty.line else Pretty.space
       , lines = if opts.layout then Pretty.lines else Pretty.words
       }
-    
-         
-    
+
+           
 -- tags for expression highlighting
 type Tag = Keyword
          | Literal
@@ -61,13 +60,13 @@ type Tag = Keyword
          | Variable
          | Linenumber
          | Exception
-    
+
+           
 -- conditionally add parenthesis to a document
 parensIf : Bool -> Doc t -> Doc t
 parensIf c doc
     = if c then Pretty.parens doc else doc
-
-      
+     
 -- default line length for pretty-printing 
 defaultLength : Int
 defaultLength
@@ -114,24 +113,12 @@ ppConfStep opts conf step
           Nothing ->
               Nothing
                   
-{-
--- right align a number; first argument is the largest number in the sequence
--- use a Unicode non breakable space to prevent HTML from eating up the formating
-rightAlign : Int -> Int -> String
-rightAlign largest number
-    = String.padLeft (decimalDigits largest) '\u{00a0}' (String.fromInt number)
-
--- get the number of decimal digits          
-decimalDigits : Int -> Int
-decimalDigits n = ceiling (logBase 10.0 (max 1 (toFloat n)+1))
--}
 
 -- pretty print a configuration
--- TODO: refactor this definiton
 ppConf : Options -> Conf -> Maybe (Doc Tag)
 ppConf opts (heap, control, stack)
-   = case control of
-         (E expr) ->
+    = case (getExpr control) of
+         Just expr ->
              let ppCtx = makeCtx opts heap 
              in 
              case unwindStack stack expr of
@@ -142,20 +129,18 @@ ppConf opts (heap, control, stack)
                      in Just (taggedString ellipsis Linenumber
                              |> a space     
                              |> a (align (ppExpr ppCtx expr1)))
-         (M (Return expr _) _) ->
-             let ppCtx = makeCtx opts heap 
-             in 
-             case unwindStack stack expr of
-                 ([], expr1) ->
-                     Just (ppExpr ppCtx expr1)
-                 (stk,expr1) ->
-                     let ellipsis = String.repeat (List.length stk) "."
-                     in Just (taggedString ellipsis Linenumber
-                             |> a space     
-                             |> a (align (ppExpr ppCtx expr1)))
-             
          _ ->
              Nothing
+
+getExpr : Control -> Maybe Expr
+getExpr ctrl
+    = case ctrl of
+          E expr ->
+              Just expr
+          M (Return expr _) _ ->
+              Just expr
+          _ ->
+              Nothing
                  
 -- unwind a stack into a context expression;
 -- may stop earlier if we reach a guard/case alternative
@@ -185,7 +170,7 @@ unwindStack stack acc
           _ ->
               (stack, acc)
                
--- functions to pretty-print to a document              
+-- pretty-print an expression 
 ppExpr : PrettyCtx -> Expr -> Doc Tag
 ppExpr ctx e =
     case e of 
@@ -200,8 +185,11 @@ ppExpr ctx e =
             if Heap.isIndirection x then
                 case Heap.get x ctx.heap of
                     Just e1 ->
-                        ppExpr {ctx|heap=Heap.delete x ctx.heap}  e1
+                        -- delete the indirection from the heap
+                        -- to avoid infinite recursion
+                        ppExpr {ctx|heap=Heap.delete x ctx.heap} e1
                     Nothing ->
+                        -- maybe print an ellipsis instead of the name?
                         taggedString x Exception
             else
                 if AST.isOperator x then
@@ -210,11 +198,11 @@ ppExpr ctx e =
                     taggedString x Variable
 
         Cons _ "," args ->
-               group (parens <| ctx.separators ", " <|
-                          List.map (ppExpr {ctx|prec=0}) args)
+            group (parens <| ctx.separators ", " <|
+                       List.map (ppExpr {ctx|prec=0}) args)
         Cons _ ",," args ->
-                group (parens <| ctx.separators ", " <|
-                             List.map (ppExpr {ctx|prec=0}) args)
+            group (parens <| ctx.separators ", " <|
+                       List.map (ppExpr {ctx|prec=0}) args)
 
         Cons _ ":" [e1, e2] ->
             if ctx.prettyLists then
@@ -237,19 +225,16 @@ ppExpr ctx e =
                          |> a (taggedString ":" Constructor)
                          |> a (ppExpr {ctx|prec=1} e2))
 
-        Cons _ tag [] ->
-            taggedString tag Constructor
-                    
         Cons _ tag args ->
-            parensIf (ctx.prec>0) (group (ppCons ctx tag args))
+            ppCons ctx tag args
 
         BinaryOp op e1 e2 ->
-            parensIf (ctx.prec>0) 
-                (ppExpr {ctx|prec=1} e1
-                           |> a space
-                           |> a (string (formatOperator op))
-                           |> a space
-                           |> a (ppExpr {ctx|prec=1} e2))
+                parensIf (ctx.prec>0) 
+                    (group (ppExpr {ctx|prec=1} e1
+                              |> a ctx.line
+                              |> a (string (formatOperator op))
+                              |> a ctx.line
+                              |> a (ppExpr {ctx|prec=1} e2)))
 
         UnaryOp op e1 ->
             parensIf (ctx.prec>0) 
@@ -305,13 +290,20 @@ ppExpr ctx e =
 
 ppCons : PrettyCtx -> String -> List Expr -> Doc Tag
 ppCons ctx cons args
-    = if List.length args>1 then 
-          group (hang 4 ((taggedString cons Constructor)
+    = case args of
+          [] ->
+              taggedString cons Constructor
+          [arg] ->
+              parensIf (ctx.prec>0)
+                  (taggedString cons Constructor
+                      |> a space 
+                      |> a (ppExpr {ctx|prec=1} arg))
+          _ ->
+              parensIf (ctx.prec>0)
+                  (group (hang 4 ((taggedString cons Constructor)
                         |> a ctx.line
-                        |> a (ctx.lines (List.map (ppExpr {ctx|prec=1}) args))))
-      else
-          words (taggedString cons Constructor ::
-                 List.map (ppExpr {ctx|prec=1}) args)
+                        |> a (ctx.lines (List.map (ppExpr {ctx|prec=1}) args)))))
+
                 
           
 
@@ -387,7 +379,7 @@ nameOf expr
                   
 ppApp2 : PrettyCtx -> Expr -> List Expr -> Doc Tag                  
 ppApp2 ctx fun args
-    = parensIf (ctx.prec>1) <|
+    = parensIf (ctx.prec>0) <|
           group (hang 4 ((ppExpr {ctx|prec=0} fun)
                     |> a space
                     |> a (ctx.lines (List.map (ppExpr {ctx|prec=1}) args))))

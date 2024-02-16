@@ -1,6 +1,6 @@
 module Machine.Types exposing (..)
 
-import AST exposing (Expr, Pattern, Matching, Name)
+import AST exposing (..)
 import Context exposing (ExprCtx)
 import Machine.Heap exposing (Heap)
 
@@ -35,3 +35,17 @@ type Cont
     | DeepEval
     | Continue Expr ExprCtx
 
+
+      
+getHeap : Conf -> Heap
+getHeap (heap,_,_) = heap
+
+getControl : Conf -> Control
+getControl (_, control, _) = control
+
+getStack : Conf -> Stack
+getStack (_, _, stack) = stack           
+
+-- check for final configuration
+checkFinal : Conf -> Bool
+checkFinal (_, _, stack) = List.isEmpty stack

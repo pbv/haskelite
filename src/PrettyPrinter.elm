@@ -473,8 +473,19 @@ ppBind ctx bind
           |> a space
           |> a (char '=') 
           |> a space 
-          |> a (ppExpr {ctx|prec=0} bind.expr)
-                
+          |> a (ppExpr {ctx|prec=0} (removeName bind.name bind.expr))
+
+
+removeName : Name -> Expr -> Expr
+removeName name expr
+    = case expr of
+          Lam arity (Just name1) m ->
+              if name == name1 then 
+                  Lam arity Nothing m
+              else
+                  expr
+          _ ->
+              expr
 
 -- format an infix operator, sometimes with spaces either side
 formatOperator : Name -> String

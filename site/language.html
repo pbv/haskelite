@@ -52,22 +52,23 @@ them to function values.
 
 <pre>
 even, odd :: Int -> Bool
-max, min :: a -> a -> a        -- NB: these are too polymorphic
-compare :: a -> a -> Ordering  -- and may fail at runtime!
+max, min :: a -> a -> a        -- too polymorphic; may fail at runtime!
+compare :: a -> a -> Ordering  
 fst :: (a,b) -> a
 snd :: (a,b) -> b
 (&&), (||) :: Bool -> Bool
 head :: [a] -> a
 tail :: [a] -> [a]
 (++) :: [a] -> [a] -> [a]
+(!!) :: [a] -> Int -> a  
 length :: [a] -> Int
-reverse :: [a] -> [a]          -- NB: defined as naive reverse 
+reverse :: [a] -> [a]          -- defined using an accumulator
 init :: [a] -> [a]
 last :: [a] -> a  
 sum, product :: [Int] -> Int
 and, or :: [Bool] -> Bool
 take, drop :: Int -> [a] -> [a]
-maximum, minimum :: [a] -> a   -- NB: too polymorphic!
+maximum, minimum :: [a] -> a   -- too polymorphic!
 concat :: [[a]] -> [a]
 repeat :: a -> [a]
 replicate :: Int -> a -> [a]  
@@ -85,7 +86,7 @@ any, all :: (a -> Bool) -> [a] -> Bool
 chr :: Int -> Char
 ord :: Char -> Int
 isAlpha, isDigit, isAlphaNum, isUpper, isLower :: Char -> Bool
-show :: Int -> String   -- NB: only for integers
+show :: Int -> String   -- only for integers
 </pre>
 
 <h2>Evaluation</h2>

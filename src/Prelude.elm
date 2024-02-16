@@ -236,15 +236,13 @@ enumFromThen !n0 !n1 = n0 : enumFromThen n1 (n1+n1-n0)
 
 enumFromThenTo :: Int -> Int -> Int -> [Int]
 enumFromThenTo n0 n1 k 
-    | step>0 = enumStepUpTo n0 step k
-    | otherwise = enumStepDownTo n0 step k
+    | step>=0 = up n0 
+    | otherwise = down n0
     where step = n1-n0
-
-enumStepUpTo n step k | n<=k = n : enumStepUpTo (n+step) step k
-                      | otherwise = []
-
-enumStepDownTo n step k | n>=k = n : enumStepDownTo (n+step) step k
-                        | otherwise = []
+          up n | n<=k = n : up (n+step)
+               | otherwise = []
+          down n | n>=k = n : down (n+step)
+                 | otherwise = []
                       
 lookup :: a -> [(a,b)] -> Maybe b
 lookup _ [] = Nothing

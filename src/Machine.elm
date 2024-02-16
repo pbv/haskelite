@@ -30,7 +30,6 @@ isWhnf expr =
         _ ->
             False
 
-
 -- check if an expression is *atomic*, i.e.
 -- if we can safely share it without losing laziness
 isAtomic : Expr -> Bool
@@ -46,22 +45,6 @@ isAtomic expr =
             True
         _ ->
             False
-
-              
-
-getHeap : Conf -> Heap
-getHeap (heap,_,_) = heap
-
-getControl : Conf -> Control
-getControl (_, control, _) = control
-
-getStack : Conf -> Stack
-getStack (_, _, stack) = stack           
-
--- check for final configuration
-checkFinal : Conf -> Bool
-checkFinal (_, _, stack) = List.isEmpty stack
-                         
 
 
 -- normalize an argument, possibly allocating a new indirection                
@@ -620,7 +603,7 @@ start heap0 expr
 -- size expansion limit;
 -- this is used to prevent loops in evaluation
 sizeLimit : Int
-sizeLimit = 500
+sizeLimit = 100
       
 --            
 -- a labelled transition step ignoring silent steps

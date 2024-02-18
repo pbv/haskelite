@@ -204,6 +204,10 @@ ppExpr ctx e =
             group (parens <| ctx.separators ", " <|
                        List.map (ppExpr {ctx|prec=0}) args)
 
+        Cons _ ",,," args ->
+            group (parens <| ctx.separators ", " <|
+                       List.map (ppExpr {ctx|prec=0}) args)
+                
         Cons _ ":" [e1, e2] ->
             if ctx.prettyLists then
                 case checkSpine e2 of
@@ -505,6 +509,9 @@ ppType prec ty
               parens  <|
                   join (char ',') (List.map (ppType 0) ts) 
           TyConst "(,,)" ts ->
+              parens <|
+                  join (char ',') (List.map (ppType 0) ts) 
+          TyConst "(,,,)" ts ->
               parens <|
                   join (char ',') (List.map (ppType 0) ts) 
               

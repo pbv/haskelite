@@ -67,21 +67,6 @@ checkBind bind
           _ ->
               Ok ()
           
--- should we record names of bindings?
--- TODO: do we really need this?
--- why not just always record names?
-{-
-type alias Naming
-    = Name -> Maybe Name
-
-recordNames : Naming
-recordNames
-    = Just
-
-ignoreNames : Naming
-ignoreNames
-    = always Nothing
--}
 
 -- collect toplevel declarations by identifier and make single bindings
 collectDeclarations :  List Decl -> Module
@@ -512,12 +497,13 @@ makeTupleType ts
               succeed (tyPair t1 t2)
           [t1, t2, t3] ->
               succeed (tyTuple3 t1 t2 t3)
+          [t1, t2, t3, t4] ->
+              succeed (tyTuple4 t1 t2 t3 t4)
           _ ->
-              problem "invalid tuple: maximum 3 elements" 
+              problem "invalid tuple: maximum 4 elements" 
               
               
-
-            
+          
                
 ------------------------------------------------------------------
 -- auxiliary parsers for expresssions
@@ -576,17 +562,16 @@ pattern =
     , succeed AST.listPattern
          |= patternSeq "[" "]" "," 
     , backtrackable
-          <| succeed AST.tuplePattern
-               |= patternSeq "(" ")" "," 
-    , backtrackable
-          <| succeed consPattern
-               |= patternSeq "(" ")" ":"
-    , succeed ConsP
+          <| succeed ConsP
             |. symbol "("
             |= upperIdentifier
             |. spaces
             |= patternSeq "" "" ""
             |. symbol ")"   
+    , backtrackable
+          <| succeed consPattern
+               |= patternSeq "(" ")" ":"
+    , (patternSeq "(" ")" ","  |> andThen makeTuplePattern)
     ]
 
 -- non-delimited pattern   
@@ -605,7 +590,7 @@ consPattern : List Pattern -> Pattern
 consPattern l =
     case List.unconsLast l of
         Nothing ->
-            AST.tuplePattern []
+            ConsP "()" []
         Just (p,ps) ->
             (List.foldr (\x y -> ConsP ":" [x,y]) p ps)
 
@@ -829,10 +814,28 @@ makeTuple args
               succeed (Cons False "," args)
           [e1,e2,e3] ->
               succeed (Cons False ",," args)
+          [e1,e2,e3,e4] ->
+              succeed (Cons False ",,," args)          
           _ ->
-              problem "tuple with maximum 3 elements"
+              problem "tuple with maximum 4 elements"
 
+makeTuplePattern : List Pattern -> Parser Pattern
+makeTuplePattern args
+    = case args of
+          [] ->
+              succeed (ConsP "()" [])
+          [p] ->
+              succeed p  -- no singleton tuple
+          [p1,p2] ->
+              succeed (ConsP "," args)
+          [p1,p2,p3] ->
+              succeed (ConsP ",," args)
+          [p1,p2,p3,p4] ->
+              succeed (ConsP ",,," args)
+          _ ->
+              problem "tuple with maximum 4 elements"
 
+                  
         
 -- build an application to a list of arguments
 makeApp : Expr -> List Expr -> Expr

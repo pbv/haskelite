@@ -264,7 +264,7 @@ matchingWellformed m
           Where _ m2 ->
               matchingWellformed m2
                
-                  
+                 
 isOperator : Name -> Bool
 isOperator = String.all operatorChar 
              
@@ -304,30 +304,12 @@ stringUnlist expr acc
               String.fromList (List.reverse acc)
 
               
-tupleLit : List Expr -> Expr
-tupleLit args
-    = case args of
-          [] ->
-              Cons True "()" []
-          [e] ->
-              e   -- no singleton tuple
-          [e1,e2] ->
-              Cons False "," args
-          [e1,e2,e3] ->
-              Cons False ",," [e1, e2, e3]
-          _ ->
-              Exception "invalid tuple"
 
 listPattern : List Pattern -> Pattern
 listPattern =
     List.foldr (\p ps -> ConsP ":" [p,ps]) (ConsP "[]" [])
 
-tuplePattern : List Pattern -> Pattern
-tuplePattern ps
-    = case ps of
-          [p] -> p          -- no singleton tuple
-          _ -> ConsP "," ps
-          
+         
             
 -- smart constructor for multi-arity applications
 applyMany : Expr -> List Expr -> Expr

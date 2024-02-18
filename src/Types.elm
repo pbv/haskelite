@@ -5,7 +5,7 @@
 
 module Types exposing (Type(..), Kind(..), Tycon, Tyvar, TySubst,
                        tyBool, tyInt, tyChar, tyOrdering, tyList,
-                       tyUnit, tyPair, tyTuple3, tyString, tyConst,
+                       tyUnit, tyPair, tyTuple3, tyTuple4, tyString, tyConst,
                        applyTySubst, generalize, freeTyVars, genVars)
 
 import Dict exposing (Dict)
@@ -56,6 +56,9 @@ tyPair t1 t2 = TyConst "(,)" [t1,t2]
 
 tyTuple3 : Type -> Type -> Type -> Type
 tyTuple3 t1 t2 t3 = TyConst "(,,)" [t1,t2,t3]
+
+tyTuple4 : Type -> Type -> Type -> Type -> Type 
+tyTuple4 t1 t2 t3 t4 = TyConst "(,,,)" [t1,t2,t3,t4] 
                
 tyString : Type
 tyString = tyList tyChar

@@ -13,7 +13,8 @@ import AST exposing (Expr(..), Matching(..), Pattern(..),
                          AliasDecl, DataDecl, Name, Tag)
 import Types exposing (Type(..), Kind(..), Tycon, Tyvar, 
                        tyBool, tyInt, tyChar, tyString, tyList,
-                           tyPair, tyTuple3, tyOrdering, applyTySubst)
+                           tyUnit, tyPair, tyTuple3, tyTuple4,
+                           tyOrdering, applyTySubst)
 import Tc exposing (Tc, pure, andThen, traverse, traverse_, explain, fail)
 import Shows 
 
@@ -660,10 +661,13 @@ translateCase e0 alts
 -- initial kind environment for primitives
 initialKindEnv : KindEnv
 initialKindEnv
-    = Dict.fromList [ ("Int", KindStar), ("Char", KindStar),
-                      ("(,)", kindArgs 2),
-                      ("(,,)", kindArgs 3),
-                      ("[]", kindArgs 1)
+    = Dict.fromList [ ("Int", KindStar)
+                    ,  ("Char", KindStar)
+                    ,  ("()", KindStar)
+                    ,  ("(,)", kindArgs 2)
+                    ,  ("(,,)", kindArgs 3)
+                    ,  ("(,,,)", kindArgs 4)
+                    ,  ("[]", kindArgs 1)
                     ]
 
 -- kind for an n-argument type constructor      
@@ -679,20 +683,27 @@ initialTypeEnv
         a = TyGen 0
         b = TyGen 1
         c = TyGen 2
+        d = TyGen 3
         cmpOp = TyFun a (TyFun a tyBool)
         orderOp = TyFun a (TyFun a tyOrdering)
       in
       Dict.fromList
-      [ ("+", intOp), ("*", intOp), ("-", intOp), 
-        ("mod", intOp), ("div", intOp), ("negate", TyFun tyInt tyInt)
+      [ ("+", intOp)
+      , ("*", intOp)
+      , ("-", intOp)
+      , ("mod", intOp)
+      , ("div", intOp)
+      , ("negate", TyFun tyInt tyInt)
       , ("==", cmpOp), ("/=", cmpOp), ("<=", cmpOp)
       , (">=", cmpOp), ("<", cmpOp), (">", cmpOp)
       , ("compare", orderOp)
       , ("error", TyFun tyString a)
       , (":", TyFun a (TyFun (tyList a) (tyList a)))
       , ("[]", tyList a)
+      , ("()", tyUnit)
       , (",", TyFun a (TyFun b (tyPair a b)))
       , (",,", TyFun a (TyFun b (TyFun c (tyTuple3 a b c))))
+      , (",,,", TyFun a (TyFun b (TyFun c (TyFun d (tyTuple4 a b c d)))))
       , ("enumFrom", TyFun tyInt (tyList tyInt))
       , ("enumFromTo", TyFun tyInt (TyFun tyInt (tyList tyInt)))
       , ("enumFromThen", TyFun tyInt (TyFun tyInt (tyList tyInt)))

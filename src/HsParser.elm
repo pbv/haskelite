@@ -249,7 +249,7 @@ dataAlternatives
       { start = ""
       , end = ""
       , separator = "|"
-      , spaces = whitespace
+      , spaces = whitespaceOrComment
       , item = dataAlternative
       , trailing = Parser.Forbidden               
       }
@@ -303,16 +303,15 @@ infixEquationAux : Parser (String -> Decl)
 infixEquationAux                   
     = succeed (\p1 id p2 e info ->
                    Equation id (Match p1 (Match p2 (Return e (Just info)))))
-         |= pattern
+         |= consPattern
          |. spaces
          |= infixOperator
          |. spaces
-         |= pattern
+         |= consPattern
          |. spaces
          |. operator "="
          |. spaces
          |= topExpr
-
               
                
 -- left side of an equation,
@@ -322,9 +321,14 @@ equationLHS
     = succeed Tuple.pair
          |= identifier
          |. spaces
-         |= (patternSeq "" "" "" 
-            |> andThen
-               (ensure distinctPatterns "distinct pattern variables"))
+         |= (Parser.sequence
+            { start = ""
+            , end = ""
+            , separator = ""
+            , spaces = spaces
+            , item = delimitedPattern
+            , trailing = Parser.Forbidden
+            } |> andThen (ensure distinctPatterns "distinct pattern variables"))
 
 
 -- equation alternatives
@@ -482,8 +486,7 @@ delimitedType
             , item = lazy (\_ -> typeExpr)
             , spaces = spaces
             , trailing = Parser.Forbidden
-            } |>
-          andThen makeTupleType
+            } |> andThen makeTupleType
       ]
 
 makeTupleType : List Type -> Parser Type
@@ -537,15 +540,15 @@ integer = Parser.chompWhile Char.isDigit
 
 
              
--- delimited patterns
-pattern : Parser Pattern
-pattern =
+-- self delimited patterns
+delimitedPattern : Parser Pattern
+delimitedPattern =
     oneOf
     [ backtrackable <|
           succeed AsP
            |= identifier
            |. symbol "@"
-           |= lazy (\_ -> pattern)
+           |= lazy (\_ -> delimitedPattern)
     , succeed (\id -> if id == "_" then DefaultP else VarP id)
            |= identifier
     , succeed BangP
@@ -560,56 +563,87 @@ pattern =
     , succeed stringPattern
            |= stringLiteral
     , succeed AST.listPattern
-         |= patternSeq "[" "]" "," 
-    , backtrackable
-          <| succeed ConsP
-            |. symbol "("
-            |= upperIdentifier
-            |. spaces
-            |= patternSeq "" "" ""
-            |. symbol ")"   
-    , backtrackable
-          <| succeed consPattern
-               |= patternSeq "(" ")" ":"
-    , (patternSeq "(" ")" ","  |> andThen makeTuplePattern)
+         |= Parser.sequence
+            { start = "["
+            , end = "]"
+            , separator = ","
+            , spaces = spaces
+            , item = lazy (\_ -> infixPattern)
+            , trailing = Parser.Forbidden
+            }
+    , succeed identity
+        |. symbol "("
+        |= parensPattern
+        |. symbol ")"
     ]
 
--- non-delimited pattern   
-pattern_ : Parser Pattern
-pattern_ = 
+
+-- prefix constructor patterns
+consPattern : Parser Pattern
+consPattern =
     oneOf
     [ succeed ConsP
         |= upperIdentifier
         |. spaces
-        |= patternSeq "" "" ""
-    , pattern
+        |= Parser.sequence
+           { start = ""
+           , end = ""
+           , separator = ""
+           , spaces = spaces
+           , item = lazy (\_ -> delimitedPattern)
+           , trailing = Parser.Forbidden
+           }
+    , delimitedPattern
     ]
 
+-- infix (:) patterns
+infixPattern : Parser Pattern
+infixPattern =
+    Parser.sequence
+    { start = ""
+    , end = ""
+    , separator = ":"
+    , spaces = spaces
+    , item  = lazy (\_ -> consPattern)
+    , trailing = Parser.Forbidden
+    } |> andThen makeInfixPattern
+
+-- parenthesized patterns
+parensPattern : Parser Pattern
+parensPattern =
+    Parser.sequence
+    { start = ""
+    , end = ""
+    , separator = ","
+    , spaces = spaces
+    , item = lazy (\_ -> infixPattern)
+    , trailing = Parser.Forbidden
+    } |> andThen makeParensPattern
+                        
+
+{-
+  Construct an infix pattern
+  ---------------------------------------------------------------
+  From 
+   p1 : p2 : ... : pN
+   yields
+   ConsP ":" [p1, ConsP ":" [p2, ...  ConsP ":" [pN-1, pN]...]]
+   ----------------------------------------------------------------
+-}
     
-consPattern : List Pattern -> Pattern
-consPattern l =
-    case List.unconsLast l of
+makeInfixPattern : List Pattern -> Parser Pattern
+makeInfixPattern l
+    = case List.unconsLast l of
         Nothing ->
-            ConsP "()" []
+            problem "expecting a pattern"
         Just (p,ps) ->
-            (List.foldr (\x y -> ConsP ":" [x,y]) p ps)
+            succeed (List.foldr (\x y -> ConsP ":" [x,y]) p ps)
+
 
 stringPattern : String -> Pattern
 stringPattern 
     = String.foldr (\x y -> ConsP ":" [CharP x,y]) (ConsP "[]" []) 
 
-                
--- parse a sequence of patterns with a given start, end and separator
-patternSeq : String -> String -> String -> Parser (List Pattern)    
-patternSeq open close sep =
-    Parser.sequence
-    { start = open
-    , end = close
-    , separator = sep
-    , spaces = spaces
-    , item = lazy (\_ -> pattern)
-    , trailing = Parser.Forbidden
-    }
 
 -- * check all pattern variables are distinct
 distinctPatterns : List Pattern -> Bool
@@ -819,8 +853,8 @@ makeTuple args
           _ ->
               problem "tuple with maximum 4 elements"
 
-makeTuplePattern : List Pattern -> Parser Pattern
-makeTuplePattern args
+makeParensPattern : List Pattern -> Parser Pattern
+makeParensPattern args
     = case args of
           [] ->
               succeed (ConsP "()" [])
@@ -902,7 +936,14 @@ lambdaExprAux
                        (makePatterns patts (Return expr (Just info))))
          |. symbol "\\"
          |. spaces
-         |= patternSeq "" "" ""
+         |= Parser.sequence
+            { start = ""
+            , end = ""
+            , separator = ""
+            , spaces = spaces
+            , item = delimitedPattern
+            , trailing = Parser.Forbidden
+            }
          |. symbol "->"   
          |. spaces
          |= lazy (\_ -> topExpr)
@@ -917,7 +958,6 @@ letExpr : Parser Expr
 letExpr
     = succeed Let
          |. keyword "let"
-         -- |. spaces
          |= lazy (\_ -> bindings)
          |. spaces
          |. keyword "in"
@@ -933,7 +973,6 @@ caseExpr
          |= lazy (\_ -> topExpr)
          |. spaces
          |. keyword "of"
-         -- |. whitespace
          |= caseAlts
 
 caseAlts : Parser (List (Pattern,Expr))
@@ -948,7 +987,7 @@ caseAlts
 caseAlt : Parser (Pattern, Expr)
 caseAlt
     = succeed Tuple.pair
-         |= pattern_
+         |= infixPattern
          |. spaces   
          |. symbol "->"
          |. spaces

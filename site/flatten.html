@@ -21,7 +21,7 @@
 	  "-- A recursive data type for Binary Search Trees (BST) of 'a's\n"+
 	  "data BST a = Leaf | Node a (BST a) (BST a)\n\n"+
 	  "-- flatten a tree into a list\n"+
-	  "-- if the tree respects the BST property, the result list will be ordered\n"+ 
+	  "-- if the tree respects the BST property, the result list will be ordered\n"+
 	  "flatten :: BST a -> [a]\n"+
 	  "flatten Leaf = []\n"+
 	  "flatten (Node x left right) = flatten left ++ [x] ++ flatten right\n\n"+

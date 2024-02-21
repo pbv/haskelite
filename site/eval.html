@@ -21,9 +21,9 @@
       var decls =
 	  "-- A recursive type for arithmetic expressions\n"+
 	  "data Expr = Num Int | Add Expr Expr | Mult Expr Expr\n\n"+
-	  "-- example expression: 1+(2*3)\n"+
+	  "-- example expression: (2*3)+1\n"+
 	  "example :: Expr\n"+
-	  "example = Add (Num 1) (Mult (Num 2) (Num 3))\n\n"+
+	  "example = Add (Mult (Num 2) (Num 3)) (Num 1)\n\n"+
 	  "-- Recursive function to evaluate an expression\n"+
           "eval :: Expr -> Int\n"+
 	  "eval (Num v) = v\n"+

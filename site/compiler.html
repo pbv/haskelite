@@ -23,9 +23,9 @@
 	  "data Expr = Num Int\n"+
           "          | Add Expr Expr\n"+
           "          | Mult Expr Expr\n\n"+
-	  "-- an example expression tree: 1+(2*3)\n"+
+	  "-- an example expression tree: (2*3)+1\n"+
 	  "example :: Expr\n"+
-	  "example = Add (Num 1) (Mult (Num 2) (Num 3))\n\n"+
+	  "example = Add (Mult (Num 2) (Num 3)) (Num 1)\n\n"+
 	  "-- instructions for a stack machine\n"+
 	  "data Instr = PUSH Int  -- push an integer onto the stack\n"+
 	  "           | ADD       -- add  2 values on top of the stack; push the result\n"+
@@ -36,7 +36,7 @@
 	  "-- translator from an expression to a list of instructions\n"+
 	  "compile :: Expr -> Code\n"+
 	  "compile (Num n) = [PUSH n]\n"+
-	  "compile (Add e1 e2) = compile e2 ++ compile e1 ++ [ADD]\n"+
+	  "compile (Add e1 e2) = compile e1 ++ compile e2 ++ [ADD]\n"+
 	  "compile (Mult e1 e2) = compile e1 ++ compile e2 ++ [MUL]\n\n"+
 	  "-- virtual machine\n"+
 	  "-- a stack is a list of values (integers)\n"+

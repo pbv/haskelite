@@ -8,13 +8,8 @@ module Typecheck exposing (..)
 import Dict exposing (Dict)
 import Set exposing (Set)
 import Set
-import AST exposing (Expr(..), Matching(..), Pattern(..),
-                      Program(..), Module, Bind, Decl(..),
-                         AliasDecl, DataDecl, Name, Tag)
-import Types exposing (Type(..), Kind(..), Tycon, Tyvar, 
-                       tyBool, tyInt, tyChar, tyString, tyList,
-                           tyUnit, tyPair, tyTuple3, tyTuple4,
-                           tyOrdering, applyTySubst)
+import AST exposing (..)
+import Types exposing (..)
 import Tc exposing (Tc, pure, andThen, traverse, traverse_, explain, fail)
 import Shows 
 
@@ -32,12 +27,12 @@ type alias TyAliases
     = Dict Tycon (List Tyvar, Type)
 
       
-tcMain : KindEnv -> TyEnv -> Program -> Result String ()
+tcMain : KindEnv -> TyEnv -> AST.Program -> Result String ()
 tcMain kenv tenv prog
     = Tc.eval <| (tcProgram kenv tenv prog |> andThen (\_ -> pure ()))
 
 -- type a program: check a module and an expression
-tcProgram : KindEnv -> TyEnv -> Program -> Tc Type
+tcProgram : KindEnv -> TyEnv -> AST.Program -> Tc Type
 tcProgram kenv tenv (LetProg mod expr) 
     = tcModule kenv tenv mod |>
       andThen (\(kenv1, tenv1) -> tcExprWrap kenv1 tenv1 expr)
@@ -647,15 +642,6 @@ getDataTypes : DataDecl -> List (Tag, Type)
 getDataTypes ddecl
     = List.map (\(con,ty) -> (con, Types.generalize Set.empty ty)) ddecl.alternatives
 
--- syntax translations
-translateCase : Expr -> List (Pattern,Expr) -> Matching
-translateCase e0 alts
-    = let
-        body = List.foldr
-                 (\(patt,expr) rest ->
-                      Alt (Match patt (Return expr Nothing)) rest)
-                   Fail alts
-      in Arg e0 body
                     
 ------------------------------------------------------------------------------
 -- initial kind environment for primitives

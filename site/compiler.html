@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>An expression compiler</title>
+    <link rel='stylesheet' href='lib/codemirror.css'>
+    <link rel="stylesheet" href="lib/screen.css">
+    <script type='text/javascript' src='lib/codemirror.js'></script>
+    <script type='text/javascript' src='lib/haskell.js'></script>
+    <script type='text/javascript' src='js/code-editor.js'></script>
+    <script type='text/javascript' src='js/haskelite-min.js'></script>
+  </head>
+
+  <body>
+    <h1>An expression compiler</h1>
+    <p>A simple compiler and stack machine for arithmetic expressions.
+      <a href="index.html">Back</a></p>
+    <div id="haskelite"/>
+
+    <script>
+      var decls =
+	  "-- abstract syntax tree for expressions\n"+
+	  "data Expr = Num Int\n"+
+          "          | Add Expr Expr\n"+
+          "          | Mult Expr Expr\n\n"+
+	  "-- an example expression tree: 1+(2*3)\n"+
+	  "example :: Expr\n"+
+	  "example = Add (Num 1) (Mult (Num 2) (Num 3))\n\n"+
+	  "-- instructions for a stack machine\n"+
+	  "data Instr = PUSH Int  -- push an integer onto the stack\n"+
+	  "           | ADD       -- add  2 values on top of the stack; push the result\n"+
+	  "           | MUL       -- multiply 2 values on top of the stack; push the result\n\n"+
+	  "-- code is a list of instructions\n"+
+	  "type Code = [Instr]\n\n"+
+	  "-- the compiler;\n"+
+	  "-- translator from an expression to a list of instructions\n"+
+	  "compile :: Expr -> Code\n"+
+	  "compile (Num n) = [PUSH n]\n"+
+	  "compile (Add e1 e2) = compile e2 ++ compile e1 ++ [ADD]\n"+
+	  "compile (Mult e1 e2) = compile e1 ++ compile e2 ++ [MUL]\n\n"+
+	  "-- virtual machine\n"+
+	  "-- a stack is a list of values (integers)\n"+
+	  "type Stack = [Int]\n\n"+
+	  "-- the state of the machine: a pair of stack and code\n"+
+	  "type State = (Stack, Code)\n\n"+
+	  "-- state transition; implements a single machine instruction\n"+
+	  "transition :: State -> State\n"+
+	  "transition (stack, PUSH n:code)    = (n:stack, code)\n"+
+	  "transition (v1:v2:stack, ADD:code) = (v1+v2:stack, code)\n"+
+	  "transition (v1:v2:stack, MUL:code) = (v1*v2:stack, code)\n"+
+	  "transition (_, _)                  = error \"no valid transition\"\n\n"+
+	  "-- execute code starting with an empty stack\n"+
+	  "run :: Code -> Int\n"+
+	  "run code = runAux ([],code)\n\n"+
+	  "-- worker function to execute instructions until the final state\n"+
+	  "-- the result is the value left on the top of the stack\n"+
+	  "runAux :: State -> Int\n"+
+	  "runAux s | final s  = topStack s\n"+
+          "         | otherwise = runAux (transition s)\n\n"+
+	  "-- a state is final if code is empty\n"+
+	  "final :: State -> Bool\n"+
+	  "final (stack, code) = null code\n\n"+
+	  "-- get the value on the top of stack\n"+
+	  "topStack :: State -> Int\n"+
+	  "topStack (v:_, _)  = v\n"+
+	  "topStack _         = error \"empty stack\"\n\n"+
+	  "-- also to try:\n"+
+	  "-- >>> run (compiler example)\n";
+ 	  
+      var app = Elm.Haskelite.init({
+          node: document.getElementById("haskelite"),
+	  flags: { expression:"compile example",
+		   declarations: decls
+		 }
+      });
+    </script>
+    <hr>
+    <div class="credits">
+    Pedro Vasconcelos, 2023.<br>
+    Powered by <a href="https://elm-lang.org/">Elm</a> and
+    <a href="https://codemirror.net/">CodeMirror</a>.
+    </div>
+
+  </body>
+</html>

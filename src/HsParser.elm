@@ -975,7 +975,7 @@ caseExpr
          |. keyword "of"
          |= caseAlts
 
-caseAlts : Parser (List (Pattern,Expr))
+caseAlts : Parser (List (Pattern,Expr,Info))
 caseAlts
     = Indent.list caseAlt "indented case alternative"
       |> andThen (\alts -> if List.isEmpty alts then
@@ -984,9 +984,10 @@ caseAlts
                                succeed alts)
            
 
-caseAlt : Parser (Pattern, Expr)
+caseAlt : Parser (Pattern, Expr, Info)
 caseAlt
-    = succeed Tuple.pair
+    = getParseChomped <|
+      succeed (\patt expr info -> (patt,expr, info))
          |= infixPattern
          |. spaces   
          |. symbol "->"

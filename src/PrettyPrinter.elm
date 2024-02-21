@@ -4,7 +4,7 @@
 -}
 module PrettyPrinter exposing (prettyExpr, prettyPattern, prettyType, prettyConfStep)
 
-import AST exposing (Expr(..), Matching(..), Bind, Pattern(..), Name)
+import AST exposing (Expr(..), Matching(..), Info, Bind, Pattern(..), Name)
 import Types exposing (Type(..))
 import Machine.Types exposing (..)
 import Machine.Heap exposing (Heap)
@@ -417,12 +417,12 @@ collectMatchingArgs m acc
 
 
 -- pretty print case alternatives
-ppAlts : PrettyCtx -> List (Pattern,Expr) -> Doc Tag
+ppAlts : PrettyCtx -> List (Pattern,Expr,Info) -> Doc Tag
 ppAlts ctx alts
     = join (char ';' |> a ctx.line) (List.map (ppAlt ctx) alts)
 
-ppAlt : PrettyCtx -> (Pattern,Expr) -> Doc Tag
-ppAlt ctx (patt,expr)
+ppAlt : PrettyCtx -> (Pattern,Expr,Info) -> Doc Tag
+ppAlt ctx (patt, expr, info)
     = ppPattern patt
           |> a (string " -> ")
           |> a (ppExpr {ctx|prec=0} expr)

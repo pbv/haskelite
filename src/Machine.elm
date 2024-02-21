@@ -450,9 +450,9 @@ structuralCmpList args1 args2
               BinaryOp "compare" e1 e2
           (e1::rest1, e2::rest2) ->
               Case (BinaryOp "compare" e1 e2)
-                  [ (ConsP "EQ" [], structuralCmpList rest1 rest2)
-                  , (ConsP "LT" [], Cons True "LT" [])
-                  , (ConsP "GT" [], Cons True "GT" [])
+                  [ (ConsP "EQ" [], structuralCmpList rest1 rest2, "EQ")
+                  , (ConsP "LT" [], Cons True "LT" [], "LT")
+                  , (ConsP "GT" [], Cons True "GT" [], "GT")
                   ]
           (_, _) ->
               Exception "shouldn't happen"
@@ -484,9 +484,9 @@ orderingCase expr ltBranch eqBranch gtBranch
           Cons _ "GT" [] ->
               gtBranch
           _ ->
-              Case expr [ (ConsP "LT" [], ltBranch)
-                        , (ConsP "EQ" [], eqBranch)
-                        , (ConsP "GT" [], gtBranch) ]
+              Case expr [ (ConsP "LT" [], ltBranch, "LT")
+                        , (ConsP "EQ" [], eqBranch, "EQ")
+                        , (ConsP "GT" [], gtBranch, "GT") ]
           
 
                   
@@ -690,30 +690,6 @@ justification (heap, control, stack)
 
          _ ->
              Nothing
-
-
-
---
--- syntax translations
---
-translateIfThenElse : Expr -> Expr -> Expr -> Matching
-translateIfThenElse e1 e2 e3
-    = Alt (Arg e1 (Match (ConsP "True" [])
-                       (Return e2 (Just "if True"))))
-           (Return e3 (Just "if False"))
-
-translateCase : Expr -> List (Pattern,Expr) -> Matching
-translateCase e0 alts
-    = let
-        body = List.foldr
-                 (\(patt,expr) rest ->
-                      let info = ("case " ++ Shows.showPattern patt ++
-                                 "->" ++  Shows.showExpr expr)
-                      in 
-                          Alt (Match patt (Return expr (Just info))) rest)
-                   Fail alts
-      in Arg e0 body
-
 
 
 showPrim2 : Name -> Expr -> Expr -> Expr -> String

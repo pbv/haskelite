@@ -28,7 +28,7 @@ type Expr
       -- the maybe field is `Just name` if the lambda was defined through a binding;
       -- otherwise it is Nothing
     | Let (List Bind) Expr              -- local bindings; can be recursive
-    | Case Expr (List (Pattern, Expr))
+    | Case Expr (List (Pattern, Expr, Info))
     | Var Name
     | Number Int
     | Char Char
@@ -179,10 +179,12 @@ applyMatchSubst s m
                   Where binds1 (applyMatchSubst s1 m2)
 
                       
-applyAltsSubst : Subst -> List (Pattern,Expr) -> List (Pattern,Expr)
+applyAltsSubst : Subst -> List (Pattern, Expr, info)
+               -> List (Pattern,Expr, info)
 applyAltsSubst s 
-    = List.map (\(patt,expr) -> let s1 = restrictSubst (patternVars patt) s
-                                in (patt, applySubst s1 expr))
+    = List.map (\(patt,expr,info) ->
+                    let s1 = restrictSubst (patternVars patt) s
+                    in (patt, applySubst s1 expr, info))
                   
 
 applyBindsSubst : Subst -> List Bind -> List Bind
@@ -314,7 +316,21 @@ listPattern =
 -- smart constructor for multi-arity applications
 applyMany : Expr -> List Expr -> Expr
 applyMany = List.foldl (\x y->App y x) 
-
-
-
               
+--
+-- syntax translations
+--
+translateIfThenElse : Expr -> Expr -> Expr -> Matching
+translateIfThenElse e1 e2 e3
+    = Alt (Arg e1 (Match (ConsP "True" [])
+                       (Return e2 (Just "if True"))))
+           (Return e3 (Just "if False"))
+
+translateCase : Expr -> List (Pattern,Expr,Info) -> Matching
+translateCase e0 alts
+    = let
+        body = List.foldr
+                 (\(patt,expr,info) rest ->
+                      Alt (Match patt (Return expr (Just info))) rest)
+                   Fail alts
+      in Arg e0 body

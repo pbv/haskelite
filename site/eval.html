@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Expression evaluator</title>
+    <title>An expression evaluator</title>
     <link rel='stylesheet' href='lib/codemirror.css'>
     <link rel="stylesheet" href="lib/screen.css">
     <script type='text/javascript' src='lib/codemirror.js'></script>
@@ -12,7 +12,7 @@
   </head>
 
   <body>
-    <h1>Expression evaluator</h1>
+    <h1>An expression evaluator</h1>
     <p>A simple evaluator for arithmetic expressions represented as
     abstract syntax trees (ASTs). <a href="index.html">Back</a></p>
     <div id="haskelite"/>
@@ -20,30 +20,19 @@
     <script>
       var decls =
 	  "-- A recursive type for arithmetic expressions\n"+
-	  "data Expr = Var Char | Num Int | Binop Op Expr Expr\n\n"+
-	  "-- An enumeration for the 4 basic arithmetic operations\n"+
-	  "data Op = Plus | Times | Minus | Div\n\n"+
-	  "-- An example expression: 2*x+y\n"+
-	  "example = Binop Plus (Binop Times (Num 2) (Var 'x')) (Var 'y') \n\n"+
-	  "-- associations of variable to values\n"+
-	  "type Assocs = [(Char,Int)]\n\n"+
+	  "data Expr = Num Int | Add Expr Expr | Mult Expr Expr\n\n"+
+	  "-- example expression: 1+(2*3)\n"+
+	  "example :: Expr\n"+
+	  "example = Add (Num 1) (Mult (Num 2) (Num 3))\n\n"+
 	  "-- Recursive function to evaluate an expression\n"+
-          "eval :: Expr -> Assocs -> Int\n"+
-	  "eval (Num v) assocs = v\n"+
-	  "eval (Var x) assocs = case lookup x assocs of\n"+
-	  "                           Just v -> v\n"+
-	  "eval (Binop op e1 e2) assocs = apply op (eval e1 assocs) (eval e2 assocs)\n\n"+
-	  "apply :: Op -> Int -> Int -> Int\n"+
-	  "apply Plus = (+)\n"+
-	  "apply Minus = (-)\n"+
-	  "apply Times = (*)\n"+
-	  "apply Div = div\n\n"+
-	  "-- example values associations\n"+
-	  "assocs = [('x',5), ('y',2)]\n";
+          "eval :: Expr -> Int\n"+
+	  "eval (Num v) = v\n"+
+	  "eval (Add e1 e2) = eval e1 + eval e2\n"+
+	  "eval (Mult e1 e2) = eval e1 * eval e2\n";
 	  
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
-	  flags: { expression:"eval example assocs",
+	  flags: { expression:"eval example",
 		   declarations: decls
 		 }
       });

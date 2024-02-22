@@ -669,13 +669,13 @@ infix6 = infixLeft infix7  [ ("+", BinaryOp "+")
 infix5 = infixRight infix6 [ (":", \e1 e2 -> Cons False ":" [e1,e2])
                            , ("++", \e1 e2 -> App (App (Var "++") e1) e2)
                            ]
-infix4 = infixLeft  infix5 [ ("==", BinaryOp "==")
-                           , ("/=", BinaryOp "/=")
-                           , ("<=", BinaryOp "<=")
-                           , (">=", BinaryOp ">=")
-                           , ("<", BinaryOp "<")
-                           , (">", BinaryOp ">")
-                           ] -- TODO: these should be non-associative
+infix4 = infixNonAssoc infix5 [ ("==", BinaryOp "==")
+                              , ("/=", BinaryOp "/=")
+                              , ("<=", BinaryOp "<=")
+                              , (">=", BinaryOp ">=")
+                              , ("<", BinaryOp "<")
+                              , (">", BinaryOp ">")
+                              ] 
 
 infix3 = infixRight infix4 [ ("&&", \e1 e2 -> App (App (Var "&&") e1) e2) ]
 infix2 = infixRight infix3 [ ("||", \e1 e2 -> App (App (Var "||") e1) e2) ]
@@ -726,7 +726,7 @@ infixRight operand table
       |> andThen (infixRightCont operand table)
 
 infixRightCont : Parser Expr -> List (Name, BinOp) -> Expr -> Parser Expr
-infixRightCont operand table x
+infixRightCont operand table accum
     = oneOf
       <| List.map (\(op,func) -> 
                        succeed identity
@@ -735,11 +735,32 @@ infixRightCont operand table x
                            |= operand
                            |. spaces
                            |> andThen (\y -> infixRightCont operand table y 
-                           |> andThen (\r -> succeed (func x r)))
+                           |> andThen (\r -> succeed (func accum r)))
                   ) table
-          ++ [succeed x]
-              
+          ++ [succeed accum]
 
+
+-- parse non-associative operators
+--
+infixNonAssoc : Parser Expr -> List (Name, BinOp) -> Parser Expr
+infixNonAssoc operand table 
+    = operand |> andThen
+      (\left ->
+           spaces |> andThen (\_ ->
+           oneOf
+           [ succeed (\func right -> func left right)
+              |= oneOf
+                  (List.map (\(op,func) -> succeed func
+                                      |. operator op) table)
+              |. spaces          
+              |= operand
+           , succeed left
+           ]))
+           
+                              
+    
+
+              
 
 applicativeExpr : Parser Expr
 applicativeExpr

@@ -132,12 +132,12 @@ minimum [x] = x
 minimum (x:xs) = min x (minimum xs) 
 
 take :: Int -> [a] -> [a]
-take 0 xs = []
+take n xs | n<=0 = []
 take n [] = []
 take n (x:xs) = x : take (n-1) xs
 
 drop :: Int -> [a] -> [a]
-drop 0 xs = xs
+drop n xs | n<=0 = xs
 drop n [] = []
 drop n (x:xs) = drop (n-1) xs
 

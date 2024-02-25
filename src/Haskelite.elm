@@ -221,12 +221,13 @@ reduceView model =
         -- the CSS enabled a custom flow direction to ensure the
         -- current line always visible when scrolling is needed
          div [ class "lines" ]
-             <|  [ div [class "current"]
+             <|
+              [ div [class "current"]
                        [ renderStep model.options linecount model.current ]
-                 ]
-                 ++
-                 List.map2 (renderStep model.options)
-                       (List.reverse <| List.range 0 (linecount-1)) model.previous
+              ]
+              ++
+              List.map2 (renderStep model.options) (List.reverse <| List.range 0 (linecount-1)) model.previous
+
         , div [] [ span [] [ button [ class "navbar"
                            , onClick EditMode] [text "Edit"]
                   , button [ class "navbar"

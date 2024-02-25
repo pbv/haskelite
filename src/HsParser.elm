@@ -158,8 +158,9 @@ topDeclaration
       [ dataDeclaration
       , typeDeclaration  
       , backtrackable typeSignature
-      , backtrackable infixEquation 
-      , prefixEquation
+      --      , backtrackable infixEquation 
+      , backtrackable prefixEquation
+      , infixEquation
       ]
 
 
@@ -293,26 +294,29 @@ whereBindings
       , succeed []
       ]
                  
-
+ 
 infixEquation : Parser Decl
 infixEquation
-    = getParseChomped infixEquationAux
+    = getParseChomped_ infixLHS |>
+      andThen (\((p1,op,p2), prefix) ->
+          succeed (\m -> makeInfixEquation op p1 p2 m)
+              |= equationAlts prefix)
           
-
-infixEquationAux : Parser (String -> Decl)
-infixEquationAux                   
-    = succeed (\p1 id p2 e info ->
-                   Equation id (Match p1 (Match p2 (Return e (Just info)))))
+infixLHS : Parser (Pattern, Name, Pattern)
+infixLHS
+    = succeed (\p1 op p2 -> (p1, op, p2))
          |= consPattern
          |. spaces
          |= infixOperator
          |. spaces
          |= consPattern
          |. spaces
-         |. operator "="
-         |. spaces
-         |= topExpr
-              
+
+makeInfixEquation : Name -> Pattern -> Pattern -> List Matching -> Decl
+makeInfixEquation op p1 p2 ms
+    = Equation op (Match p1 (Match p2 (joinAlts ms)))
+            
+
                
 -- left side of an equation,
 -- i.e. an identifier and a list of patterns

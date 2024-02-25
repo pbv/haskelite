@@ -53,13 +53,13 @@ flip f x y = f y x
 otherwise :: Bool
 otherwise = True
 
-(||) :: Bool -> Bool -> Bool
-False || x = x
-True  || _ = True
-
 (&&) :: Bool -> Bool -> Bool
 False && _ = False
 True  && x = x
+
+(||) :: Bool -> Bool -> Bool
+False || x = x
+True  || _ = True
 
 not :: Bool -> Bool
 not True = False
@@ -142,9 +142,10 @@ drop n [] = []
 drop n (x:xs) = drop (n-1) xs
 
 (!!) :: [a] -> Int -> a
+_ !! n | n<0 = error "!!: negative index"
+[] !! _ = error "!!: index too large"
 (x:_) !! 0 = x
 (_:xs) !! n = xs !! (n-1)
-[] !! _ = error "!!: invalid index"
 
 concat :: [[a]] -> [a]
 concat [] = []

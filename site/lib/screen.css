@@ -18,9 +18,9 @@ input.editline {
     margin: 1em 1em; 
     cursor: default;
     height: 340px;
-    overflow-y: auto;
-    flex-direction: column-reverse;
-    display: flex;
+    overflow: auto; 
+    flex-direction: column-reverse; 
+    display: flex; 
     border-top: 1px solid grey;
     border-bottom: 1px solid grey;
 }

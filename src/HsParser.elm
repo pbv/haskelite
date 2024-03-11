@@ -666,7 +666,9 @@ topExprEnd
 topExpr : Parser Expr
 topExpr = infix2
 
-infix9 = infixLeft applicativeExpr [ ("!!", \e1 e2 -> App (App (Var "!!") e1) e2) ]
+-- we shouldn't really allow mixing infixl and infixr level 9 operators
+infix9r = infixRight applicativeExpr [ (".", \e1 e2 ->  App (App (Var ".") e1) e2) ]
+infix9 = infixLeft infix9r [ ("!!", \e1 e2 -> App (App (Var "!!") e1) e2) ]
 infix7 = infixLeft infix9 [ ("*", BinaryOp "*") ]
 infix6 = infixLeft infix7  [ ("+", BinaryOp "+")
                             , ("-", BinaryOp "-") ]

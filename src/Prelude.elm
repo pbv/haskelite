@@ -50,6 +50,9 @@ const x y = x
 flip :: (a -> b -> c) -> b -> a -> c
 flip f x y = f y x
 
+(.) :: (b -> c) -> (a -> b) -> a -> c
+f . g = \\x -> f (g x)
+
 otherwise :: Bool
 otherwise = True
 

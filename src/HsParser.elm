@@ -281,9 +281,9 @@ prefixEquation
               |= whereBindings)
 
 -- helper function to construct an equation 
-makeEquation : Name -> List Pattern -> List Matching -> List Bind -> Decl
-makeEquation name patts alts binds
-    = Equation name (makePatterns patts (makeBindings binds (joinAlts alts)))
+makeEquation : Name -> List Pattern -> Matching -> List Bind -> Decl
+makeEquation name patts match binds
+    = Equation name (makePatterns patts (makeBindings binds match))
                       
 whereBindings : Parser (List Bind)
 whereBindings
@@ -299,8 +299,10 @@ infixEquation : Parser Decl
 infixEquation
     = getParseChomped_ infixLHS |>
       andThen (\((p1,op,p2), prefix) ->
-          succeed (\m -> makeInfixEquation op p1 p2 m)
-              |= equationAlts prefix)
+          succeed (\m binds -> makeInfixEquation op p1 p2 (makeBindings binds m))
+              |= equationAlts prefix
+              |. whitespace
+              |= whereBindings)
           
 infixLHS : Parser (Pattern, Name, Pattern)
 infixLHS
@@ -312,9 +314,9 @@ infixLHS
          |= consPattern
          |. spaces
 
-makeInfixEquation : Name -> Pattern -> Pattern -> List Matching -> Decl
-makeInfixEquation op p1 p2 ms
-    = Equation op (Match p1 (Match p2 (joinAlts ms)))
+makeInfixEquation : Name -> Pattern -> Pattern -> Matching -> Decl
+makeInfixEquation op p1 p2 match
+    = Equation op (Match p1 (Match p2 match))
             
 
                
@@ -337,12 +339,13 @@ equationLHS
 
 -- equation alternatives
 -- i.e. list of guards and expressions or a single return expression
-equationAlts : String -> Parser (List Matching)
+equationAlts : String -> Parser Matching
 equationAlts prefix
     = oneOf
       [ Indent.list (equationGuard prefix) "indented guard"
-             |> andThen (ensure (List.isEmpty >> not) "alternative")
-      , succeed (\(expr,info) -> [Return expr (Just (prefix++info))])
+             |> andThen (\alts -> ensure (List.isEmpty >> not) "alternative" alts
+                                  |> andThen (\_ -> succeed (joinAlts alts)))
+      , succeed (\(expr,info) -> Return expr (Just (prefix++info)))
            |= getParseChomped_ equationRHS
       ]
   

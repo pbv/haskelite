@@ -6,7 +6,7 @@ including integers, booleans, lists, tuples and recursive
 definitions. The principal focus is on simplicity since this is
 intended for teaching fundamentals of functional programming.
 
-This project is a re-implementation of the [Lambda
+This project started as a re-implementation of the [Lambda
 Lessons](https://stevekrouse.com/hs.js/) by Jan Paul Posma and Steve
 Krouse in Elm and extended with more features, e.g.:
 
@@ -20,9 +20,9 @@ Krouse in Elm and extended with more features, e.g.:
   Prelude](https://www.haskell.org/onlinereport/standard-prelude.html).
 
 The interpreter is based on an abstract machine for a pattern matching
-calculus described in a paper submitted to the IFL'2023 symposium.
-Please contact me at <em>pbv at dcc dot fc dot up dot pt</em> if you
-are interested in a draft copy.
+calculus described in a paper under review for publication.  Please
+contact me at <em>pbv at dcc dot fc dot up dot pt</em> if you are
+interested in a draft copy.
 
 The CodeView custom element is based on the [code published](https://github.com/billstclair/elm-custom-element/) by Bill St. Clair.
 

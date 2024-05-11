@@ -86,9 +86,6 @@ transition conf
           (heap, E (Exception msg), _::_) ->
               Just (heap, E (Exception msg), [])
 
-          -- primitive to force full evaluation
-          (heap, E (App (Var "force") e2), stack) ->
-              Just (heap, E e2, DeepEval::stack)
           -- applications and constructors                  
           (heap,  E (App e1 e2), stack) ->
               let
@@ -157,7 +154,9 @@ transition conf
 
           (heap, E (UnaryOp "error" e1), stack) ->
               Just (heap, E e1, DeepEval::ContUnary "error"::stack)
-                  
+          -- primitive to force full evaluation
+          (heap, E (UnaryOp "force" e1), stack) ->
+              Just (heap, E e1, DeepEval::stack)                 
           (heap, E (UnaryOp op e1), stack) ->
               Just (heap, E e1, (ContUnary op)::stack)
 
@@ -585,7 +584,7 @@ prefixOps : List Name
 prefixOps
     = ["negate", "ord", "chr", "toUpper", "toLower",
            "isLower", "isUpper", "isAlpha", "isDigit", "isAlphaNum",
-           "show", "error" ]
+           "show", "error", "force" ]
       
 
 mkPrefixOp :  Name -> (Name, Expr)

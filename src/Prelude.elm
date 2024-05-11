@@ -57,7 +57,7 @@ f . g = \\x -> f (g x)
 f $ x = f x
 
 ($!) :: (a -> b) -> a -> b
-f $ !x = f x
+f $! !x = f x
 
 seq :: a -> b -> b
 seq !x y = y

@@ -689,7 +689,7 @@ infix4 = infixNonAssoc infix5 [ ("==", BinaryOp "==")
 infix3 = infixRight infix4 [ ("&&", \e1 e2 -> App (App (Var "&&") e1) e2) ]
 infix2 = infixRight infix3 [ ("||", \e1 e2 -> App (App (Var "||") e1) e2) ]
 infix0 = infixRight infix2 [ ("$", \e1 e2 -> App (App (Var "$") e1) e2)
-                           , ("$!", \e1 e2 -> App (App (Var "$") e1) e2) ]
+                           , ("$!", \e1 e2 -> App (App (Var "$!") e1) e2) ]
 
 
 -- parse a given operator

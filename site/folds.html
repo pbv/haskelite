@@ -28,11 +28,11 @@
 	  "-- Compute the sum of a list associating to the left\n"+
 	  "example2 = foldl (+) 0 [1,2,3,4,5]\n\n"+
 	  "-- Data.List exports a function foldl' that performs as foldl\n"+
-	  "-- but applies the operation strictly for efficiency\n"+
+	  "-- but with a strict accumulator\n"+
 	  "example3 = foldl' (+) 0 [1,2,3,4,5]\n"
       var app = Elm.Haskelite.init({
           node: document.getElementById("haskelite"),
-	  flags: { expression:"example1", declarations: decls }
+	  flags: { expression:"(example1, example2, example3)", declarations: decls }
       });
     </script>
     <hr>

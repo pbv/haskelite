@@ -53,6 +53,15 @@ flip f x y = f y x
 (.) :: (b -> c) -> (a -> b) -> a -> c
 f . g = \\x -> f (g x)
 
+($) :: (a -> b) -> a -> b
+f $ x = f x
+
+($!) :: (a -> b) -> a -> b
+f $ !x = f x
+
+seq :: a -> b -> b
+seq !x y = y
+
 otherwise :: Bool
 otherwise = True
 

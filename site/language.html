@@ -1,6 +1,7 @@
 <!doctype html>
 <html>
   <head>
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Haskelite language</title>
     <link rel="stylesheet" href="lib/screen.css">
@@ -60,7 +61,7 @@ snd :: (a,b) -> b
 head :: [a] -> a
 tail :: [a] -> [a]
 (++) :: [a] -> [a] -> [a]
-(!!) :: [a] -> Int -> a  
+(!!) :: [a] -> Int -> a 
 length :: [a] -> Int
 reverse :: [a] -> [a]          -- defined using an accumulator
 init :: [a] -> [a]
@@ -79,6 +80,8 @@ filter :: (a -> Bool) -> [a] -> [a]
 foldr :: (a -> b -> b) -> b -> [a] -> b
 foldl :: (a -> b -> a) -> a -> [b] -> a
 foldl' :: (a -> b -> a) -> a -> [b] -> a
+(.) :: (b -> c) -> (a -> b) -> a -> c
+($), ($!) :: (a -> b) -> a -> b
 zip :: [a] -> [b] -> [(a,b)]
 zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
 takeWhile, dropWhile :: (a -> Bool) -> [a] -> [a]

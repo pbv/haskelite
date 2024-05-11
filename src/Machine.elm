@@ -150,7 +150,10 @@ transition conf
 
           -- primitive operations
           (heap, E (BinaryOp op e1 e2), stack) ->
-              Just (heap, E e1, (ContBinary1 op e2)::stack)
+              if List.member op infixOps then
+                  Just (heap, E e1, (ContBinary1 op e2)::stack)
+              else
+                  Just (heap, E (App (App (Var op) e1) e2), stack)
 
           (heap, E (UnaryOp "error" e1), stack) ->
               Just (heap, E e1, DeepEval::ContUnary "error"::stack)
@@ -569,22 +572,30 @@ initializeHeap heap
                                                 Nothing)
                                       )))
       ] ++
-      List.map infixOp [ "+", "-", "*", "<", ">", "<=", ">=",
-                             "div", "mod", "compare" ]
-         ++
-      List.map prefixOp ["negate", "ord", "chr", "toUpper", "toLower",
-                         "isLower", "isUpper", "isAlpha", "isDigit", "isAlphaNum",
-                         "show", "error" ]
+      List.map mkInfixOp infixOps ++
+      List.map mkPrefixOp prefixOps
 
 
-prefixOp :  Name -> (Name, Expr)
-prefixOp op
+          
+infixOps : List Name
+infixOps
+    = [ "+", "-", "*", "==", "/=", "<", ">", "<=", ">=", "div", "mod", "compare" ]
+
+prefixOps : List Name
+prefixOps
+    = ["negate", "ord", "chr", "toUpper", "toLower",
+           "isLower", "isUpper", "isAlpha", "isDigit", "isAlphaNum",
+           "show", "error" ]
+      
+
+mkPrefixOp :  Name -> (Name, Expr)
+mkPrefixOp op
     = (op, AST.lambda (Just op)
            (Match (VarP "x") (Return (UnaryOp op (Var "x")) Nothing)))
 
           
-infixOp : Name -> (Name, Expr)
-infixOp op = (op, AST.lambda (Just op)
+mkInfixOp : Name -> (Name, Expr)
+mkInfixOp op = (op, AST.lambda (Just op)
                    (Match (VarP "x")
                        (Match (VarP "y")
                            (Return (BinaryOp op (Var "x") (Var "y"))

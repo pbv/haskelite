@@ -273,7 +273,8 @@ isOperator = String.all operatorChar
 operatorChar : Char -> Bool
 operatorChar c =
      c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
-         c==':' || c=='=' || c=='&' || c=='|' || c=='.' || c=='/' || c=='!' || c=='^'
+     c==':' || c=='=' || c=='&' || c=='|' || c=='.' ||
+     c=='/' || c=='!' || c=='^' || c=='$' || c=='!'
 
 -- AST constructors
 trueCons : Expr

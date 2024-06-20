@@ -119,15 +119,15 @@ ppConf : Options -> Conf -> Maybe (Doc Tag)
 ppConf opts (heap, control, stack)
     = case (getExpr control) of
          Just expr ->
-             let ppCtx = makeCtx opts heap 
-             in 
-             case unwindStack stack expr of
-                 ([], expr1) ->
-                     Just (ppExpr ppCtx expr1)
-                 (stk,expr1) ->
-                     let ellipsis = String.repeat (List.length stk) "."
+             case unwindStack heap expr stack expr of
+                 (heap1, [], expr1) ->
+                     let ppCtx = makeCtx opts heap1
+                     in Just (ppExpr ppCtx expr1)
+                 (heap1, stk, expr1) ->
+                     let ppCtx = makeCtx opts heap1
+                         ellipsis = String.repeat (List.length stk) "."
                      in Just (taggedString ellipsis Linenumber
-                             |> a space     
+                             |> a space
                              |> a (align (ppExpr ppCtx expr1)))
          _ ->
              Nothing
@@ -144,31 +144,32 @@ getExpr ctrl
                  
 -- unwind a stack into a context expression;
 -- may stop earlier if we reach a guard/case alternative
-unwindStack : Stack -> Expr -> (Stack, Expr)
-unwindStack stack acc
+unwindStack : Heap -> Expr -> Stack -> Expr -> (Heap, Stack, Expr)
+unwindStack heap control_expr stack acc
     = case stack of
-          (Update _::rest) ->
-              unwindStack rest acc
+          (Update y::rest) ->
+              let heap1 = Heap.update y control_expr heap
+              in unwindStack heap1 control_expr rest acc
           (PushArg arg::rest) ->
-              unwindStack rest (App acc arg)
+              unwindStack heap control_expr rest (App acc arg)
           (ContBinary1 op e2::rest) ->
-              unwindStack rest (BinaryOp op acc e2)
+              unwindStack heap control_expr rest (BinaryOp op acc e2)
           (ContBinary2 op e1::rest) ->
-              unwindStack rest (BinaryOp op e1 acc) 
+              unwindStack heap control_expr rest (BinaryOp op e1 acc)
           (RetBinary op _ _ ::rest) ->
-              unwindStack rest acc
+              unwindStack heap control_expr rest acc
           (ContUnary op::rest) ->
-              unwindStack rest (UnaryOp op acc)
+              unwindStack heap control_expr rest (UnaryOp op acc)
           (RetUnary op _ ::rest) ->
-              unwindStack rest acc              
+              unwindStack heap control_expr rest acc
           (MatchEnd::rest) ->
-              unwindStack rest acc
+              unwindStack heap control_expr rest acc
           (DeepEval::rest) ->
-              unwindStack rest acc
+              unwindStack heap control_expr rest acc
           (Continue expr ctx::rest) ->
-              unwindStack rest (ctx.set acc expr)
+              unwindStack heap control_expr rest (ctx.set acc expr)
           _ ->
-              (stack, acc)
+              (heap, stack, acc)
                
 -- pretty-print an expression 
 ppExpr : PrettyCtx -> Expr -> Doc Tag

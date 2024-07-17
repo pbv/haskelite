@@ -16,12 +16,13 @@ Krouse in Elm and extended with more features, e.g.:
 * let and where bindings;
 * algebraic data type definitions;
 * lazy evaluation;
-* a more thorough implementation of the [Haskell
-  Prelude](https://www.haskell.org/onlinereport/standard-prelude.html).
+* definitions for [commonly used functions](site/language.html)
+  of the Haskell Prelude.
 
 This interpreter and associated lazy abstract machine are
 described in the paper [Haskelite: A Tracing Interpreter Based on a
-Pattern-Matching Calculus](https://doi.org/10.1145/3677999.3678274).
+Pattern-Matching Calculus](https://doi.org/10.1145/3677999.3678274)
+(accept for publication in the proceedings of the *Haskell 2024 Symposium*).
 
 The CodeView custom element is based on the [code published](https://github.com/billstclair/elm-custom-element/) by Bill St. Clair.
 

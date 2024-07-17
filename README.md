@@ -16,8 +16,7 @@ Krouse in Elm and extended with more features, e.g.:
 * let and where bindings;
 * algebraic data type definitions;
 * lazy evaluation;
-* definitions for [commonly used functions](site/language.html)
-  of the Haskell Prelude.
+* definitions for commonly used functions from the Haskell Prelude.
 
 This interpreter and associated lazy abstract machine are
 described in the paper [Haskelite: A Tracing Interpreter Based on a
@@ -29,7 +28,7 @@ The CodeView custom element is based on the [code published](https://github.com/
 ## Language features
 
 Please check the supported subset of the Haskell language
-[here](site/language.html).
+[here](https://pbv.github.io/haskelite/site/language.html).
 
 ## Online Demo
 
@@ -43,7 +42,7 @@ available from this page. All the required HTML, CSS and JavaScript
 files are bundled; no external files are downloaded and no internet
 connection is needed.
 
-## Compiling from source
+## Re-compiling from source
 
 The Elm source is in the `src` directory; some aditional open-source
 JavaScript libraries are included in `site/js`.

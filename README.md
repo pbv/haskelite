@@ -18,10 +18,11 @@ Krouse in Elm and extended with more features, e.g.:
 * lazy evaluation;
 * definitions for commonly used functions from the Haskell Prelude.
 
-This interpreter and associated lazy abstract machine are
-described in the paper [Haskelite: A Tracing Interpreter Based on a
-Pattern-Matching Calculus](https://doi.org/10.1145/3677999.3678274)
-(accept for publication in the proceedings of the *Haskell 2024 Symposium*).
+This interpreter and associated lazy abstract machine are described in
+the paper *Haskelite: A Tracing Interpreter Based on a
+Pattern-Matching Calculus* accepted for publication in the proceedings
+of the *Haskell 2024 Symposium*).  A preprint version is available
+[here](https://arxiv.org/pdf/2407.11831).
 
 The CodeView custom element is based on the [code published](https://github.com/billstclair/elm-custom-element/) by Bill St. Clair.
 

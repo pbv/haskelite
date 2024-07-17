@@ -20,7 +20,7 @@ Krouse in Elm and extended with more features, e.g.:
 
 This interpreter and associated lazy abstract machine are described in
 the paper *Haskelite: A Tracing Interpreter Based on a
-Pattern-Matching Calculus* accepted for publication in the proceedings
+Pattern-Matching Calculus* (accepted for publication in the proceedings
 of the *Haskell 2024 Symposium*).  A preprint version is available
 [here](https://arxiv.org/pdf/2407.11831).
 

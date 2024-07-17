@@ -33,8 +33,8 @@ patterns.</p>
 <p>
 
 <p>Data types have structural equality and order (similar to
-deriving Eq and Ord); these can fail at runtime (e.g. when attempting
-to compare functions).</p>
+  derived Eq and Ord); note that comparisions can fail at
+  runtime (e.g. when attempting to compare functions).</p>
 
 <h2>Function definitions</h2>
 
@@ -45,11 +45,11 @@ and recursive definitions.</p>
 
 <h2>Standard Prelude</h2>
 
-Definitions for the following functions from the Standard Prelude are
-provided.  Note that functions based on equality or ordering have an
-overly polymorphic type (they should really have a typeclass
-restriction); they will fail at runtime if you apply
-them to function values.
+Definitions for the following functions from the Standard Prelude
+and <code>Data.List</code> are provided.  Note that functions based on
+equality or ordering have an overly polymorphic type (they should
+really have a typeclass restriction); they will fail at runtime if you
+apply them to function values.
 
 <pre>
 even, odd :: Int -> Bool
@@ -79,9 +79,9 @@ map :: (a -> b) -> [a] -> [b]
 filter :: (a -> Bool) -> [a] -> [a]
 foldr :: (a -> b -> b) -> b -> [a] -> b
 foldl :: (a -> b -> a) -> a -> [b] -> a
-foldl' :: (a -> b -> a) -> a -> [b] -> a
+foldl' :: (a -> b -> a) -> a -> [b] -> a   -- strict version of foldl 
 (.) :: (b -> c) -> (a -> b) -> a -> c
-($), ($!) :: (a -> b) -> a -> b
+($), ($!) :: (a -> b) -> a -> b            -- $! is the strict application
 zip :: [a] -> [b] -> [(a,b)]
 zipWith :: (a -> b -> c) -> [a] -> [b] -> [c]
 takeWhile, dropWhile :: (a -> Bool) -> [a] -> [a]

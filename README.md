@@ -19,22 +19,49 @@ Krouse in Elm and extended with more features, e.g.:
 * a more thorough implementation of the [Haskell
   Prelude](https://www.haskell.org/onlinereport/standard-prelude.html).
 
-The interpreter is based on an abstract machine for a pattern matching
-calculus described in a paper under review for publication.  Please
-contact me at <em>pbv at dcc dot fc dot up dot pt</em> if you are
-interested in a draft copy.
+This interpreter and associated lazy abstract machine are
+described in the paper [Haskelite: A Tracing Interpreter Based on a
+Pattern-Matching Calculus](https://doi.org/10.1145/3677999.3678274).
 
 The CodeView custom element is based on the [code published](https://github.com/billstclair/elm-custom-element/) by Bill St. Clair.
 
 ## Language features
 
-Please check the supporte Haskell subset
-[here](https://pbv.github.io/haskelite/site/language.html).
+Please check the supported subset of the Haskell language
+[here](site/language.html).
 
-## Demo
+## Online Demo
 
 [Try Haskelite now!](https://pbv.github.io/haskelite/site/index.html)
 
+## Running locally
+
+You can try the interpreter locally by opening the file
+`site/index.html` using a web browser; several examples are also
+available from this page. All the required HTML, CSS and JavaScript
+files are bundled; no external files are downloaded and no internet
+connection is needed.
+
+## Compiling from source
+
+The Elm source is in the `src` directory; some aditional open-source
+JavaScript libraries are included in `site/js`.
+
+To build the interpreter just run `make` from the main directory; this
+will invoke `elm make` to download the Elm packages listed in
+`elm.json` and compile all sources to a minimized `haskelite-min.js`
+JS file.  The following tools need to be installed:
+
+* the [Elm compiler](https://elm-lang.org/);
+* the [uglyfy-js](https://www.npmjs.com/package/uglify-js) JavaScript
+  minimizer (part of the NodeJS tools);
+* a make tool (e.g. GNU make).
+
+This software was developed in Ubuntu Linux with Firefox and tested
+with Chrome, but should work in other OSes and browsers provided
+they support reasonably recent CSS and JavaScript.
+
+
 ----
 
-Pedro Vasconcelos, 2023.
+Pedro Vasconcelos, 2024.

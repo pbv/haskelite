@@ -274,7 +274,8 @@ operatorChar : Char -> Bool
 operatorChar c =
      c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
      c==':' || c=='=' || c=='&' || c=='|' || c=='.' ||
-     c=='/' || c=='!' || c=='^' || c=='$' || c=='!'
+     c=='/' || c=='!' || c=='^' || c=='$' || c=='!' ||
+     c == '@'
 
 -- AST constructors
 trueCons : Expr
@@ -305,14 +306,7 @@ stringUnlist expr acc
               stringUnlist rest (c::acc)
           _ ->
               String.fromList (List.reverse acc)
-
-              
-
-listPattern : List Pattern -> Pattern
-listPattern =
-    List.foldr (\p ps -> ConsP ":" [p,ps]) (ConsP "[]" [])
-
-         
+                     
             
 -- smart constructor for multi-arity applications
 applyMany : Expr -> List Expr -> Expr
@@ -335,3 +329,7 @@ translateCase e0 alts
                       Alt (Match patt (Return expr (Just info))) rest)
                    Fail alts
       in Arg e0 body
+
+
+      
+                  

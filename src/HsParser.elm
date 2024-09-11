@@ -13,6 +13,7 @@ import Parser.Workaround
 import Indent 
 import AST exposing (..)
 import Types exposing (..)
+import Shows
 import Char
 import Set exposing (Set)
 import Dict exposing (Dict)
@@ -158,9 +159,7 @@ topDeclaration
       [ dataDeclaration
       , typeDeclaration  
       , backtrackable typeSignature
-      --      , backtrackable infixEquation 
-      , backtrackable prefixEquation
-      , infixEquation
+      , equation
       ]
 
 
@@ -171,10 +170,10 @@ declaration : Parser Decl
 declaration
     = oneOf
       [ backtrackable typeSignature
-      -- , backtrackable infixEquation 
-      , prefixEquation
+      , equation
       ]
 
+    
 ----------------------------------------------------    
 -- type synonym declarations
 ----------------------------------------------------
@@ -271,8 +270,8 @@ dataAlternative
 
             
 ---------------------------------------------------------------------
-prefixEquation : Parser Decl
-prefixEquation
+equation : Parser Decl
+equation
     = getParseChomped_ equationLHS |>
       andThen (\((name,patts), prefix) ->
           succeed (makeEquation name patts)
@@ -294,47 +293,56 @@ whereBindings
       , succeed []
       ]
                  
- 
-infixEquation : Parser Decl
-infixEquation
-    = getParseChomped_ infixLHS |>
-      andThen (\((p1,op,p2), prefix) ->
-          succeed (\m binds -> makeInfixEquation op p1 p2 (makeBindings binds m))
-              |= equationAlts prefix
-              |. whitespace
-              |= whereBindings)
-          
-infixLHS : Parser (Pattern, Name, Pattern)
-infixLHS
-    = succeed (\p1 op p2 -> (p1, op, p2))
-         |= consPattern
-         |. spaces
-         |= infixOperator
-         |. spaces
-         |= consPattern
-         |. spaces
 
-makeInfixEquation : Name -> Pattern -> Pattern -> Matching -> Decl
-makeInfixEquation op p1 p2 match
-    = Equation op (Match p1 (Match p2 match))
-            
 
-               
--- left side of an equation,
--- i.e. an identifier and a list of patterns
+-- left hand side of an equation
 equationLHS : Parser (Name, List Pattern)
 equationLHS
-    = succeed Tuple.pair
-         |= identifier
-         |. spaces
-         |= (Parser.sequence
-            { start = ""
-            , end = ""
-            , separator = ""
-            , spaces = spaces
-            , item = delimitedPattern
-            , trailing = Parser.Forbidden
-            } |> andThen (ensure distinctPatterns "distinct pattern variables"))
+    = topExpr
+      |> andThen makeLHS
+      |> andThen checkLHS
+
+makeLHS : Expr -> Parser (Name, List Pattern)
+makeLHS expr
+    = case unwind expr of
+          (Var fun, args) ->
+              case translatePatterns args of
+                  Ok patts ->
+                      succeed (fun, patts)
+                  Err msg ->
+                      problem msg
+          (BinaryOp fun e1 e2, []) ->
+              case translatePatterns [e1,e2] of
+                  Ok patts ->
+                      succeed (fun, patts)
+                  Err msg ->
+                      problem msg
+          _ ->
+              problem ("left-hand side of equation: " ++ Shows.showExpr expr)
+
+checkLHS : (Name, List Pattern) -> Parser (Name, List Pattern)
+checkLHS (fun, patts)
+    = if List.allDifferent (List.concatMap patternVars patts) then
+          succeed (fun, patts)
+      else
+          problem "pattern variables must be distinct"
+
+-- unwind a sequence of binary applications
+unwind : Expr -> (Expr, List Expr)
+unwind expr
+    = unwind_ expr []
+
+-- worker function
+unwind_ : Expr -> List Expr -> (Expr, List Expr)
+unwind_ expr args
+    = case expr of
+          App e0 e1 ->
+              unwind_ e0 (e1::args)
+          _ ->
+              (expr, args)
+         
+        
+      
 
 
 -- equation alternatives
@@ -510,13 +518,13 @@ makeTupleType ts
           [t1, t2, t3, t4] ->
               succeed (tyTuple4 t1 t2 t3 t4)
           _ ->
-              problem "invalid tuple: maximum 4 elements" 
+              problem "tuple type with at most 4 elements" 
               
               
           
                
 ------------------------------------------------------------------
--- auxiliary parsers for expresssions
+-- auxiliary parsers for expressions
 -----------------------------------------------------------------
                
 identifierOrOperator : Parser Name
@@ -545,118 +553,14 @@ integer = Parser.chompWhile Char.isDigit
                                 Nothing -> problem "integer"
                                 Just n -> succeed n)
 
-
-             
--- self delimited patterns
 delimitedPattern : Parser Pattern
-delimitedPattern =
-    oneOf
-    [ backtrackable <|
-          succeed AsP
-           |= identifier
-           |. symbol "@"
-           |= lazy (\_ -> delimitedPattern)
-    , succeed (\id -> if id == "_" then DefaultP else VarP id)
-           |= identifier
-    , succeed BangP
-           |. symbol "!"
-           |= identifier
-    , succeed (\c -> ConsP c [])
-           |= upperIdentifier
-    , succeed NumberP
-           |= integer
-    , succeed CharP
-           |= charLiteral
-    , succeed stringPattern
-           |= stringLiteral
-    , succeed AST.listPattern
-         |= Parser.sequence
-            { start = "["
-            , end = "]"
-            , separator = ","
-            , spaces = spaces
-            , item = lazy (\_ -> infixPattern)
-            , trailing = Parser.Forbidden
-            }
-    , succeed identity
-        |. symbol "("
-        |= parensPattern
-        |. symbol ")"
-    ]
+delimitedPattern
+    = delimited |> andThen patternFromExpr
 
-
--- prefix constructor patterns
-consPattern : Parser Pattern
-consPattern =
-    oneOf
-    [ succeed ConsP
-        |= upperIdentifier
-        |. spaces
-        |= Parser.sequence
-           { start = ""
-           , end = ""
-           , separator = ""
-           , spaces = spaces
-           , item = lazy (\_ -> delimitedPattern)
-           , trailing = Parser.Forbidden
-           }
-    , delimitedPattern
-    ]
-
--- infix (:) patterns
-infixPattern : Parser Pattern
-infixPattern =
-    Parser.sequence
-    { start = ""
-    , end = ""
-    , separator = ":"
-    , spaces = spaces
-    , item  = lazy (\_ -> consPattern)
-    , trailing = Parser.Forbidden
-    } |> andThen makeInfixPattern
-
--- parenthesized patterns
-parensPattern : Parser Pattern
-parensPattern =
-    Parser.sequence
-    { start = ""
-    , end = ""
-    , separator = ","
-    , spaces = spaces
-    , item = lazy (\_ -> infixPattern)
-    , trailing = Parser.Forbidden
-    } |> andThen makeParensPattern
-                        
-
-{-
-  Construct an infix pattern
-  ---------------------------------------------------------------
-  From 
-   p1 : p2 : ... : pN
-   yields
-   ConsP ":" [p1, ConsP ":" [p2, ...  ConsP ":" [pN-1, pN]...]]
-   ----------------------------------------------------------------
--}
-    
-makeInfixPattern : List Pattern -> Parser Pattern
-makeInfixPattern l
-    = case List.unconsLast l of
-        Nothing ->
-            problem "expecting a pattern"
-        Just (p,ps) ->
-            succeed (List.foldr (\x y -> ConsP ":" [x,y]) p ps)
-
-
-stringPattern : String -> Pattern
-stringPattern 
-    = String.foldr (\x y -> ConsP ":" [CharP x,y]) (ConsP "[]" []) 
-
-
--- * check all pattern variables are distinct
-distinctPatterns : List Pattern -> Bool
-distinctPatterns ps
-    = List.allDifferent <| List.concatMap AST.patternVars ps
-
+pattern : Parser Pattern
+pattern
+    = topExpr |> andThen patternFromExpr
+                             
     
 -- top-level expressions
 topExprEnd : Parser Expr
@@ -669,8 +573,11 @@ topExprEnd
 topExpr : Parser Expr
 topExpr = infix0
 
+-- dummy operator for @-patterns
+infix10 = infixNonAssoc applicativeExpr [ ("@", BinaryOp "@") ]
+          
 -- we shouldn't really allow mixing infixl and infixr level 9 operators
-infix9r = infixRight applicativeExpr [ (".", \e1 e2 ->  App (App (Var ".") e1) e2) ]
+infix9r = infixRight infix10 [ (".", \e1 e2 ->  App (App (Var ".") e1) e2) ]
 infix9 = infixLeft infix9r [ ("!!", \e1 e2 -> App (App (Var "!!") e1) e2) ]
 infix7 = infixLeft infix9 [ ("*", BinaryOp "*") ]
 infix6 = infixLeft infix7  [ ("+", BinaryOp "+")
@@ -689,8 +596,10 @@ infix4 = infixNonAssoc infix5 [ ("==", BinaryOp "==")
 infix3 = infixRight infix4 [ ("&&", \e1 e2 -> App (App (Var "&&") e1) e2) ]
 infix2 = infixRight infix3 [ ("||", \e1 e2 -> App (App (Var "||") e1) e2) ]
 infix0 = infixRight infix2 [ ("$", \e1 e2 -> App (App (Var "$") e1) e2)
-                           , ("$!", \e1 e2 -> App (App (Var "$!") e1) e2) ]
+                           , ("$!", \e1 e2 -> App (App (Var "$!") e1) e2)
+                           ]
 
+           
 
 -- parse a given operator
 -- maximal munch of operator chars 
@@ -789,7 +698,7 @@ applicativeExpr
 delimited : Parser Expr
 delimited =
     oneOf
-    [ succeed Var
+    [ succeed Var  
           |= identifier
     , succeed Number
           |= integer
@@ -804,6 +713,10 @@ delimited =
           |. symbol "("
           |= infixOperator
           |. symbol ")"
+    , backtrackable <|
+        succeed (UnaryOp "!" << Var)
+           |. symbol "!"
+           |= identifier   
     , backtrackable <|
         succeed (App (Var "enumFrom"))
             |. symbol "["
@@ -840,11 +753,14 @@ delimited =
             |. spaces
             |= lazy (\_ -> topExpr)
             |. symbol "]"
-
     , literalTuple
     , literalList
     ]
 
+           
+             
+    
+    
 literalList : Parser Expr
 literalList
     = succeed AST.listLit
@@ -875,7 +791,7 @@ makeTuple args
           [] ->
               succeed (Cons True "()" [])
           [e] ->
-              succeed e   -- no singleton tuple
+              succeed e -- no singleton tuple
           [e1,e2] ->
               succeed (Cons False "," args)
           [e1,e2,e3] ->
@@ -883,26 +799,8 @@ makeTuple args
           [e1,e2,e3,e4] ->
               succeed (Cons False ",,," args)          
           _ ->
-              problem "tuple with maximum 4 elements"
+              problem "tuple with at most 4 elements"
 
-makeParensPattern : List Pattern -> Parser Pattern
-makeParensPattern args
-    = case args of
-          [] ->
-              succeed (ConsP "()" [])
-          [p] ->
-              succeed p  -- no singleton tuple
-          [p1,p2] ->
-              succeed (ConsP "," args)
-          [p1,p2,p3] ->
-              succeed (ConsP ",," args)
-          [p1,p2,p3,p4] ->
-              succeed (ConsP ",,," args)
-          _ ->
-              problem "tuple with maximum 4 elements"
-
-                  
-        
 -- build an application to a list of arguments
 makeApp : Expr -> List Expr -> Expr
 makeApp e0 args
@@ -925,7 +823,8 @@ prefixNeg
     = succeed (App (Var "negate"))
          |. symbol "-"
          |= delimited
-            
+
+           
              
 infixApp : Parser Expr
 infixApp
@@ -1020,7 +919,7 @@ caseAlt : Parser (Pattern, Expr, Info)
 caseAlt
     = getParseChomped <|
       succeed (\patt expr info -> (patt,expr, info))
-         |= infixPattern
+         |= lazy (\_ -> pattern)
          |. spaces   
          |. symbol "->"
          |. spaces
@@ -1233,4 +1132,43 @@ problemToString prob
           _ -> "?"
       
 
+-- check if an expression can be converted to a pattern               
+patternFromExpr : Expr -> Parser Pattern
+patternFromExpr expr
+    = case translatePattern expr of
+          Ok patt ->
+              if List.allDifferent (patternVars patt) then
+                  succeed patt
+              else
+                  problem "pattern variables must be distinct"
+          Err msg ->
+              problem msg
+               
+-- convert an expression into a pattern or fail
+translatePattern : Expr -> Result String Pattern
+translatePattern expr
+    = case expr of
+          Var x ->
+              Ok (if x == "_" then DefaultP else VarP x)
+          UnaryOp "!" (Var x) ->
+              Ok (BangP x)
+          Number n ->
+              Ok (NumberP n)
+          Char c ->
+              Ok (CharP c)
+          Cons _ c args ->
+              translatePatterns args |> Result.andThen (Ok << ConsP c)
+          BinaryOp "@" (Var id) e2 ->
+              translatePattern e2 |> Result.andThen (Ok << AsP id)
+          _ ->
+              Err ("invalid pattern: " ++ Shows.showExpr expr)
 
+translatePatterns : List Expr -> Result String (List Pattern)
+translatePatterns exprs
+    = case exprs of
+          [] ->
+              Ok []
+          (e::es) ->
+              translatePattern e
+                  |> Result.andThen (\p -> translatePatterns es
+                  |> Result.andThen (\ps -> Ok (p::ps)))

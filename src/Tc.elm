@@ -117,20 +117,6 @@ freshTypes n
       andThen (\vs -> pure (List.map TyVar vs))
       
      
-{-      
-freshTypes : Int -> Tc (List Type)
-freshTypes n
-    = if n<=0 then
-          pure []
-      else
-          freshType |> andThen (\v -> freshTypes (n-1) |>
-                                    andThen (\vs -> pure (v::vs)))
--}
-
-      
-
-
-
 -- create fresh instances of generic variables in a type
 freshInst : Type -> Tc Type
 freshInst ty

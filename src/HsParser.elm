@@ -64,7 +64,7 @@ checkBind bind
                       Ok ()
                   Nothing ->
                       Err ("equations for " ++ bind.name ++
-                               " to have equal number of arguments")
+                               " must have equal number of arguments")
           _ ->
               Ok ()
           
@@ -601,6 +601,7 @@ infix0 = infixRight infix2 [ ("$", \e1 e2 -> App (App (Var "$") e1) e2)
 
            
 
+        
 -- parse a given operator
 -- maximal munch of operator chars 
 operator : String -> Parser ()
@@ -613,6 +614,7 @@ operator s
                         else problem ("operator " ++ s)))
 
 
+
 type alias BinOp = Expr -> Expr -> Expr
     
 -- parse infix left associative operators
@@ -622,8 +624,8 @@ infixLeft operand table
     = succeed identity
          |= operand
          |. spaces
-      |> andThen (infixLeftCont operand table)
-
+        |> andThen (infixLeftCont operand table)
+         
 infixLeftCont : Parser Expr -> List (Name, BinOp) -> Expr -> Parser Expr     
 infixLeftCont operand table accum
     = oneOf
@@ -636,6 +638,7 @@ infixLeftCont operand table accum
                            |> andThen (infixLeftCont operand table)) table
           ++ [succeed accum]
 
+              
 -- parse infix right associative operators
 --
 infixRight : Parser Expr -> List (Name, BinOp) -> Parser Expr
@@ -643,7 +646,8 @@ infixRight operand table
     = succeed identity
          |= operand
          |. spaces
-      |> andThen (infixRightCont operand table)
+       |> andThen (infixRightCont operand table)
+
 
 infixRightCont : Parser Expr -> List (Name, BinOp) -> Expr -> Parser Expr
 infixRightCont operand table accum
@@ -677,9 +681,67 @@ infixNonAssoc operand table
            , succeed left
            ]))
            
-                              
+
+-- parethesised operators and sections          
+operatorSections : Parser Expr
+operatorSections  
+    = oneOf
+      [ backtrackable <|
+            succeed Var
+                |. symbol "("
+                |= infixOperator
+                |. symbol ")"
+      , backtrackable <|
+            succeed (\e1 op -> App (Var op) e1)
+                  |. symbol "("
+                  |= lazy (\_ -> application)
+                  |. spaces
+                  |= leftSection
+                  |. symbol ")"
+      , backtrackable <|
+          succeed (\op e2 -> App (App (Var "flip") (Var op)) e2)
+                  |. symbol "("                 
+                  |= rightSection 
+                  |. spaces
+                  |= lazy (\_ -> application)
+                  |. symbol ")"
+      ]
     
 
+-- left section operator 
+leftSection : Parser String
+leftSection
+    = oneOf
+      [ infixOperator
+      , infixFunction
+      ]
+
+
+rightSection : Parser String
+rightSection
+    = oneOf
+      [ rightOperator
+      , infixFunction
+      ]
+      
+    
+-- right section operator; disallow (- exp) as a section
+rightOperator : Parser String
+rightOperator
+    = Parser.chompWhile (\c -> c/='-' && AST.operatorChar c)
+    |> Parser.getChompedString
+    |> andThen (\s -> if String.isEmpty s
+                      then problem "operator"
+                      else succeed s)
+
+infixFunction : Parser String
+infixFunction
+    = succeed identity
+          |. symbol "`"
+          |= identifier
+          |. symbol "`"   
+                
+    
               
 
 applicativeExpr : Parser Expr
@@ -709,69 +771,66 @@ delimited =
     , succeed (\tag -> Cons True tag [])
           |= upperIdentifier
     , backtrackable <|
-        succeed Var
-          |. symbol "("
-          |= infixOperator
-          |. symbol ")"
-    , backtrackable <|
         succeed (UnaryOp "!" << Var)
            |. symbol "!"
-           |= identifier   
-    , backtrackable <|
-        succeed (App (Var "enumFrom"))
-            |. symbol "["
-            |= lazy (\_ -> topExpr)
-            |. symbol ".."
-            |. spaces
-            |. symbol "]"
-    , backtrackable <|
-        succeed (\e1 e2 -> makeApp (Var "enumFromThen") [e1,e2])
-            |. symbol "["
-            |= lazy (\_ -> topExpr)
-            |. symbol ","
-            |. spaces
-            |= lazy (\_ -> topExpr)
-            |. symbol ".."
-            |. spaces
-            |. symbol "]"
-    , backtrackable <|
-        succeed (\e1 e2 -> makeApp (Var "enumFromTo") [e1,e2])
-            |. symbol "["
-            |= lazy (\_ -> topExpr)
-            |. symbol ".."
-            |. spaces
-            |= lazy (\_ -> topExpr)
-            |. symbol "]"
-    , backtrackable <|
-        succeed (\e1 e2 e3 -> makeApp (Var "enumFromThenTo") [e1,e2,e3])
-            |. symbol "["
-            |= lazy (\_ -> topExpr)
-            |. symbol ","
-            |. spaces
-            |= lazy (\_ -> topExpr)
-            |. symbol ".."
-            |. spaces
-            |= lazy (\_ -> topExpr)
-            |. symbol "]"
+           |= identifier
+    , backtrackable operatorSections
+    , succeed identity
+             |. symbol "["
+             |= listLike
     , literalTuple
-    , literalList
     ]
 
-           
-             
+
+-- parser for "list-like" things (enumerations and literal lists)
+listLike :  Parser Expr
+listLike
+    = oneOf
+      [ backtrackable <|
+            succeed (App (Var "enumFrom"))
+               |= lazy (\_ -> topExpr)
+               |. symbol ".."
+               |. spaces
+               |. symbol "]"
+      , backtrackable <|
+          succeed (\e1 e2 -> makeApp (Var "enumFromThen") [e1,e2])
+               |= lazy (\_ -> topExpr)
+               |. symbol ","
+               |. spaces
+               |= lazy (\_ -> topExpr)
+               |. symbol ".."
+               |. spaces
+               |. symbol "]"
+      , backtrackable <|
+          succeed (\e1 e2 -> makeApp (Var "enumFromTo") [e1,e2])
+               |= lazy (\_ -> topExpr)
+               |. symbol ".."
+               |. spaces
+               |= lazy (\_ -> topExpr)
+               |. spaces
+               |. symbol "]"   
+      , backtrackable <|
+          succeed (\e1 e2 e3 -> makeApp (Var "enumFromThenTo") [e1,e2,e3])
+               |= lazy (\_ -> topExpr)
+               |. symbol ","
+               |. spaces
+               |= lazy (\_ -> topExpr)
+               |. symbol ".."
+               |. spaces
+               |= lazy (\_ -> topExpr)
+               |. spaces
+               |. symbol "]"
+      , succeed AST.listLit
+               |= Parser.sequence
+                  { start = ""
+                  , end = "]"
+                  , separator = ","
+                  , spaces = spaces
+                  , item = lazy (\_ -> topExpr)
+                  , trailing = Parser.Forbidden
+                  }
+     ]
     
-    
-literalList : Parser Expr
-literalList
-    = succeed AST.listLit
-         |= Parser.sequence
-            { start = "["
-            , end = "]"
-            , separator = ","
-            , spaces = spaces
-            , item = lazy (\_ -> topExpr)
-            , trailing = Parser.Forbidden
-            }
 
 literalTuple : Parser Expr
 literalTuple
@@ -782,8 +841,7 @@ literalTuple
       , spaces = spaces
       , item = lazy (\_ -> topExpr)
       , trailing = Parser.Forbidden
-      } |>
-    andThen makeTuple
+      } |> andThen makeTuple
 
 makeTuple : List Expr -> Parser Expr
 makeTuple args
@@ -831,9 +889,7 @@ infixApp
     = succeed (\e1 f e2 -> BinaryOp f e1 e2)
          |= application 
          |. spaces   
-         |. symbol "`"
-         |= identifier
-         |. symbol "`"
+         |= infixFunction
          |. spaces   
          |= application 
              

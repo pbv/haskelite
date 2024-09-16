@@ -24,8 +24,8 @@ type alias Info
 type Expr 
     = App Expr Expr
     | Lam Int (Maybe Name) Matching
-      -- the integer field is the matching arity
-      -- the maybe field is `Just name` if the lambda was defined through a binding;
+      -- the integer field is the matching arity the maybe field is
+      -- `Just name` if the lambda was defined through a binding;
       -- otherwise it is Nothing
     | Let (List Bind) Expr              -- local bindings; can be recursive
     | Case Expr (List (Pattern, Expr, Info))

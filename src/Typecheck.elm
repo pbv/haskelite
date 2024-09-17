@@ -359,6 +359,9 @@ tcExpr kenv tenv expr
           Exception _ ->
               Tc.freshType                 -- error admits any type
 
+          ListComp _ _ ->
+              fail "list comprehensions are not (yet) supported!"
+
 
 
 extend : Name -> Type -> TyEnv -> TyEnv

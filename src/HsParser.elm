@@ -606,12 +606,12 @@ infix0 = infixRight infix2 [ ("$", \e1 e2 -> App (App (Var "$") e1) e2)
 -- maximal munch of operator chars 
 operator : String -> Parser ()
 operator s
-    = backtrackable 
+    = backtrackable
       (Parser.chompWhile AST.operatorChar
-      |> Parser.getChompedString
-      |> andThen (\r -> if s==r
-                        then succeed ()
-                        else problem ("operator " ++ s)))
+        |> Parser.getChompedString
+        |> andThen (\r -> if s==r
+                          then succeed ()
+                          else problem ("operator " ++ s)))
 
 
 
@@ -685,27 +685,26 @@ infixNonAssoc operand table
 -- parethesised operators and sections          
 operatorSections : Parser Expr
 operatorSections  
-    = oneOf
-      [ backtrackable <|
-            succeed Var
-                |. symbol "("
-                |= infixOperator
-                |. symbol ")"
-      , backtrackable <|
-            succeed (\e1 op -> App (Var op) e1)
-                  |. symbol "("
+    = succeed identity
+        |. symbol "("
+        |= oneOf
+           [ backtrackable <|
+                 succeed Var
+                   |= infixOperator
+                   |. symbol ")"
+           , backtrackable <|
+                 succeed (\e1 op -> App (Var op) e1)
                   |= lazy (\_ -> application)
                   |. spaces
                   |= leftSection
                   |. symbol ")"
-      , backtrackable <|
-          succeed (\op e2 -> App (App (Var "flip") (Var op)) e2)
-                  |. symbol "("                 
+           , backtrackable <|
+               succeed (\op e2 -> App (App (Var "flip") (Var op)) e2)
                   |= rightSection 
                   |. spaces
                   |= lazy (\_ -> application)
                   |. symbol ")"
-      ]
+           ]
     
 
 -- left section operator 
@@ -775,62 +774,96 @@ delimited =
            |. symbol "!"
            |= identifier
     , backtrackable operatorSections
-    , succeed identity
-             |. symbol "["
-             |= listLike
+    , listLike
     , literalTuple
     ]
 
 
--- parser for "list-like" things (enumerations and literal lists)
+-- parser for "list-like" things
+-- enumerations, list comprehensions and literal lists
 listLike :  Parser Expr
 listLike
+    = succeed identity
+             |. symbol "["
+             |= oneOf
+                [ backtrackable <|
+                      succeed (App (Var "enumFrom"))
+                       |= lazy (\_ -> topExpr)
+                       |. symbol ".."
+                       |. spaces
+                       |. symbol "]"
+                , backtrackable <|
+                    succeed (\e1 e2 -> makeApp (Var "enumFromThen") [e1,e2])
+                       |= lazy (\_ -> topExpr)
+                       |. symbol ","
+                       |. spaces
+                       |= lazy (\_ -> topExpr)
+                       |. symbol ".."
+                       |. spaces
+                       |. symbol "]"
+                , backtrackable <|
+                    succeed (\e1 e2 -> makeApp (Var "enumFromTo") [e1,e2])
+                       |= lazy (\_ -> topExpr)
+                       |. symbol ".."
+                       |. spaces
+                       |= lazy (\_ -> topExpr)
+                       |. spaces
+                       |. symbol "]"   
+                , backtrackable <|
+                    succeed (\e1 e2 e3 -> makeApp (Var "enumFromThenTo") [e1,e2,e3])
+                       |= lazy (\_ -> topExpr)
+                       |. symbol ","
+                       |. spaces
+                       |= lazy (\_ -> topExpr)
+                       |. symbol ".."
+                       |. spaces
+                       |= lazy (\_ -> topExpr)
+                       |. spaces
+                       |. symbol "]"
+                , backtrackable listComp
+                , succeed AST.listLit
+                       |= Parser.sequence
+                          { start = ""
+                          , end = "]"
+                          , separator = ","
+                          , spaces = spaces
+                          , item = lazy (\_ -> topExpr)
+                          , trailing = Parser.Forbidden
+                          }
+                ]
+
+-- parser for list comprehensions
+listComp : Parser Expr
+listComp
+    = succeed ListComp
+          |. spaces    
+          |= lazy (\_ -> topExpr)
+          |. spaces
+          |= Parser.sequence
+             { start = "|"
+             , spaces = spaces
+             , separator = ","
+             , end = "]"
+             , item = listQual
+             , trailing = Parser.Forbidden
+             }
+
+listQual : Parser ListQual
+listQual            
     = oneOf
       [ backtrackable <|
-            succeed (App (Var "enumFrom"))
-               |= lazy (\_ -> topExpr)
-               |. symbol ".."
+            succeed QGen
+               |= lazy (\_ -> pattern)
                |. spaces
-               |. symbol "]"
-      , backtrackable <|
-          succeed (\e1 e2 -> makeApp (Var "enumFromThen") [e1,e2])
+               |. symbol "<-"
+               |. spaces   
                |= lazy (\_ -> topExpr)
-               |. symbol ","
-               |. spaces
+      , succeed QGuard
                |= lazy (\_ -> topExpr)
-               |. symbol ".."
-               |. spaces
-               |. symbol "]"
-      , backtrackable <|
-          succeed (\e1 e2 -> makeApp (Var "enumFromTo") [e1,e2])
-               |= lazy (\_ -> topExpr)
-               |. symbol ".."
-               |. spaces
-               |= lazy (\_ -> topExpr)
-               |. spaces
-               |. symbol "]"   
-      , backtrackable <|
-          succeed (\e1 e2 e3 -> makeApp (Var "enumFromThenTo") [e1,e2,e3])
-               |= lazy (\_ -> topExpr)
-               |. symbol ","
-               |. spaces
-               |= lazy (\_ -> topExpr)
-               |. symbol ".."
-               |. spaces
-               |= lazy (\_ -> topExpr)
-               |. spaces
-               |. symbol "]"
-      , succeed AST.listLit
-               |= Parser.sequence
-                  { start = ""
-                  , end = "]"
-                  , separator = ","
-                  , spaces = spaces
-                  , item = lazy (\_ -> topExpr)
-                  , trailing = Parser.Forbidden
-                  }
-     ]
-    
+      ]
+            
+
+               
 
 literalTuple : Parser Expr
 literalTuple

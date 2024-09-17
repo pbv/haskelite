@@ -2,16 +2,19 @@
   Pretty-printer for Haskelite expressions, types and machine configurations
   Pedro Vasconcelos 2021--24
 -}
-module PrettyPrinter exposing (prettyExpr, prettyPattern, prettyType, prettyConfStep)
+module PrettyPrinter exposing
+    (prettyExpr, prettyPattern, prettyType, prettyConfStep)
 
-import AST exposing (Expr(..), Matching(..), Info, Bind, Pattern(..), Name)
+import AST exposing
+    (Expr(..), Matching(..), Info, Bind, Pattern(..), ListQual, Name)
 import Types exposing (Type(..))
 import Machine.Types exposing (..)
 import Machine.Heap exposing (Heap)
 import Machine.Heap as Heap
-import Pretty exposing (Doc, string, taggedString, char, space, join,
-                        parens, brackets, a, words, 
-                        nest, indent, align, hang, group)
+import Pretty exposing
+    (Doc, string, taggedString, char, space, join,
+         parens, brackets, a, words, 
+         nest, indent, align, hang, group)
 import Pretty.Renderer exposing (Renderer)
 
 import Html exposing (Html, Attribute)
@@ -291,7 +294,29 @@ ppExpr ctx e =
         AST.Exception msg ->
             taggedString ("exception: " ++ msg) Exception
 
+        AST.ListComp e1 quals ->
+            ppListComp ctx e1 quals
 
+
+ppListComp : PrettyCtx -> Expr -> List ListQual -> Doc Tag
+ppListComp ctx e1 quals
+    = brackets <|
+         (ppExpr {ctx|prec=0} e1
+         |> a space
+         |> a (string  "|")
+         |> a space
+         |> a (join (string ", ") (List.map (ppQual {ctx|prec=0}) quals)))
+
+ppQual : PrettyCtx -> ListQual -> Doc Tag
+ppQual ctx qual
+    = case qual of
+          AST.QGen pat expr ->
+              ppPattern pat
+                  |> a (string "<-")
+                  |> a (ppExpr {ctx|prec=0} expr)
+          AST.QGuard expr ->
+              ppExpr {ctx|prec=0} expr
+      
 ppCons : PrettyCtx -> String -> List Expr -> Doc Tag
 ppCons ctx cons args
     = case args of

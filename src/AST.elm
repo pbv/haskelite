@@ -39,6 +39,13 @@ type Expr
     | UnaryOp Name Expr                  -- unary primitive operations
     | IfThenElse Expr Expr Expr
     | Exception String                   -- runtime errors
+      -- list comprehensions
+    | ListComp Expr (List ListQual)
+
+-- qualifiers      
+type ListQual
+    = QGen Pattern Expr          -- generators
+    | QGuard Expr                -- boolean guards
 
       
 -- * matchings
@@ -148,6 +155,8 @@ applySubst s e
               e
           Exception _ ->
               e
+          ListComp _ _ ->
+              e   -- TODO: FIXME
 
                   
 applyMatchSubst : Subst -> Matching -> Matching

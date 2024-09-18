@@ -318,14 +318,14 @@ makeLHS expr
                   Err msg ->
                       problem msg
           _ ->
-              problem ("left-hand side of equation: " ++ Shows.showExpr expr)
+              problem "left side of equation; pattern bindings are not supported"
 
 checkLHS : (Name, List Pattern) -> Parser (Name, List Pattern)
 checkLHS (fun, patts)
-    = if List.allDifferent (List.concatMap patternVars patts) then
+    = if List.allDifferent (fun :: List.concatMap patternVars patts) then
           succeed (fun, patts)
       else
-          problem "pattern variables must be distinct"
+          problem "distinct pattern variables"
 
 -- unwind a sequence of binary applications
 unwind : Expr -> (Expr, List Expr)

@@ -360,7 +360,7 @@ tcExpr kenv tenv expr
               Tc.freshType                 -- error admits any type
 
           ListComp _ _ ->
-              fail "list comprehensions are not (yet) supported!"
+              fail "list comprehensions are not supported"
 
 
 

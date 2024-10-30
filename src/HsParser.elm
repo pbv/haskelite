@@ -4,21 +4,23 @@
 -}
 module HsParser exposing (..)
 
-import Parser exposing (Parser,
+import Parser exposing (Parser, 
                         (|.), (|=),
-                        symbol, keyword, variable,
-                        succeed, problem, oneOf, andThen,
+                        token, symbol, keyword, variable,
+                        succeed, problem, oneOf, andThen, commit,
                         backtrackable, lazy)
 import Parser.Workaround 
 import Indent 
 import AST exposing (..)
 import Types exposing (..)
 import Shows
-import Char
 import Set exposing (Set)
 import Dict exposing (Dict)
 import List.Extra as List
 
+
+notImplemented : String -> String -> Expr
+notImplemented msg src =  Unimplemented <| AST.notImplemented msg src
 
 parseModule : String -> Result String Module
 parseModule input
@@ -318,7 +320,7 @@ makeLHS expr
                   Err msg ->
                       problem msg
           _ ->
-              problem "left side of equation; pattern bindings are not supported"
+              problem "pattern bindings are not supported"
 
 checkLHS : (Name, List Pattern) -> Parser (Name, List Pattern)
 checkLHS (fun, patts)
@@ -546,13 +548,48 @@ infixOperator
                       then problem "operator"
                       else succeed s)
 
-integer : Parser Int
-integer = Parser.chompWhile Char.isDigit
-          |> Parser.getChompedString
-          |> andThen (\s -> case String.toInt s of
-                                Nothing -> problem "integer"
-                                Just n -> succeed n)
 
+-- one or more decimal digits
+manyDigits1 : Parser String
+manyDigits1
+    = (Parser.chompIf Char.isDigit |. Parser.chompWhile Char.isDigit)
+      |> Parser.getChompedString
+
+
+
+floatLiteral : Parser String
+floatLiteral = succeed (\n f -> n ++ "." ++ f) 
+                   |= manyDigits1
+                   |. symbol "."
+                   |= manyDigits1   
+         
+intLiteral : Parser Int
+intLiteral = manyDigits1 |> andThen
+             (\prefix ->
+                  case String.toInt prefix of
+                      Just n -> succeed n
+                      Nothing -> problem "integer literal")
+
+{-         
+number : Parser (Result NotImplemented Int)
+number = manyDigits1 |> andThen
+         (\prefix ->
+              oneOf
+              [ succeed (\suffix -> Err (AST.notImplemented (prefix++suffix) "floats are not supported"))
+                        |= backtrackable floatSuffix
+              , case String.toInt prefix of
+                    Just n -> succeed (Ok n)
+                    Nothing -> problem "integer literal"
+              ])
+floatSuffix : Parser String
+floatSuffix = succeed (String.cons '.')
+                  |. symbol "."
+                  |= manyDigits1
+-}
+
+
+
+              
 delimitedPattern : Parser Pattern
 delimitedPattern
     = delimited |> andThen patternFromExpr
@@ -579,7 +616,7 @@ infix10 = infixNonAssoc applicativeExpr [ ("@", BinaryOp "@") ]
 -- we shouldn't really allow mixing infixl and infixr level 9 operators
 infix9r = infixRight infix10 [ (".", \e1 e2 ->  App (App (Var ".") e1) e2) ]
 infix9 = infixLeft infix9r [ ("!!", \e1 e2 -> App (App (Var "!!") e1) e2) ]
-infix7 = infixLeft infix9 [ ("*", BinaryOp "*") ]
+infix7 = infixLeft infix9 [ ("*", BinaryOp "*"), ("/", BinaryOp "/") ]
 infix6 = infixLeft infix7  [ ("+", BinaryOp "+")
                             , ("-", BinaryOp "-") ]
 infix5 = infixRight infix6 [ (":", \e1 e2 -> Cons False ":" [e1,e2])
@@ -754,15 +791,17 @@ applicativeExpr
                   application ]
 
 
--- self-delimited expressions
+-- delimited expressions
 --
 delimited : Parser Expr
 delimited =
     oneOf
     [ succeed Var  
           |= identifier
+    , succeed (notImplemented "floats are not implemented")
+           |= backtrackable floatLiteral
     , succeed Number
-          |= integer
+          |= intLiteral
     , succeed Char
           |= charLiteral
     , succeed stringToList
@@ -771,7 +810,7 @@ delimited =
           |= upperIdentifier
     , backtrackable <|
         succeed (UnaryOp "!" << Var)
-           |. symbol "!"
+           |. token "!"
            |= identifier
     , backtrackable operatorSections
     , listLike
@@ -820,7 +859,9 @@ listLike
                        |= lazy (\_ -> topExpr)
                        |. spaces
                        |. symbol "]"
-                , backtrackable listComp
+                , succeed (\(_, src) ->
+                               notImplemented "list comprehensions are not supported" ("[" ++ src))
+                       |= backtrackable (getParseChomped_ listComp)
                 , succeed AST.listLit
                        |= Parser.sequence
                           { start = ""
@@ -832,14 +873,15 @@ listLike
                           }
                 ]
 
--- parser for list comprehensions
-listComp : Parser Expr
+-- parser for list comprehensions;
+-- just for reporting better error messages
+listComp : Parser ()
 listComp
-    = succeed ListComp
+    = succeed ()
           |. spaces    
-          |= lazy (\_ -> topExpr)
+          |. lazy (\_ -> topExpr)
           |. spaces
-          |= Parser.sequence
+          |. Parser.sequence
              { start = "|"
              , spaces = spaces
              , separator = ","
@@ -848,18 +890,18 @@ listComp
              , trailing = Parser.Forbidden
              }
 
-listQual : Parser ListQual
+listQual : Parser ()
 listQual            
     = oneOf
       [ backtrackable <|
-            succeed QGen
-               |= lazy (\_ -> pattern)
+            succeed ()
+               |. lazy (\_ -> pattern)
                |. spaces
                |. symbol "<-"
                |. spaces   
-               |= lazy (\_ -> topExpr)
-      , succeed QGuard
-               |= lazy (\_ -> topExpr)
+               |. lazy (\_ -> topExpr)
+      , succeed ()
+               |. lazy (\_ -> topExpr)
       ]
             
 
@@ -1076,10 +1118,11 @@ upperIdentifier
 charLiteral : Parser Char
 charLiteral 
     = succeed identity
-        |. Parser.chompIf (\c -> c == '\'')
+        |. token "'" -- Parser.chompIf (\c -> c == '\'')
         |= character '\''
-        |. Parser.chompIf (\c -> c == '\'')
-         
+        |. token "'" -- Parser.chompIf (\c -> c == '\'')
+
+           
 stringLiteral : Parser String
 stringLiteral 
     = succeed String.fromList
@@ -1096,7 +1139,7 @@ stringLiteral
 character : Char -> Parser Char
 character delimiter
     = oneOf [ succeed identity
-                  |. Parser.chompIf (\c -> c=='\\')
+                  |. token "\\" -- Parser.chompIf (\c -> c=='\\')
                   |= escapeChar
             , getChompedChar (Parser.chompIf (\c -> c/=delimiter))
             ]
@@ -1104,13 +1147,13 @@ character delimiter
 escapeChar : Parser Char
 escapeChar
     = oneOf [ succeed '\n'
-                  |. Parser.chompIf (\c -> c == 'n')
+                  |. token "n" -- Parser.chompIf (\c -> c == 'n')
             , succeed '\t'
-                  |. Parser.chompIf (\c -> c == 't')
+                  |. token "t" -- Parser.chompIf (\c -> c == 't')
             , getChompedChar
                   (Parser.chompIf (\c -> c == '\\' || c=='\'' || c=='\"'))
             , succeed Char.fromCode
-                  |= integer
+                  |= Parser.int
             ]
       
 getChompedChar : Parser a -> Parser Char
@@ -1198,27 +1241,44 @@ deadEndsToString deadEnds
                                             a.col==b.col) deadEnds
       in
           String.join "; " <|
-          List.map (\(a,r) ->
-                        "line " ++ String.fromInt a.row  ++ "," ++
-                        "col " ++ String.fromInt a.col ++ ": " ++
-                        "expecting " ++                        
-                        (String.join ", " <|
-                             Set.toList <|
-                             Set.fromList <|
-                             List.map (\d -> problemToString d.problem) (a::r))
+          List.map (\(first,rest) ->
+                        let probs = List.map .problem (first::rest)
+                        in 
+                            "line " ++ String.fromInt first.row  ++ "," ++
+                            "col " ++ String.fromInt first.col ++ ", " ++
+                            "expecting: " ++
+                                String.join ", "
+                                    (Set.toList <| Set.fromList <|
+                                         List.filterMap problemToString probs)
                    ) groups
-      
-problemToString : Parser.Problem -> String
+              
+problemToString : Parser.Problem -> Maybe String
 problemToString prob
     = case prob of
-          Parser.Expecting s -> s
-          Parser.ExpectingInt -> "integer"
-          Parser.ExpectingVariable -> "variable"
-          Parser.ExpectingSymbol s -> s
-          Parser.ExpectingKeyword s -> s
-          Parser.ExpectingEnd -> "end of input"
-          Parser.Problem s -> s
-          _ -> "?"
+          Parser.Expecting s -> Just (quote s)
+          Parser.ExpectingSymbol s ->
+              if s == "!" then Nothing else Just (quote s)
+          Parser.ExpectingKeyword s ->  Just s
+          Parser.ExpectingInt -> Just "integer"
+          Parser.ExpectingHex -> Just "hexadecimal"
+          Parser.ExpectingOctal -> Just "octal"
+          Parser.ExpectingBinary -> Just "binary"
+          Parser.ExpectingFloat -> Just "float"
+          Parser.ExpectingNumber -> Just "number"
+          Parser.ExpectingVariable -> Just "variable"
+          Parser.ExpectingEnd -> Just "end of input"
+          Parser.Problem s ->  Just s
+          Parser.UnexpectedChar -> Just "character"
+          _ -> Nothing
+
+quote : String -> String
+quote = String.replace "," "comma" >>
+        String.replace "\'" "character literal" >>
+        String.replace "\"" "string literal" >>
+        String.replace "\\" "lambda expression" >>
+        String.replace "[" "list" >>
+        String.replace "]" "end of list"
+          
       
 
 -- check if an expression can be converted to a pattern               

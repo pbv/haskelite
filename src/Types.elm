@@ -4,7 +4,7 @@
 -}
 
 module Types exposing (Type(..), Kind(..), Tycon, Tyvar, TySubst,
-                       tyBool, tyInt, tyChar, tyOrdering, tyList,
+                       tyBool, tyInt, tyFloat, tyChar, tyOrdering, tyList,
                        tyUnit, tyPair, tyTuple3, tyTuple4, tyString, tyConst,
                        applyTySubst, generalize, freeTyVars, genVars)
 
@@ -39,6 +39,9 @@ tyBool = TyConst "Bool" []
 tyInt : Type         
 tyInt = TyConst "Int" []
 
+tyFloat : Type
+tyFloat = TyConst "Float" []
+        
 tyChar : Type
 tyChar = TyConst "Char" []
 

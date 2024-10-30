@@ -6,7 +6,7 @@ module PrettyPrinter exposing
     (prettyExpr, prettyPattern, prettyType, prettyConfStep)
 
 import AST exposing
-    (Expr(..), Matching(..), Info, Bind, Pattern(..), ListQual, Name)
+    (Expr(..), Matching(..), Info, Bind, Pattern(..), Name)
 import Types exposing (Type(..))
 import Machine.Types exposing (..)
 import Machine.Heap exposing (Heap)
@@ -180,7 +180,6 @@ ppExpr ctx e =
         Number n ->
             parensIf (ctx.prec>0 && n<0) <|
                 taggedString (String.fromInt n) Literal
-
         Char c ->
             taggedString (prettyChar c) String
 
@@ -294,10 +293,10 @@ ppExpr ctx e =
         AST.Exception msg ->
             taggedString ("exception: " ++ msg) Exception
 
-        AST.ListComp e1 quals ->
-            ppListComp ctx e1 quals
+        AST.Unimplemented na ->
+            string na.source
 
-
+{-
 ppListComp : PrettyCtx -> Expr -> List ListQual -> Doc Tag
 ppListComp ctx e1 quals
     = brackets <|
@@ -316,7 +315,8 @@ ppQual ctx qual
                   |> a (ppExpr {ctx|prec=0} expr)
           AST.QGuard expr ->
               ppExpr {ctx|prec=0} expr
-      
+-}
+
 ppCons : PrettyCtx -> String -> List Expr -> Doc Tag
 ppCons ctx cons args
     = case args of

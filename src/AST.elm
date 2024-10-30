@@ -39,15 +39,14 @@ type Expr
     | UnaryOp Name Expr                  -- unary primitive operations
     | IfThenElse Expr Expr Expr
     | Exception String                   -- runtime errors
-      -- list comprehensions
-    | ListComp Expr (List ListQual)
+    | Unimplemented NotImplemented       -- unimplemented language feature
 
--- qualifiers      
-type ListQual
-    = QGen Pattern Expr          -- generators
-    | QGuard Expr                -- boolean guards
+type alias NotImplemented = { source : String, message : String }
 
+notImplemented : String -> String -> NotImplemented
+notImplemented msg src = {source=src, message=msg}
       
+    
 -- * matchings
 type Matching 
     = Return Expr (Maybe Info)      -- matching succeeded
@@ -155,8 +154,8 @@ applySubst s e
               e
           Exception _ ->
               e
-          ListComp _ _ ->
-              e   -- TODO: FIXME
+          Unimplemented _ ->
+              e
 
                   
 applyMatchSubst : Subst -> Matching -> Matching
@@ -284,7 +283,7 @@ operatorChar c =
      c=='+' || c=='*' || c=='-' || c=='>' || c=='<' ||
      c==':' || c=='=' || c=='&' || c=='|' || c=='.' ||
      c=='/' || c=='!' || c=='^' || c=='$' || c=='!' ||
-     c == '@'
+     c=='@'
 
 -- AST constructors
 trueCons : Expr

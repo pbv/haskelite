@@ -359,10 +359,12 @@ tcExpr kenv tenv expr
           Exception _ ->
               Tc.freshType                 -- error admits any type
 
-          ListComp _ _ ->
-              fail "list comprehensions are not supported"
+          Unimplemented msg ->
+              unimplemented msg
 
-
+unimplemented : AST.NotImplemented -> Tc a
+unimplemented na = fail na.message
+                             
 
 extend : Name -> Type -> TyEnv -> TyEnv
 extend v t tenv
@@ -651,6 +653,7 @@ getDataTypes ddecl
 initialKindEnv : KindEnv
 initialKindEnv
     = Dict.fromList [ ("Int", KindStar)
+                    , ("Float", KindStar)
                     ,  ("Char", KindStar)
                     ,  ("()", KindStar)
                     ,  ("(,)", kindArgs 2)
@@ -668,6 +671,7 @@ initialTypeEnv : TyEnv
 initialTypeEnv
     = let
         intOp = TyFun tyInt (TyFun tyInt tyInt)
+        floatOp = TyFun tyFloat (TyFun tyFloat tyFloat)
         -- NB: no typeclasses so these types are overly polymorphic!
         a = TyGen 0
         b = TyGen 1
@@ -679,6 +683,7 @@ initialTypeEnv
       Dict.fromList
       [ ("+", intOp)
       , ("*", intOp)
+      , ("/", floatOp)
       , ("-", intOp)
       , ("mod", intOp)
       , ("div", intOp)

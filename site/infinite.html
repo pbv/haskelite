@@ -26,7 +26,7 @@
 	  "-- Sum all squares less than n.\n"+
 	  "-- Note that we need takeWhile above to ensure termination;\n"+
 	  "-- try to replace takeWhile with filter and see what happens.\n"+
-	  "sumSquares n = sum (takeWhile (\\x->x<n) (map square [1..]))\n\n"+
+	  "sumSquares n = sum (takeWhile (<n) (map square [1..]))\n\n"+
 	  "-- auxiliary function to compute the square of a number\n"+
 	  "square x = x*x\n";
       var app = Elm.Haskelite.init({

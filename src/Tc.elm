@@ -1,11 +1,11 @@
 {-
   A monad for type checking and inference
-  A combination of state (fresh variable generation and  current unifier)
+  A combination of state (fresh variable generation and current unifier)
   and failure (type errors).
 
-  Pedro Vasconcelos, 2022-23
+  Pedro Vasconcelos, 2022-24
 -}
-module Tc exposing (Tc, run, eval, pure, fail, explain, andThen,
+module Tc exposing (Tc, run, eval, pure, fail, context, andThen,
                     get, put, modify, traverse, traverse_, simplify,
                     freshType, freshTypes, freshVar, freshVars, freshInst, unify)
 
@@ -16,20 +16,34 @@ import State exposing (State)
 import Unify
 
 type Tc a
-    = Tc (State TcState (Result String a))
+    = Tc (State TcState (Result Error a))
 
 type alias TcState
     = { varcount : Int          -- current fresh variable counter
       , unifier : TySubst       -- current most general unifier
       }
+
+-- an error with a possible context
+type alias Error = { context : List String
+                   , reason : String
+                   }
+
+
+errorToString : Error -> String
+errorToString err
+    = if List.isEmpty err.context then
+          err.reason
+      else
+          String.join ", " err.context ++ ": " ++ err.reason
       
-fromTc : Tc a -> State TcState (Result String a)
+fromTc : Tc a -> State TcState (Result Error a)
 fromTc (Tc m)
     = m
 
 run : TcState -> Tc a -> (Result String a, TcState)
 run s m
-    = State.run s (fromTc m) 
+    = case State.run s (fromTc m) of
+          (r, st) -> (Result.mapError errorToString r, st)
 
 eval : Tc a -> Result String a
 eval m
@@ -51,15 +65,15 @@ andThen f m
                  Err err -> State.state (Err err)
       ) (fromTc m))
 
-
+-- fail with an error message
 fail : String -> Tc a
-fail e
-    = Tc (State.state <| Err e)
+fail msg
+    = Tc (State.state <| Err { context=[], reason=msg })
 
--- add an explaining string to errors
-explain : String -> Tc a -> Tc a
-explain mesg action
-    = Tc <| State.map (Result.mapError (\s ->  mesg ++ s)) (fromTc action)
+-- add a context to errors
+context : String -> Tc a -> Tc a
+context msg action
+    = Tc <| State.map (Result.mapError (\err -> { err | context = msg::err.context })) (fromTc action)
           
          
 get : Tc TcState

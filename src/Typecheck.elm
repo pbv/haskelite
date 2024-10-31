@@ -10,7 +10,7 @@ import Set exposing (Set)
 import Set
 import AST exposing (..)
 import Types exposing (..)
-import Tc exposing (Tc, pure, andThen, traverse, traverse_, explain, fail)
+import Tc exposing (Tc, pure, andThen, traverse, traverse_, context, fail)
 import Shows 
 
 -- * type environments for term variables and term constructors  
@@ -83,7 +83,7 @@ tcDataDecl : KindEnv -> TyEnv -> DataDecl -> Tc TyEnv
 tcDataDecl kenv tyenv ddecl
     = let kenv1 = extendKindEnv kenv <| List.map (\v -> (v,KindStar)) ddecl.args
       in
-          explain ("declaration for " ++ Shows.quote ddecl.tycon ++ ", ") <|
+          context ("declaration of type " ++ Shows.quote ddecl.tycon) <|
             (wellformedAlternatives kenv1 ddecl.alternatives |>
              andThen (\_ -> pure (extendDataDecl ddecl tyenv)))
 
@@ -101,7 +101,7 @@ wellformedSignature kenv bind
                   tvs = Types.freeTyVars typ
                   kenv1 = extendKindEnv kenv <| List.map (\v -> (v,KindStar)) tvs
               in 
-                  explain ("type signature for "++ bind.name ++ ", ")
+                  context ("type signature for "++ bind.name)
                       (wellformedType kenv1 typ)
           Nothing ->
               pure ()
@@ -111,7 +111,7 @@ wellformedSignature kenv bind
 wellformedAlternatives : KindEnv -> List (Tag, Type) -> Tc ()
 wellformedAlternatives kenv alts
     = traverse_ (\(cons, typ) ->
-                     explain ("in constructor " ++ Shows.quote cons ++ ", ")
+                     context ("constructor " ++ Shows.quote cons)
                                    (wellformedType kenv typ)) alts
  
 
@@ -133,7 +133,7 @@ wellformedType kenv ty
               case Dict.get c kenv of
                   Just kind ->
                       wellformedTypes kenv ts |>
-                      andThen (\_ -> explain ("in type constructor " ++ Shows.quote c ++ ": ")
+                      andThen (\_ -> context ("type constructor " ++ Shows.quote c)
                                      (wellformedApp kind ts))
                   Nothing ->
                       fail ("unknown type constructor " ++ Shows.quote c)
@@ -183,8 +183,7 @@ wellformedAliasDecl kenv tyalias adecl
     = let
         kenv1 = extendKindEnv kenv <| List.map (\v->(v,KindStar)) adecl.args
       in
-        explain ("in declaration for type synonym " ++
-                     Shows.quote adecl.tycon ++ ": ") 
+        context ("declaration of type synonym " ++ Shows.quote adecl.tycon) 
             (expand tyalias adecl.tyexp |>
              andThen (\_ -> wellformedType kenv1 adecl.tyexp))
 
@@ -200,7 +199,7 @@ tcExpandDataDecls tyalias ddecls
 
 tcExpandDataDecl : TyAliases -> DataDecl -> Tc DataDecl
 tcExpandDataDecl tyalias ddecl
-    = explain ("in declaration for " ++ Shows.quote ddecl.tycon ++ ", ") <|
+    = context ("declaration for type " ++ Shows.quote ddecl.tycon) <|
       (traverse (\(tag, ty) -> expand tyalias ty |> andThen (\ty1 -> pure (tag,ty1))) ddecl.alternatives |>
       andThen (\alts -> pure {ddecl | alternatives=alts}))
 
@@ -260,7 +259,7 @@ expandRec tyalias acc ty
                       Result.andThen (\ts1 -> Ok (TyConst c ts1))
                   Just (vs, ty1) ->
                       if List.member c acc then
-                          Err ("cycle in type synonym declaration: " ++
+                          Err ("cyclic definition " ++
                                    showCycle (c::acc))
                       else
                           if List.length vs /= List.length ts then 
@@ -290,10 +289,10 @@ expandList tyalias acc ts
 -- typechecking expressions             
 -----------------------------------------------------------------------          
              
--- wrapper function that documents the expression being typechecked             
+-- wrapper function that documents the expression being typechecked
 tcExprWrap : KindEnv -> TyEnv -> Expr -> Tc Type
 tcExprWrap kenv tenv expr
-    = explain ("in expression " ++ Shows.showExpr expr ++ ": ") <|
+    = context ("expression " ++ Shows.showExpr expr) <|
       tcExpr kenv tenv expr
 
              
@@ -392,9 +391,8 @@ tcMatching : KindEnv -> TyEnv -> Matching -> Type -> Tc ()
 tcMatching kenv tenv match ty
     = case match of
           Return expr _ ->
-              explain ("in expression " ++ Shows.showExpr expr ++ ": ")
-              (tcExpr kenv tenv expr |>
-               andThen (unify ty))
+               context ("expression " ++ Shows.showExpr expr)
+               (tcExpr kenv tenv expr |> andThen (unify ty))
                   
           Fail ->
               pure ()
@@ -444,8 +442,8 @@ tcPattern tenv patt ty
               case Dict.get tag tenv of
                   Just tyc ->
                       Tc.freshInst tyc |>
-                      andThen (\tyc1 -> explain ("in pattern " ++
-                                                     Shows.showPattern patt ++ ": ")
+                      andThen (\tyc1 -> context ("pattern " ++
+                                                     Shows.showPattern patt)
                                           <| tcConsArgs tenv args tyc1 ty)
                   Nothing ->
                       Tc.fail ("unknown constructor " ++ Shows.quote tag)
@@ -541,7 +539,7 @@ tcRecAlts kenv tyenv lst
           [] ->
               pure ()
           ((bind,ty) :: rest) ->
-              (explain ("definition of " ++ bind.name ++ ": ") <|
+              (context ("definition of " ++ bind.name) <|
                (tcExpr kenv tyenv bind.expr |>
                 andThen (\ty1 -> unify ty ty1))) |>
                   andThen (\_ -> tcRecAlts kenv tyenv rest)

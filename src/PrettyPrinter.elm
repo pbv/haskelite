@@ -296,26 +296,6 @@ ppExpr ctx e =
         AST.Unimplemented na ->
             string na.source
 
-{-
-ppListComp : PrettyCtx -> Expr -> List ListQual -> Doc Tag
-ppListComp ctx e1 quals
-    = brackets <|
-         (ppExpr {ctx|prec=0} e1
-         |> a space
-         |> a (string  "|")
-         |> a space
-         |> a (join (string ", ") (List.map (ppQual {ctx|prec=0}) quals)))
-
-ppQual : PrettyCtx -> ListQual -> Doc Tag
-ppQual ctx qual
-    = case qual of
-          AST.QGen pat expr ->
-              ppPattern pat
-                  |> a (string "<-")
-                  |> a (ppExpr {ctx|prec=0} expr)
-          AST.QGuard expr ->
-              ppExpr {ctx|prec=0} expr
--}
 
 ppCons : PrettyCtx -> String -> List Expr -> Doc Tag
 ppCons ctx cons args

@@ -148,11 +148,6 @@ topDeclList
 indentedDeclList : Parser (List Decl)
 indentedDeclList
     = Indent.list declaration "indented binding"
-      |> andThen (\decls -> if List.isEmpty decls then
-                                problem "non-empty bindings"
-                            else
-                                succeed decls)
-
         
 -- a single top-level declaration
 topDeclaration : Parser Decl
@@ -352,9 +347,8 @@ unwind_ expr args
 equationAlts : String -> Parser Matching
 equationAlts prefix
     = oneOf
-      [ Indent.list (equationGuard prefix) "indented guard"
-             |> andThen (\alts -> ensure (List.isEmpty >> not) "alternative" alts
-                                  |> andThen (\_ -> succeed (joinAlts alts)))
+      [ succeed joinAlts
+             |= Indent.list (equationGuard prefix) "indented guard"
       , succeed (\(expr,info) -> Return expr (Just (prefix++info)))
            |= getParseChomped_ equationRHS
       ]
@@ -368,8 +362,7 @@ equationRHS
            |= topExpr   
 
 
--- an equation guard,
--- i.e. "| cond = expr"
+-- an equation guard, i.e. "| cond = expr"
 equationGuard :  String -> Parser Matching
 equationGuard prefix 
     = succeed (\ ((e1,e2), info) -> makeGuard e1 e2 (prefix++info))
@@ -561,7 +554,7 @@ floatLiteral : Parser String
 floatLiteral = succeed (\n f -> n ++ "." ++ f) 
                    |= manyDigits1
                    |. symbol "."
-                   |= manyDigits1   
+                   |= manyDigits1
          
 intLiteral : Parser Int
 intLiteral = manyDigits1 |> andThen
@@ -569,25 +562,6 @@ intLiteral = manyDigits1 |> andThen
                   case String.toInt prefix of
                       Just n -> succeed n
                       Nothing -> problem "integer literal")
-
-{-         
-number : Parser (Result NotImplemented Int)
-number = manyDigits1 |> andThen
-         (\prefix ->
-              oneOf
-              [ succeed (\suffix -> Err (AST.notImplemented (prefix++suffix) "floats are not supported"))
-                        |= backtrackable floatSuffix
-              , case String.toInt prefix of
-                    Just n -> succeed (Ok n)
-                    Nothing -> problem "integer literal"
-              ])
-floatSuffix : Parser String
-floatSuffix = succeed (String.cons '.')
-                  |. symbol "."
-                  |= manyDigits1
--}
-
-
 
               
 delimitedPattern : Parser Pattern
@@ -1040,10 +1014,6 @@ caseExpr
 caseAlts : Parser (List (Pattern,Expr,Info))
 caseAlts
     = Indent.list caseAlt "indented case alternative"
-      |> andThen (\alts -> if List.isEmpty alts then
-                               problem "non-empty case alternatives"
-                           else
-                               succeed alts)
            
 
 caseAlt : Parser (Pattern, Expr, Info)
@@ -1118,9 +1088,9 @@ upperIdentifier
 charLiteral : Parser Char
 charLiteral 
     = succeed identity
-        |. token "'" -- Parser.chompIf (\c -> c == '\'')
+        |. token "'"
         |= character '\''
-        |. token "'" -- Parser.chompIf (\c -> c == '\'')
+        |. token "'"
 
            
 stringLiteral : Parser String
@@ -1139,7 +1109,7 @@ stringLiteral
 character : Char -> Parser Char
 character delimiter
     = oneOf [ succeed identity
-                  |. token "\\" -- Parser.chompIf (\c -> c=='\\')
+                  |. token "\\" 
                   |= escapeChar
             , getChompedChar (Parser.chompIf (\c -> c/=delimiter))
             ]
@@ -1147,9 +1117,9 @@ character delimiter
 escapeChar : Parser Char
 escapeChar
     = oneOf [ succeed '\n'
-                  |. token "n" -- Parser.chompIf (\c -> c == 'n')
+                  |. token "n"
             , succeed '\t'
-                  |. token "t" -- Parser.chompIf (\c -> c == 't')
+                  |. token "t"
             , getChompedChar
                   (Parser.chompIf (\c -> c == '\\' || c=='\'' || c=='\"'))
             , succeed Char.fromCode
@@ -1255,7 +1225,8 @@ deadEndsToString deadEnds
 problemToString : Parser.Problem -> Maybe String
 problemToString prob
     = case prob of
-          Parser.Expecting s -> Just (quote s)
+          Parser.Expecting s ->
+              if s == "!" then Nothing else Just (quote s)
           Parser.ExpectingSymbol s ->
               if s == "!" then Nothing else Just (quote s)
           Parser.ExpectingKeyword s ->  Just s
@@ -1268,13 +1239,12 @@ problemToString prob
           Parser.ExpectingVariable -> Just "variable"
           Parser.ExpectingEnd -> Just "end of input"
           Parser.Problem s ->  Just s
-          Parser.UnexpectedChar -> Just "character"
           _ -> Nothing
 
 quote : String -> String
 quote = String.replace "," "comma" >>
-        String.replace "\'" "character literal" >>
-        String.replace "\"" "string literal" >>
+        String.replace "\'" "character" >>
+        String.replace "\"" "string" >>
         String.replace "\\" "lambda expression" >>
         String.replace "[" "list" >>
         String.replace "]" "end of list"

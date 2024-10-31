@@ -1,13 +1,12 @@
-module Indent exposing (list)
-
-{-| This library provides a parser for indented text.
-  | Based on https://github.com/eelcoh/parser-indent
+{- This library provides a parser for indented text.
+   Based on https://github.com/eelcoh/parser-indent
+   Pedro Vasconcelos, 2024
 -}
+module Indent exposing (list)
 
 import Parser as P exposing ((|.), (|=), Parser)
 
-
--- | Parse a list with the same indentation, for a given parser.
+-- | Parse a non-empty list with the same indentation, for a given parser.
 -- the 2nd argument is the error message for incorrect indentation
 --
 list : Parser a -> String -> Parser (List a)
@@ -21,19 +20,17 @@ list parser msg =
                 P.succeed []
 
         parser_ =
-            P.succeed identity
-                |= P.loop [] (step parser msg)
+            P.loop [] (step parser msg)
     in
-    P.oneOf
-        [ P.succeed (\a b -> ( a, b ))
+        P.succeed (\a b c -> (a,b,c))
             |. P.spaces
             |= P.getIndent
             |= P.getCol
-            |> P.andThen list_
-        , P.succeed []
-            |. P.chompWhile (\c -> c == ' ')
-            |. P.end
-        ]
+            |= parser
+            |. P.spaces
+            |> P.andThen (\(minIndent,col,first) ->
+                              P.succeed (\items -> first::items)
+                                    |= list_ (minIndent, col))
 
 
 step : Parser a -> String -> List a -> Parser (P.Step (List a) (List a))

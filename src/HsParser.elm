@@ -772,7 +772,7 @@ delimited =
     oneOf
     [ succeed Var  
           |= identifier
-    , succeed (notImplemented "floats are not implemented")
+    , succeed (notImplemented "floats are not supported")
            |= backtrackable floatLiteral
     , succeed Number
           |= intLiteral
@@ -1243,13 +1243,10 @@ problemToString prob
 
 quote : String -> String
 quote = String.replace "," "comma" >>
-        String.replace "\'" "character" >>
-        String.replace "\"" "string" >>
-        String.replace "\\" "lambda expression" >>
-        String.replace "[" "list" >>
-        String.replace "]" "end of list"
-          
-      
+        String.replace "\'" "single quote" >>
+        String.replace "\"" "double quote" >>
+        String.replace "[" "open list" >>
+        String.replace "]" "close list"      
 
 -- check if an expression can be converted to a pattern               
 patternFromExpr : Expr -> Parser Pattern

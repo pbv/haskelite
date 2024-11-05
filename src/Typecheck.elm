@@ -287,16 +287,15 @@ expandList tyalias acc ts
       
 -----------------------------------------------------------------------
 -- typechecking expressions             
------------------------------------------------------------------------          
-             
+-----------------------------------------------------------------------
+
 -- wrapper function that documents the expression being typechecked
 tcExprWrap : KindEnv -> TyEnv -> Expr -> Tc Type
 tcExprWrap kenv tenv expr
     = context ("expression " ++ Shows.showExpr expr) <|
       tcExpr kenv tenv expr
 
-             
--- typecheck a single expression      
+-- typecheck a single expression and infer the type
 tcExpr : KindEnv -> TyEnv -> Expr -> Tc Type
 tcExpr kenv tenv expr
     = case expr of
@@ -358,9 +357,21 @@ tcExpr kenv tenv expr
           Exception _ ->
               Tc.freshType                 -- error admits any type
 
-          Unimplemented msg ->
-              unimplemented msg
+          Unimplemented na ->
+              unimplemented na
 
+-- typecheck a single expression against the give type;
+-- simplifies the matching case and gives better error messages
+tcExprCheck : KindEnv -> TyEnv -> Expr -> Type -> Tc ()
+tcExprCheck kenv tenv expr ty
+    = case expr of
+          Lam _ _ match ->
+              tcMatching kenv tenv match ty
+          _ ->
+              tcExpr kenv tenv expr |>
+              andThen (\ty2 -> unify ty ty2)
+
+                  
 unimplemented : AST.NotImplemented -> Tc a
 unimplemented na = fail na.message
                              
@@ -449,12 +460,12 @@ tcPattern tenv patt ty
                       Tc.fail ("unknown constructor " ++ Shows.quote tag)
 
           (NumberP _) ->
-              unify ty tyInt |>
-              andThen (\_ -> pure tenv)
+              context ("pattern " ++ Shows.showPattern patt)
+              (unify ty tyInt |> andThen (\_ -> pure tenv))
 
           (CharP _) ->
-              unify ty tyChar |>
-              andThen (\_ -> pure tenv)
+              context ("pattern " ++ Shows.showPattern patt)
+              (unify ty tyChar |> andThen (\_ -> pure tenv))
 
           (AsP var patt1) ->
               let tenv1 = extend var ty tenv
@@ -539,10 +550,18 @@ tcRecAlts kenv tyenv lst
           [] ->
               pure ()
           ((bind,ty) :: rest) ->
-              (context ("definition of " ++ bind.name) <|
-               (tcExpr kenv tyenv bind.expr |>
-                andThen (\ty1 -> unify ty ty1))) |>
-                  andThen (\_ -> tcRecAlts kenv tyenv rest)
+              case bind.typeSig of
+                  -- just check the type if a signature was provided
+                  Just _ ->
+                      (context ("definition of " ++ bind.name) <|
+                           (tcExprCheck kenv tyenv bind.expr ty |>
+                            andThen (\_ -> tcRecAlts kenv tyenv rest)))
+                  -- otherwise, infer the type than then check  
+                  Nothing ->
+                      (context ("definition of " ++ bind.name) <|
+                           (tcExpr kenv tyenv bind.expr |>
+                            andThen (\ty1 -> unify ty ty1))) |>
+                            andThen (\_ -> tcRecAlts kenv tyenv rest)
 
 
 

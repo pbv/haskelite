@@ -554,8 +554,8 @@ tcRecAlts kenv tyenv lst
                   -- just check the type if a signature was provided
                   Just _ ->
                       (context ("definition of " ++ bind.name) <|
-                           (tcExprCheck kenv tyenv bind.expr ty |>
-                            andThen (\_ -> tcRecAlts kenv tyenv rest)))
+                           (tcExprCheck kenv tyenv bind.expr ty)) |>
+                            andThen (\_ -> tcRecAlts kenv tyenv rest)
                   -- otherwise, infer the type than then check  
                   Nothing ->
                       (context ("definition of " ++ bind.name) <|

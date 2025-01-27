@@ -1,6 +1,6 @@
 
 
-SRC = src/AST.elm src/HsParser.elm src/Indent.elm src/Haskelite.elm src/PrettyPrinter.elm src/Shows.elm src/Machine.elm src/Machine/Types.elm src/Machine/Heap.elm src/Context.elm src/Prelude.elm src/Types.elm src/Typecheck.elm src/Unify.elm src/Tc.elm
+SRC = src/AST.elm src/HsParser.elm src/Indent.elm src/Haskelite.elm src/HsPretty.elm src/Shows.elm src/Machine.elm src/Machine/Types.elm src/Machine/Heap.elm src/Context.elm src/Prelude.elm src/Types.elm src/Typecheck.elm src/Unify.elm src/Tc.elm
 
 JS = site/js/haskelite.js
 

@@ -6,13 +6,13 @@
 module Haskelite exposing (main)
 
 import AST exposing (Expr(..), Program(..), Module, Bind, Info, Name)
+import Parser
 import HsParser
+import HsPretty 
 import Machine
 import Machine.Types as Machine
 import Machine.Heap as Heap
 import Typecheck exposing (TyEnv, KindEnv)
-import Parser
-import PrettyPrinter 
 import Prelude
 
 import Dict
@@ -20,11 +20,12 @@ import Set exposing (Set)
 import List.Extra as List
 
 import Pretty exposing (Doc)
-import Pretty.Renderer as Pretty
+import Pretty.Renderer exposing (Renderer)
 
 import Html exposing (..)
-import Html.Attributes exposing (type_, class, value, style, placeholder, checked,
-                                 disabled, size, rows, cols, spellcheck, tabindex)
+import Html.Attributes exposing
+    (type_, class, value, style, placeholder, checked,
+         disabled, size, rows, cols, spellcheck, tabindex)
 import Html.Events exposing (on, onClick, onInput)
 import Platform.Cmd as Cmd
 import Platform.Sub as Sub
@@ -38,6 +39,15 @@ import Keyboard.Key exposing (Key(..))
 type alias Flags
     = { expression:String, declarations:String }
 
+-- UI options
+type alias Options
+    = { prettyLists : Bool     -- should we prettify lists?
+      , prettyEnums : Bool     -- should we prettify prelude enum functions?
+      , justifications : Bool  -- show justifications inline?
+      , layout : Bool          -- should we use layout?
+      , columns : Int          -- number of columns (for layout)
+      }
+    
 type Model
     = Editing EditModel            -- while editing
     | Reducing ReduceModel         -- while doing evaluations
@@ -64,15 +74,22 @@ type alias ReduceModel
       , flags : Flags              -- saved inputs (to go back to editing)
       , options : Options          -- displaying options
       }
-  
-type alias Options
-    = { prettyLists : Bool     -- should we prettify lists?
-      , prettyEnums : Bool     -- should we prettify Prelude enum functions?
-      , layout : Bool
-      , justifications : Bool  -- show jusfications inline/hover
+
+-- default UI options
+defaultOpts :  Options 
+defaultOpts 
+    = { prettyLists = True
+      , prettyEnums = True
+      , layout = True
+      , justifications = True
+      , columns = defaultLength
       }
 
-    
+-- default columns for pretty-printing 
+defaultLength : Int
+defaultLength
+    = 70
+   
 -- check for final evaluation step    
 isFinal : ReduceModel -> Bool
 isFinal model
@@ -81,15 +98,7 @@ isFinal model
 isInit : ReduceModel -> Bool
 isInit model
     = List.isEmpty model.previous
-      
-defaultOpts : Options
-defaultOpts
-    = { prettyLists = True
-      , prettyEnums = True
-      , layout = True
-      , justifications = True
-      }
-
+    
     
 type Msg
     = Previous           -- undo one evaluation step
@@ -289,24 +298,27 @@ checkbox b msg name =
         ]
         
 toggleLists : Options -> Options
-toggleLists opts = { opts | prettyLists = not (opts.prettyLists) }
+toggleLists opts
+    = { opts | prettyLists = not (opts.prettyLists) }
 
 toggleEnums : Options -> Options
-toggleEnums opts = { opts | prettyEnums = not (opts.prettyEnums) }
+toggleEnums opts
+    = { opts | prettyEnums = not (opts.prettyEnums) }
 
 toggleLayout : Options -> Options
-toggleLayout opts = { opts | layout = not (opts.layout) }
+toggleLayout opts
+    = { opts | layout = not (opts.layout) }
 
 toggleJustifications : Options -> Options
-toggleJustifications opts = { opts | justifications = not (opts.justifications) }
-                    
+toggleJustifications opts
+    = { opts | justifications = not (opts.justifications) }
 
 -- render a single reduction step
-renderStep  : Options -> Int -> Step -> Html Msg
+renderStep : Options -> Int -> Step -> Html Msg
 renderStep opts step (conf, info) 
-      = case PrettyPrinter.prettyConfStep opts conf step of
+      = case HsPretty.htmlConfStep opts step conf of
           Just html ->
-              if  opts.justifications then
+              if opts.justifications then
                   div [class "line"]
                       [ div [class "info2"] [text ("{ " ++  info ++ " }")]
                       , html ]
@@ -406,16 +418,9 @@ editUpdate msg model =
         _ ->
             Editing model
                        
-subscriptions : Model -> Sub msg
-subscriptions _ = Sub.none
+subscriptions : model -> Sub Msg
+subscriptions _ = Sub.none 
 
 
-{-
--- extra debugging stuff                 
-observe : a -> b -> b
-observe x y
-    = let
-        _ = Debug.log ">>>" x
-      in  y
 
--}
+                  

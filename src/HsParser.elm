@@ -833,9 +833,8 @@ listLike
                        |= lazy (\_ -> topExpr)
                        |. spaces
                        |. symbol "]"
-                , succeed (\(_, src) ->
-                               notImplemented "list comprehensions are not supported" ("[" ++ src))
-                       |= backtrackable (getParseChomped_ listComp)
+                , succeed (\(e,qs) -> ListComp e qs)
+                       |= backtrackable listComp
                 , succeed AST.listLit
                        |= Parser.sequence
                           { start = ""
@@ -849,13 +848,13 @@ listLike
 
 -- parser for list comprehensions;
 -- just for reporting better error messages
-listComp : Parser ()
+listComp : Parser (Expr, List Qual)
 listComp
-    = succeed ()
+    = succeed Tuple.pair
           |. spaces    
-          |. lazy (\_ -> topExpr)
+          |= lazy (\_ -> topExpr)
           |. spaces
-          |. Parser.sequence
+          |= Parser.sequence
              { start = "|"
              , spaces = spaces
              , separator = ","
@@ -864,18 +863,26 @@ listComp
              , trailing = Parser.Forbidden
              }
 
-listQual : Parser ()
+listQual : Parser Qual
 listQual            
     = oneOf
       [ backtrackable <|
-            succeed ()
-               |. lazy (\_ -> pattern)
+            succeed Gen
+               |= lazy (\_ -> pattern)
                |. spaces
                |. symbol "<-"
                |. spaces   
-               |. lazy (\_ -> topExpr)
-      , succeed ()
-               |. lazy (\_ -> topExpr)
+               |= lazy (\_ -> topExpr)
+      , succeed LetQual
+               |. keyword "let"
+               |. spaces
+               |= identifier
+               |. spaces   
+               |. operator "="
+               |. spaces
+               |= lazy (\_ -> topExpr)
+      , succeed Guard
+               |= lazy (\_ -> topExpr)
       ]
             
 

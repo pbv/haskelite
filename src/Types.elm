@@ -4,9 +4,10 @@
 -}
 
 module Types exposing (Type(..), Kind(..), Tycon, Tyvar, TySubst,
-                       tyBool, tyInt, tyFloat, tyChar, tyOrdering, tyList,
-                       tyUnit, tyPair, tyTuple3, tyTuple4, tyString, tyConst,
-                       applyTySubst, generalize, freeTyVars, genVars)
+                       tyBool, tyInt, tyFloat, tyChar, tyOrdering,
+                       tyList, tyUnit, tyPair, tyTuple3, tyTuple4,
+                       tyString, tyConst, applyTySubst, generalize,
+                       freeTyVars, genVars)
 
 import Dict exposing (Dict)
 import Set exposing (Set)

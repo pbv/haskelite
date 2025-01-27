@@ -3,26 +3,24 @@
    Pedro Vasconcelos, 2024
 -}
 module Shows exposing (..)
-import AST exposing (..)
-import Types  exposing (..)
-import Pretty
-import PrettyPrinter
-import Machine.Heap as Heap
 
-defaultOpts = { prettyLists = True, prettyEnums = False, layout = False, justifications = False }
-      
+import AST exposing (Expr, Pattern)
+import Types exposing (Type)
+import Pretty
+import HsPretty 
+import Machine.Heap as Heap
+  
 showExpr : Expr -> String
 showExpr
-    = PrettyPrinter.prettyExpr defaultOpts Heap.empty
+    = HsPretty.showExpr 
 
 showType : Type -> String
-showType t
-    = PrettyPrinter.prettyType t
+showType 
+    = HsPretty.showType 
 
 showPattern : Pattern -> String
-showPattern p
-    = PrettyPrinter.prettyPattern p
-
+showPattern 
+    = HsPretty.showPattern 
            
 quote : String -> String
 quote name

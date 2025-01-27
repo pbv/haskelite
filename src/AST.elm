@@ -39,10 +39,20 @@ type Expr
     | UnaryOp Name Expr                  -- unary primitive operations
     | IfThenElse Expr Expr Expr
     | Exception String                   -- runtime errors
+    | ListComp Expr (List Qual)          -- list comprehensions
     | Unimplemented NotImplemented       -- unimplemented language feature
+
+-- comprehension qualifiers
+type Qual
+    = Gen Pattern Expr    -- p <- e 
+    | Guard Expr          -- boolean expr
+    | LetQual Name Expr   -- let x = e
+
 
 type alias NotImplemented = { source : String, message : String }
 
+
+    
 notImplemented : String -> String -> NotImplemented
 notImplemented msg src = {source=src, message=msg}
       
@@ -154,6 +164,8 @@ applySubst s e
               e
           Exception _ ->
               e
+          ListComp e1 qs ->
+              ListComp (applySubst s e1) (applyQualSubst s qs)
           Unimplemented _ ->
               e
 
@@ -202,8 +214,22 @@ applyBindsSubst s
 restrictSubst : List Name -> Subst -> Subst
 restrictSubst names s
     = List.foldr Dict.remove s names
-                  
 
+
+applyQualSubst : Subst -> List Qual -> List Qual
+applyQualSubst s qs
+    = case qs of
+          [] ->
+              []
+          (Gen p e :: qs1) ->
+              let s1 = restrictSubst (patternVars p) s
+              in Gen p (applySubst s e) :: applyQualSubst s1 qs1
+          (Guard e :: qs1) ->
+              Guard (applySubst s e) :: applyQualSubst s qs1
+          (LetQual x e :: qs1) ->
+              let s1 = restrictSubst [x] s
+              in LetQual x e :: applyQualSubst s1 qs1 
+              
 -- list variables bound by a pattern
 patternVars : Pattern -> List Name
 patternVars patt 

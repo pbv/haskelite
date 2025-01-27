@@ -357,6 +357,9 @@ tcExpr kenv tenv expr
           Exception _ ->
               Tc.freshType                 -- error admits any type
 
+          ListComp _ _ ->
+              unimplemented <| notImplemented  "list comprehensions are not implemented" (Shows.showExpr expr)
+
           Unimplemented na ->
               unimplemented na
 

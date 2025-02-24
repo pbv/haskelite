@@ -18,7 +18,7 @@
             "elm-community/list-extra": "8.3.1",
             "folkertdev/elm-state": "3.0.1",
             "pithub/elm-parser-bug-workaround": "1.0.0",
-            "the-sett/elm-pretty-printer": "3.1.0"
+            "the-sett/elm-pretty-printer": "3.1.1"
         },
         "indirect": {
             "elm/time": "1.0.0",

@@ -3,10 +3,11 @@
   Pedro Vasconcelos 2021--24
 -}
 module HsPretty exposing
-    (Options, showExpr, showPattern, showType, htmlConfStep)
+    (PrettyCfg, ppExpr, ppPattern, ppType, ppConfStep, htmlRenderer)
 
-import AST exposing
-    (Expr(..), Matching(..), Qual(..), Info, Bind, Pattern(..), Name)
+import AST exposing (Expr(..), Matching(..), Qual(..), 
+    Info, Bind, Pattern(..), Name)
+
 import Types exposing (Type(..))
 
 import Machine.Types exposing (..)
@@ -18,41 +19,44 @@ import Pretty.Renderer exposing (Renderer)
 
 import Html exposing (Html, Attribute)
 import Html.Attributes exposing (class)
-   
-type alias Options r
-    = { r
-      | prettyLists : Bool     -- should we prettify lists?
-      , prettyEnums : Bool     -- should we prettify prelude enum functions?
-      , layout : Bool          -- should we use layout?
-      , columns : Int          -- number of columns for layout
-      }
 
--- very high columns for pretty-printint without layout
-infiniteLength : Int
-infiniteLength
-    = 1000000
+-- precedence and depth for pretty printing
+type alias Prec = Int
+
+type alias Depth = Int    
+
+-- tags for expression highlighting
+type Tag = Keyword
+         | Literal
+         | String
+         | Constructor
+         | Variable
+         | Linenumber
+         | Exception
     
 
-type alias Prec = Int
-              
+                  
 type alias PrettyCtx
-    = { prec : Prec          -- precedence level for placing parenthesis
-      , depth : Int          -- depth level (>=0) for tweaking printing
-      , prettyLists : Bool
+    = { prettyLists : Bool
       , prettyEnums : Bool
       -- combinators that depend on layout setting
       , line : Doc Tag
       , softline : Doc Tag
       }
 
-makeCtx : Options r -> PrettyCtx
-makeCtx opts 
-    = { prec = 0
-      , depth = 0
-      , prettyLists = opts.prettyLists
-      , prettyEnums = opts.prettyEnums
-      , line = if opts.layout then Pretty.line else Pretty.space
-      , softline = if opts.layout then Pretty.softline else Pretty.space
+type alias PrettyCfg a
+    = { a | prettyLists : Bool
+      , prettyEnums : Bool
+      , layout : Bool
+      , columns : Int
+      }
+    
+makeContext : PrettyCfg a -> PrettyCtx
+makeContext cfg
+    = { prettyLists = cfg.prettyLists
+      , prettyEnums = cfg.prettyEnums
+      , line = if cfg.layout then Pretty.line else Pretty.space
+      , softline = if cfg.layout then Pretty.softline else Pretty.space
       }
    
 
@@ -63,103 +67,88 @@ listCons = taggedString ":" Constructor
 parensIf : Bool -> Doc t -> Doc t
 parensIf b doc
     = if b then Pretty.parens doc else doc
-              
--- tags for expression highlighting
-type Tag = Keyword
-         | Literal
-         | String
-         | Constructor
-         | Variable
-         | Linenumber
-         | Exception
-        
---
--- top-level functions to render to a string
---
-showType : Type -> String
-showType ty
-    = Pretty.pretty infiniteLength (ppType 0 ty)
-      
-showExpr : Expr -> String
-showExpr e
-    = let
-        opts = { prettyLists = True
-               , prettyEnums = True
-               , layout = False
-               , columns = infiniteLength
-               }
-      in Pretty.pretty infiniteLength (ppExpr (makeCtx opts) e)
-
-showPattern : Pattern -> String
-showPattern p
-    = Pretty.pretty infiniteLength (ppPattern p)
 
 
---
--- render a configuration to HTML
---
-htmlConfStep : Options t -> Int -> Conf -> Maybe (Html msg)
-htmlConfStep opts step conf 
-    -- compute an approximate number of columns for layout
-    = case ppConfStep opts step conf of
-          Just doc ->
-              Just <| Pretty.Renderer.pretty opts.columns htmlRenderer doc
-          Nothing ->
-              Nothing
-
-      
+                  
 -- pretty print a configuration step
-ppConfStep : Options t -> Int -> Conf -> Maybe (Doc Tag)
-ppConfStep opts step conf 
-    = case ppConf opts conf of
-          Just doc ->
-              if step>0 then 
-                  Just (taggedString "=" Linenumber
-                       |> a space
-                       |> a (align doc))
-              else
-                  Just (space |> a space |> a (align doc))
-          Nothing ->
-              Nothing
+ppConfStep : PrettyCfg a -> Int -> Conf -> Maybe (Doc Tag)
+ppConfStep cfg step conf 
+    = ppConf (makeContext cfg) conf |> Maybe.andThen
+          (\doc -> Just (if step>0 then 
+                             taggedString "=" Linenumber
+                                |> a space
+                                |> a (align doc)
+                         else
+                             space |> a space |> a (align doc)))
+
                   
 
+
+
+                  
 -- pretty print a configuration
-ppConf : Options t -> Conf -> Maybe (Doc Tag)
-ppConf opts (heap, control, stack)
-    = case (getExpr control) of
+ppConf : PrettyCtx -> Conf -> Maybe (Doc Tag)
+ppConf ctx (heap, control, stack)
+    = case getExpr control of
          Just expr ->
-             let ctx = makeCtx opts 
-             in 
              case unwindStack stack expr of
-                 ([], expr1) ->
-                     let expr2 = Heap.expandExpr heap expr1
-                     in Just (ppExpr ctx expr2)
                  (stk,expr1) ->
                      let ellipsis = String.repeat (List.length stk) "."
                          expr2 = Heap.expandExpr heap expr1
                      in Just (taggedString ellipsis Linenumber
                              |> a space     
-                             |> a (align (ppExpr ctx expr2)))
+                             |> a (align (ppExpr ctx 0 0 expr2)))
+
          _ ->
              Nothing
 
+-- convert the stack into a partial expression;
+-- aborts if we reach a guard/case alternative
+unwindStack : Stack -> Expr -> (Stack, Expr)
+unwindStack stack acc
+    = case stack of
+          (Update _::rest) ->
+              unwindStack rest acc
+          (PushArg arg::rest) ->
+              unwindStack rest (App acc arg)
+          (ContBinary1 op e2::rest) ->
+              unwindStack rest (BinaryOp op acc e2)
+          (ContBinary2 op e1::rest) ->
+              unwindStack rest (BinaryOp op e1 acc) 
+          (RetBinary op _ _ ::rest) ->
+              unwindStack rest acc
+          (ContUnary op::rest) ->
+              unwindStack rest (UnaryOp op acc)
+          (RetUnary op _ ::rest) ->
+              unwindStack rest acc
+          (DeepEval::rest) ->
+              unwindStack rest acc
+          (Continue expr ctx::rest) ->
+              unwindStack rest (ctx.set acc expr)
+          (MatchEnd::rest) ->
+              unwindStack rest acc              
+          _ ->
+              (stack, acc)
+
+
+                 
 getExpr : Control -> Maybe Expr
 getExpr ctrl
     = case ctrl of
           E expr ->
               Just expr
-          M (Return expr _) _ ->
+          M (Return expr _) [] ->
               Just expr
           _ ->
               Nothing
                  
                
 -- pretty-print an expression 
-ppExpr : PrettyCtx -> Expr -> Doc Tag
-ppExpr ctx e 
+ppExpr : PrettyCtx -> Prec -> Depth -> Expr -> Doc Tag
+ppExpr ctx prec depth e 
     = case e of 
         Number n ->
-            parensIf (ctx.prec>0 && n<0) <|
+            parensIf (prec>0 && n<0) <|
                 taggedString (String.fromInt n) Literal
         Char c ->
             taggedString (prettyChar c) String
@@ -180,149 +169,149 @@ ppExpr ctx e
                         Just s ->
                             taggedString ("\"" ++ s ++ "\"") String
                         Nothing ->
-                            ppList ctx args
+                            ppList ctx depth args
                     else
-                        ppListCons ctx (args++[last])
+                        ppListCons ctx prec depth (args++[last])
                else
-                   ppListCons ctx (args++[last])
+                   ppListCons ctx prec depth (args++[last])
 
         Cons _ tag args ->
             if tag == "," || tag == ",," || tag == ",,," then
-                let sep = if ctx.depth>0 then empty else ctx.softline
+                let sep = if depth>0 then empty else ctx.softline
                 in 
                 group <| parens <| join (char ',' |> a sep) <|
-                    List.map (ppExpr {ctx|prec=0,depth=1+ctx.depth}) args
+                    List.map (ppExpr ctx 0 (1+depth)) args
             else
-                ppGenericCons ctx tag args
+                ppGenericCons ctx prec depth tag args
 
         BinaryOp op e1 e2 ->
-            let sep = if ctx.depth>0 then empty else ctx.softline
+            let sep = if depth>0 then empty else ctx.softline
             in 
-            parensIf (ctx.prec>0) 
-                 (ppExpr {ctx|prec=1} e1
+            parensIf (prec>0) 
+                 (ppExpr ctx 1 depth e1
                      |> a sep
                      |> a (string (formatOperator op))
                      |> a sep
-                     |> a (ppExpr {ctx|prec=1} e2))
+                     |> a (ppExpr ctx 1 depth e2))
 
         UnaryOp op e1 ->
-            parensIf (ctx.prec>0) 
-                (string op |> a space |> a (ppExpr {ctx|prec=1} e1))
+            parensIf (prec>0) 
+                (string op |> a space |> a (ppExpr ctx 1 depth e1))
 
         App e0 e1 ->
-            ppApp ctx e0 e1
+            ppApp ctx prec depth e0 e1
                 
         Lam _ optid match ->
             case collectMatchingArgs match [] of
                 (_, []) ->
                     ppLambda ctx optid match
                 (match1, args1) ->
-                    ppApp1 ctx (AST.lambda optid match1) args1
+                    ppApp1 ctx prec depth (AST.lambda optid match1) args1
 
         Let binds e1 ->
-             parensIf (ctx.prec>0)
+             parensIf (prec>0)
                  (group 
                       (taggedString "let" Keyword
                       |> a space
-                      |> a (nest 4 (ppBinds ctx binds))
+                      |> a (nest 4 (ppBinds ctx depth binds))
                       |> a ctx.line
                       |> a (taggedString "in" Keyword)
                       |> a space
-                      |> a (ppExpr {ctx|prec=0} e1)))
+                      |> a (ppExpr ctx 0 depth e1)))
                       
      
         Case expr alts ->
-            parensIf (ctx.prec>0) 
+            parensIf (prec>0) 
                 (group (hang 4 (taggedString "case" Keyword
                     |> a space
-                    |> a (ppExpr {ctx|prec=1} expr)
+                    |> a (ppExpr ctx 1 depth expr)
                     |> a space 
                     |> a (taggedString "of" Keyword)
                     |> a ctx.line 
-                    |> a (ppAlts {ctx|prec=0} alts))))
+                    |> a (ppAlts ctx depth alts))))
                     
         IfThenElse e1 e2 e3 ->
-            parensIf (ctx.prec>0)
+            parensIf (prec>0)
                 (group (taggedString "if" Keyword
                         |> a space
-                        |> a (ppExpr {ctx|prec=0} e1)
+                        |> a (ppExpr ctx 0 depth e1)
                         |> a space
                         |> a (taggedString "then" Keyword)
                         |> a (nest 4 (ctx.line |>
-                                       a (ppExpr {ctx|prec=0} e2)))
+                                       a (ppExpr ctx 0 depth e2)))
                         |> a ctx.line 
                         |> a (taggedString "else" Keyword)
                         |> a (nest 4 (ctx.line |>
-                                       a (ppExpr {ctx|prec=0} e3)))))
+                                       a (ppExpr ctx 0 depth e3)))))
 
         AST.Exception msg ->
             taggedString ("exception: " ++ msg) Exception
 
         AST.ListComp e1 qs ->
-            ppListComp ctx e1 qs
+            ppListComp ctx depth e1 qs
 
         AST.Unimplemented na ->
             string na.source
 
 -- list constructor
-ppListCons : PrettyCtx -> List Expr -> Doc Tag
-ppListCons ctx args 
-    = let sep = if ctx.depth>0 then empty else ctx.softline
+ppListCons : PrettyCtx -> Prec -> Depth -> List Expr -> Doc Tag
+ppListCons ctx prec depth args 
+    = let sep = if depth>0 then empty else ctx.softline
       in 
-      parensIf (ctx.prec>0) <| group <|
+      parensIf (prec>0) <| group <|
        join (sep |> a listCons |> a sep) <|
-          List.map (ppExpr {ctx|prec=1,depth=1+ctx.depth}) args
+          List.map (ppExpr ctx 1 (1+depth)) args
 
                 
 -- general constructor
-ppGenericCons : PrettyCtx -> String -> List Expr -> Doc Tag
-ppGenericCons ctx cons args
+ppGenericCons : PrettyCtx -> Prec -> Depth -> String -> List Expr -> Doc Tag
+ppGenericCons ctx prec depth cons args
     = case args of
           [] ->
               taggedString cons Constructor
           [arg] ->
-              parensIf (ctx.prec>0)
+              parensIf (prec>0)
                   (taggedString cons Constructor
                       |> a space 
-                      |> a (ppExpr {ctx|prec=1} arg))
+                      |> a (ppExpr ctx 1 depth arg))
           _ ->
               let docs =
-                      List.map (ppExpr {ctx|prec=1,depth=1+ctx.depth}) args
+                      List.map (ppExpr ctx 1 (1+depth)) args
                in
-                   parensIf (ctx.prec>0)
+                   parensIf (prec>0)
                        (group <| hang 2 <| join ctx.line
                             (taggedString cons Constructor::docs))
 
 
                       
-ppList : PrettyCtx -> List Expr -> Doc Tag
-ppList ctx es
-    = let sep = if ctx.depth>1 then empty else ctx.softline
+ppList : PrettyCtx -> Depth -> List Expr -> Doc Tag
+ppList ctx depth es
+    = let sep = if depth>1 then empty else ctx.softline
       in  group <| brackets <|
             join (char ',' |> a sep) <|
-                List.map (ppExpr {ctx|depth=1+ctx.depth}) es
+                List.map (ppExpr ctx 0 (1+depth)) es
 
               
 
-ppListComp : PrettyCtx -> Expr -> List Qual -> Doc Tag
-ppListComp ctx e qs
-    = let ctx0 = {ctx|prec=0}
-      in 
-          group (brackets (ppExpr ctx0 e
-                          |> a space
-                          |> a (char '|')
-                          |> a space
-                          |> a (join (char ',') (List.map (ppListQual ctx0) qs))))
+ppListComp : PrettyCtx -> Depth -> Expr -> List Qual -> Doc Tag
+ppListComp ctx depth e qs
+    = group
+      (brackets
+        (ppExpr ctx 0 depth e
+                 |> a space
+                 |> a (char '|')
+                 |> a space
+                 |> a (join (char ',') (List.map (ppListQual ctx depth) qs))))
 
-ppListQual : PrettyCtx -> Qual -> Doc Tag
-ppListQual ctx qs
+ppListQual : PrettyCtx -> Depth -> Qual -> Doc Tag
+ppListQual ctx depth qs
     = case qs of
           (Gen p e) ->
              ppPattern p
                  |> a (string "<-")
-                 |> a (ppExpr ctx e)
+                 |> a (ppExpr ctx 0 depth e)
           (Guard e) ->
-              ppExpr ctx e
+              ppExpr ctx 0 depth e
           (LetQual x e) ->
               taggedString "let" Keyword
                   |> a space
@@ -330,69 +319,69 @@ ppListQual ctx qs
                   |> a space
                   |> a (string "=")
                   |> a space
-                  |> a (ppExpr ctx e)
+                  |> a (ppExpr ctx 0 depth e)
                         
       
 -- pretty print a generic application
-ppApp : PrettyCtx -> Expr -> Expr -> Doc Tag
-ppApp ctx e0 e1
+ppApp : PrettyCtx -> Prec -> Depth -> Expr -> Expr -> Doc Tag
+ppApp ctx prec depth e0 e1
     = let (fun, args) = collectArgs e0 [e1]
       in if ctx.prettyEnums then
-             ppApp1Enums ctx fun args
+             ppApp1Enums ctx prec depth fun args
          else
-             ppApp1 ctx fun args
+             ppApp1 ctx prec depth fun args
 
 -- used when pretty printing enums
-ppApp1Enums : PrettyCtx -> Expr -> List Expr -> Doc Tag
-ppApp1Enums ctx fun args
-    = let ctx0 = {ctx|prec=0,depth=1+ctx.depth}
+ppApp1Enums : PrettyCtx -> Prec -> Depth -> Expr -> List Expr -> Doc Tag
+ppApp1Enums ctx prec depth fun args
+    = let depth1 = 1+depth
       in case (nameOf fun,args) of
           -- special cases for enums
           (Just "enumFrom", [e1]) ->
-              brackets (ppExpr ctx0 e1 |> a (string ".."))
+              brackets (ppExpr ctx 0 depth1 e1 |> a (string ".."))
           (Just "enumFromTo", [e1,e2]) ->
               brackets 
-                   (ppExpr ctx0 e1
+                   (ppExpr ctx 0 depth1 e1
                          |> a (string "..")
-                         |> a (ppExpr ctx0 e2))
+                         |> a (ppExpr ctx 0 depth1 e2))
           (Just "enumFromThen", [e1,e2]) ->
               brackets  
-                  (ppExpr ctx0 e1
+                  (ppExpr ctx 0 depth1 e1
                            |> a (char ',')
-                           |> a (ppExpr ctx0 e2)
+                           |> a (ppExpr ctx 0 depth1 e2)
                            |> a (string ".."))                  
           (Just "enumFromThenTo", [e1,e2,e3]) ->
               brackets 
-                  (ppExpr ctx0 e1
+                  (ppExpr ctx 0 depth1 e1
                          |> a (char ',')
-                         |> a (ppExpr ctx0 e2)
+                         |> a (ppExpr ctx 0 depth1 e2)
                          |> a (string "..")
-                         |> a (ppExpr ctx0 e3))
+                         |> a (ppExpr ctx 0 depth1 e3))
   
           -- special cases for binary operators
           (Just op, [arg1, arg2]) ->
               if AST.isOperator op then
-                  ppExpr ctx (BinaryOp op arg1 arg2)
+                  ppExpr ctx prec depth (BinaryOp op arg1 arg2)
               else
-                  ppApp2 ctx fun args
+                  ppApp2 ctx prec depth fun args
           _ ->
-              ppApp2 ctx fun args
+              ppApp2 ctx prec depth fun args
               
 -- used when not pretty printing enums          
-ppApp1 : PrettyCtx -> Expr -> List Expr -> Doc Tag
-ppApp1 ctx fun args
-    = let ctx1 = {ctx|depth=1+ctx.depth}
+ppApp1 : PrettyCtx -> Prec -> Depth -> Expr -> List Expr -> Doc Tag
+ppApp1 ctx prec depth fun args
+    = let depth1 = 1 + depth
       in case (nameOf fun,args) of
           -- special cases for binary operators
           (Just op, [arg1, arg2]) ->
               if AST.isOperator op then
-                  ppExpr ctx1 (BinaryOp op arg1 arg2)
+                  ppExpr ctx prec depth1 (BinaryOp op arg1 arg2)
               else
-                  ppApp2 ctx1 fun args
+                  ppApp2 ctx prec depth1 fun args
           _ ->
-              ppApp2 ctx1 fun args
+              ppApp2 ctx prec depth1 fun args
 
--- fetch the name for a function (if any)                  
+-- fetch the name for a function (if any) 
 nameOf : Expr -> Maybe Name
 nameOf expr 
     = case expr of
@@ -403,12 +392,12 @@ nameOf expr
           _ ->
               Nothing
                   
-ppApp2 : PrettyCtx -> Expr -> List Expr -> Doc Tag                  
-ppApp2 ctx fun args
-    = parensIf (ctx.prec>0) <|
-      (ppExpr {ctx|prec=0} fun
+ppApp2 : PrettyCtx -> Prec -> Depth -> Expr -> List Expr -> Doc Tag
+ppApp2 ctx prec depth fun args
+    = parensIf (prec>0) <|
+      (ppExpr ctx 0 depth fun
         |> a space
-        |> a (words (List.map (ppExpr {ctx|prec=1}) args)))
+        |> a (words (List.map (ppExpr ctx 1 depth) args)))
                  
                   
               
@@ -432,20 +421,19 @@ collectMatchingArgs m acc
 
 
 -- pretty print case alternatives
-ppAlts : PrettyCtx -> List (Pattern,Expr,Info) -> Doc Tag
-ppAlts ctx alts
-    = let ctx0 = {ctx|prec=0}
-      in join (char ';' |> a ctx.line) (List.map (ppAlt ctx0) alts)
+ppAlts : PrettyCtx -> Depth -> List (Pattern,Expr,Info) -> Doc Tag
+ppAlts ctx depth alts
+    = join (char ';' |> a ctx.line) (List.map (ppAlt ctx depth) alts)
 
-ppAlt : PrettyCtx -> (Pattern,Expr,Info) -> Doc Tag
-ppAlt ctx (patt, expr, info)
+ppAlt : PrettyCtx -> Depth -> (Pattern,Expr,Info) -> Doc Tag
+ppAlt ctx depth (patt, expr, info)
     = ppPattern patt
           |> a (string " -> ")
-          |> a (ppExpr ctx expr)
+          |> a (ppExpr ctx 0 0 expr)
 
 
 -- pretty print a lambda
-ppLambda : PrettyCtx -> Maybe Name -> Matching -> Doc Tag
+ppLambda : PrettyCtx  -> Maybe Name -> Matching -> Doc Tag
 ppLambda ctx optid m
     = case optid of
           -- just use the binding name if there is one
@@ -458,42 +446,42 @@ ppLambda ctx optid m
               -- otherwise check if it has any arguments
               case m of
                   Match p m1 ->
-                      parens (char '\\' |> a (ppMatching ctx m))
+                      parens (char '\\' |> a (ppMatching ctx 0 m))
                   Return e _ ->
-                      ppExpr ctx e
+                      ppExpr ctx 0 0 e
                   _ ->
                       taggedString "<unimplemented>" Exception
 
           
 -- pretty print a matching            
-ppMatching : PrettyCtx -> Matching -> Doc Tag
-ppMatching ctx m =
+ppMatching : PrettyCtx -> Depth -> Matching -> Doc Tag
+ppMatching ctx depth m =
     case m of
         (Match p m1) ->
             ppPattern p
                  |> a space
-                 |> a (ppMatching ctx m1)
+                 |> a (ppMatching ctx depth m1)
         (Return e _) ->
             string "->"
                   |> a space
-                  |> a (ppExpr {ctx|prec=0} e)
+                  |> a (ppExpr ctx 0 depth e)
 
         _ ->
             string "<unimplemented>"
 
 
 -- pretty print a list of bindings
-ppBinds : PrettyCtx -> List Bind -> Doc Tag
-ppBinds ctx binds
-    = join (char ';' |> a ctx.line) (List.map (ppBind ctx) binds)
+ppBinds : PrettyCtx -> Depth -> List Bind -> Doc Tag
+ppBinds ctx depth binds
+    = join (char ';' |> a ctx.line) (List.map (ppBind ctx depth) binds)
 
-ppBind : PrettyCtx -> Bind -> Doc Tag
-ppBind ctx bind
+ppBind : PrettyCtx -> Depth -> Bind -> Doc Tag
+ppBind ctx depth bind
     = string bind.name
           |> a space
           |> a (char '=') 
           |> a space 
-          |> a (ppExpr {ctx|prec=0} (removeName bind.name bind.expr))
+          |> a (ppExpr ctx 0 depth (removeName bind.name bind.expr))
 
 
 removeName : Name -> Expr -> Expr
@@ -571,6 +559,8 @@ ppPattern p =
         ConsP "," ps ->
             parens <| join (char ',') (List.map ppPattern ps)
         ConsP ",," ps ->
+            parens <| join (char ',') (List.map ppPattern ps)
+        ConsP ",,," ps ->
             parens <| join (char ',') (List.map ppPattern ps)
 
         ConsP ":" [p1,p2] ->
@@ -652,7 +642,7 @@ escapeChar delimiter c
 -- use CodeMirror CSS tags for consistency
 htmlRenderer : Renderer Tag (List (Html msg)) (Html msg)
 htmlRenderer =
-    { outer = (\elems -> Html.span [class "cm-s-default"] (List.reverse elems))
+    { outer = (\elems -> Html.span [] (List.reverse elems))
     , init = []
     , tagged = htmlTagged
     , untagged = htmlUntagged

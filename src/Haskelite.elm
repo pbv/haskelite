@@ -43,7 +43,7 @@ type alias Flags
 type alias Options
     = { prettyLists : Bool     -- should we prettify lists?
       , prettyEnums : Bool     -- should we prettify prelude enum functions?
-      , justifications : Bool  -- show justifications inline?
+      , justifications : Bool  -- show justifications inline or as popup?
       , layout : Bool          -- should we use layout?
       , columns : Int          -- number of columns (for layout)
       }
@@ -232,10 +232,11 @@ reduceView model =
          div [ class "lines" ]
              <|
               [ div [class "current"]
-                       [ renderStep model.options linecount model.current ]
+                   [renderStep model.options linecount linecount model.current]
               ]
               ++
-              List.map2 (renderStep model.options) (List.reverse <| List.range 0 (linecount-1)) model.previous
+              List.map2 (renderStep model.options linecount)
+                   (List.reverse <| List.range 0 (linecount-1)) model.previous
 
         , div [] [ span [] [ button [ class "navbar"
                            , onClick EditMode] [text "Edit"]
@@ -314,9 +315,9 @@ toggleJustifications opts
     = { opts | justifications = not (opts.justifications) }
 
 -- render a single reduction step
-renderStep : Options -> Int -> Step -> Html Msg
-renderStep opts step (conf, info) 
-      = case HsPretty.htmlConfStep opts step conf of
+renderStep : Options -> Int -> Int -> Step -> Html Msg
+renderStep opts count step (conf, info)
+    = case htmlConfStep opts step conf of
           Just html ->
               if opts.justifications then
                   div [class "line"]
@@ -327,6 +328,14 @@ renderStep opts step (conf, info)
                       [ html, div [class "info"] [text info] ]
           Nothing ->
               span [] []
+
+-- render a configuration to HTML
+htmlConfStep : Options -> Int -> Machine.Conf -> Maybe (Html msg)
+htmlConfStep cfg step conf 
+    = HsPretty.ppConfStep cfg step conf |>
+      Maybe.andThen
+          (\doc -> Just <|
+               Pretty.Renderer.pretty cfg.columns HsPretty.htmlRenderer doc)
 
                 
                   

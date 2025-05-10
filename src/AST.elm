@@ -42,16 +42,15 @@ type Expr
     | ListComp Expr (List Qual)          -- list comprehensions
     | Unimplemented NotImplemented       -- unimplemented language feature
 
+      
+
 -- comprehension qualifiers
 type Qual
     = Gen Pattern Expr    -- p <- e 
     | Guard Expr          -- boolean expr
     | LetQual Name Expr   -- let x = e
 
-
 type alias NotImplemented = { source : String, message : String }
-
-
     
 notImplemented : String -> String -> NotImplemented
 notImplemented msg src = {source=src, message=msg}

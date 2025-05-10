@@ -71,7 +71,6 @@ normalizeArgs heap args
                            
 --                
 -- a small-step transition of the machine
--- first argument is the set of functions to skip over
 transition : Conf -> Maybe Conf
 transition conf 
     = case conf of
@@ -123,11 +122,15 @@ transition conf
               let
                   (e1, heap1) = normalizeArg heap e0
               in 
-                  Just (heap1, M (translateCase e1 alts) [], MatchEnd::stack)
+                  Just (heap1
+                       , M (translateCase e1 alts) []
+                       , MatchEnd::stack)
                       
           -- if-then-else
           (heap, E (IfThenElse e1 e2 e3), stack) ->
-              Just (heap, M (translateIfThenElse e1 e2 e3) [], MatchEnd::stack)
+              Just (heap
+                   , M (translateIfThenElse e1 e2 e3) []
+                   , MatchEnd::stack)
 
           (heap, E (Var y), stack) ->
               case Heap.get y heap of
@@ -684,11 +687,13 @@ justification (heap, control, stack)
     = case (control, stack) of
          (E w, ((RetBinary op e1 e2)::_)) ->
              Just (showPrim2 op e1 e2 w)
+                 
          (E w, ((RetUnary op e1)::_)) ->
              Just (showPrim1 op e1 w)
+                 
          (M (Return expr info) [], MatchEnd::_) ->
              info
-                 
+
          (E (Exception msg), _) ->
              Just "runtime error"
 
@@ -715,5 +720,4 @@ showPrim1 op e1 e2
           Shows.showExpr (UnaryOp op e1) ++ " = " ++ Shows.showExpr e2
       else
           "definition of " ++ op 
-
 

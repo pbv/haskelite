@@ -94,3 +94,9 @@ input.editline {
     color: #a00;
     font-style: oblique;
 }
+
+/* expression focusing */
+.marked {
+    background-color: #8f0;
+    padding: 2px;
+}

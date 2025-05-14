@@ -136,6 +136,8 @@ expandExpr heap expr
               expr
           Unimplemented _ ->
               expr
+          Marked e1 ->
+              Marked (expandExpr heap e1)
 
 expandQual : Heap -> Qual -> Qual
 expandQual heap q

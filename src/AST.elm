@@ -41,6 +41,7 @@ type Expr
     | Exception String                   -- runtime errors
     | ListComp Expr (List Qual)          -- list comprehensions
     | Unimplemented NotImplemented       -- unimplemented language feature
+    | Marked Expr                        -- mark around an expressoin
 
       
 
@@ -167,6 +168,8 @@ applySubst s e
               ListComp (applySubst s e1) (applyQualSubst s qs)
           Unimplemented _ ->
               e
+          Marked e1 ->
+              Marked (applySubst s e1)
 
                   
 applyMatchSubst : Subst -> Matching -> Matching

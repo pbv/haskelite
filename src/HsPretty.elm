@@ -33,6 +33,8 @@ type Tag = Keyword
          | Variable
          | Linenumber
          | Exception
+         | BeginMark
+         | EndMark  
     
 
                   
@@ -71,9 +73,9 @@ parensIf b doc
 
                   
 -- pretty print a configuration step
-ppConfStep : PrettyCfg a -> Int -> Conf -> Maybe (Doc Tag)
-ppConfStep cfg step conf 
-    = ppConf (makeContext cfg) conf |> Maybe.andThen
+ppConfStep : PrettyCfg a -> Bool -> Int -> Conf -> Maybe (Doc Tag)
+ppConfStep cfg highlight step conf 
+    = ppConf (makeContext cfg) highlight conf |> Maybe.andThen
           (\doc -> Just (if step>0 then 
                              taggedString "=" Linenumber
                                 |> a space
@@ -82,16 +84,14 @@ ppConfStep cfg step conf
                              space |> a space |> a (align doc)))
 
                   
-
-
-
-                  
+                 
 -- pretty print a configuration
-ppConf : PrettyCtx -> Conf -> Maybe (Doc Tag)
-ppConf ctx (heap, control, stack)
+ppConf :  PrettyCtx -> Bool -> Conf -> Maybe (Doc Tag)
+ppConf ctx highlight (heap, control, stack)
     = case getExpr control of
          Just expr ->
-             case unwindStack stack expr of
+             case unwindStack stack (if highlight then Marked expr
+                                     else expr) of
                  (stk,expr1) ->
                      let ellipsis = String.repeat (List.length stk) "."
                          expr2 = Heap.expandExpr heap expr1
@@ -252,6 +252,12 @@ ppExpr ctx prec depth e
 
         AST.Unimplemented na ->
             string na.source
+
+        AST.Marked e1 ->
+            taggedString "(" BeginMark
+                |> a (ppExpr ctx prec depth e1)
+                |> a (taggedString ")" EndMark)   
+        
 
 -- list constructor
 ppListCons : PrettyCtx -> Prec -> Depth -> List Expr -> Doc Tag
@@ -640,22 +646,66 @@ escapeChar delimiter c
 
 -- an HTML renderer;
 -- use CodeMirror CSS tags for consistency
-htmlRenderer : Renderer Tag (List (Html msg)) (Html msg)
+
+-- accumulator for HTML  
+type HtmlAcc msg
+    = Outside (List (Html msg))                  -- outside of a mark
+    | Inside (List (Html msg)) (List (Html msg)) -- inside of a mark
+
+
+htmlRenderer : Renderer Tag (HtmlAcc msg) (Html msg)
 htmlRenderer =
-    { outer = (\elems -> Html.span [] (List.reverse elems))
-    , init = []
+    { outer = htmlOuter
+    , init = Outside []
     , tagged = htmlTagged
     , untagged = htmlUntagged
-    , newline = (\elems -> Html.br [] []::elems)
+    , newline = htmlNewline
     }
 
-htmlTagged : Tag -> String -> List (Html msg) -> List (Html msg)
-htmlTagged tag str lst =
-    (Html.span (tagToAttributes tag) [Html.text str]) :: lst
+htmlOuter : HtmlAcc msg -> Html msg
+htmlOuter acc =
+    case acc of
+        Outside outelems ->
+            Html.span [] (List.reverse outelems)
+        Inside inelems outelems ->
+            Html.span []
+                [ Html.span [class "marked"] (List.reverse inelems)
+                , Html.span [] (List.reverse outelems) ]            
 
-htmlUntagged : String -> List (Html msg) -> List (Html msg)
-htmlUntagged str lst
-    = (Html.text (replaceSpaces str)) :: lst
+htmlNewline : HtmlAcc msg -> HtmlAcc msg
+htmlNewline acc 
+    = let new = Html.br [] []
+      in 
+          case acc of
+              Outside elems ->
+                  Outside (new::elems)
+              Inside inelems outelems ->
+                  Inside (new::inelems) outelems
+
+    
+htmlTagged : Tag -> String -> HtmlAcc msg -> HtmlAcc msg
+htmlTagged tag str acc =
+    case (tag, acc) of
+        (BeginMark, Outside elems) ->
+            Inside [] elems
+        (EndMark, Inside inelems outelems) ->
+            let mark = Html.span [class "marked"] (List.reverse inelems)
+            in Outside (mark::outelems)
+        (_, Outside elems) ->
+            let new = Html.span (tagToAttributes tag) [Html.text str]
+            in Outside (new::elems)
+        (_, Inside inelems outelems) ->
+            let new = Html.span (tagToAttributes tag) [Html.text str]
+            in Inside (new::inelems) outelems
+
+htmlUntagged : String -> HtmlAcc msg -> HtmlAcc msg
+htmlUntagged str acc
+    = let new = Html.text (replaceSpaces str)
+      in case acc of
+          Outside elems ->
+              Outside (new :: elems)
+          Inside inelems outelems ->
+              Inside (new::inelems) outelems
 
 -- replace spaces with unbreakable ones
 replaceSpaces : String -> String
@@ -679,4 +729,8 @@ tagToAttributes tag
               [class "linenumber"]
           Exception ->
               [class "exception"]
+          BeginMark ->
+              []
+          EndMark ->
+              []
 

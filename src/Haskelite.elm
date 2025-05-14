@@ -250,7 +250,7 @@ reduceView model =
                            , disabled (isFinal model)
                            , onClick Next] [text "Next >"]
                  , span [class "options"] [
-                         label [] [text "Pretty-printing"]                         
+                         label [] [text "Pretty-printing"]
                        ,  checkbox model.options.prettyLists
                              (Toggle toggleLists) "lists"
                        , checkbox model.options.prettyEnums
@@ -310,6 +310,7 @@ toggleLayout : Options -> Options
 toggleLayout opts
     = { opts | layout = not (opts.layout) }
 
+
 toggleJustifications : Options -> Options
 toggleJustifications opts
     = { opts | justifications = not (opts.justifications) }
@@ -317,7 +318,7 @@ toggleJustifications opts
 -- render a single reduction step
 renderStep : Options -> Int -> Int -> Step -> Html Msg
 renderStep opts count step (conf, info)
-    = case htmlConfStep opts step conf of
+    = case htmlConfStep opts step count conf of
           Just html ->
               if opts.justifications then
                   div [class "line"]
@@ -330,9 +331,9 @@ renderStep opts count step (conf, info)
               span [] []
 
 -- render a configuration to HTML
-htmlConfStep : Options -> Int -> Machine.Conf -> Maybe (Html msg)
-htmlConfStep cfg step conf 
-    = HsPretty.ppConfStep cfg step conf |>
+htmlConfStep : Options -> Int -> Int -> Machine.Conf -> Maybe (Html msg)
+htmlConfStep cfg step count conf 
+    = HsPretty.ppConfStep cfg (step==count) step conf |>
       Maybe.andThen
           (\doc -> Just <|
                Pretty.Renderer.pretty cfg.columns HsPretty.htmlRenderer doc)

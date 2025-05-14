@@ -363,6 +363,9 @@ tcExpr kenv tenv expr
           Unimplemented na ->
               unimplemented na
 
+          Marked e1 ->
+              tcExpr kenv tenv e1
+
 -- typecheck a single expression against the give type;
 -- simplifies the matching case and gives better error messages
 tcExprCheck : KindEnv -> TyEnv -> Expr -> Type -> Tc ()

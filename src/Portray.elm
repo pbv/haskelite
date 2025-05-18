@@ -2,7 +2,7 @@
   Pretty-printer for Haskelite expressions, types and machine configurations
   Pedro Vasconcelos 2021--24
 -}
-module HsPretty exposing
+module Portray exposing
     (PrettyCfg, ppExpr, ppPattern, ppType, ppConfStep, htmlRenderer)
 
 import AST exposing (Expr(..), Matching(..), Qual(..), 

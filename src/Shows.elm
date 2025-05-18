@@ -7,7 +7,7 @@ module Shows exposing (..)
 import AST exposing (Expr, Pattern)
 import Types exposing (Type)
 import Pretty
-import HsPretty 
+import Portray
 
 -- very high number of columns for pretty-printing without layout
 infiniteLength : Int
@@ -16,7 +16,7 @@ infiniteLength
 
 showType : Type -> String
 showType ty
-    = Pretty.pretty infiniteLength (HsPretty.ppType 0 ty)
+    = Pretty.pretty infiniteLength (Portray.ppType 0 ty)
       
 showExpr : Expr -> String
 showExpr e
@@ -26,11 +26,11 @@ showExpr e
               , line = Pretty.space
               , softline = Pretty.space
               }
-      in Pretty.pretty infiniteLength (HsPretty.ppExpr ctx 0 0 e)
+      in Pretty.pretty infiniteLength (Portray.ppExpr ctx 0 0 e)
 
 showPattern : Pattern -> String
 showPattern p
-    = Pretty.pretty infiniteLength (HsPretty.ppPattern p)
+    = Pretty.pretty infiniteLength (Portray.ppPattern p)
 
 quote : String -> String
 quote name

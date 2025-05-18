@@ -7,8 +7,8 @@ module Haskelite exposing (main)
 
 import AST exposing (Expr(..), Program(..), Module, Bind, Info, Name)
 import Parser
-import HsParser
-import HsPretty 
+import Language
+import Portray
 import Machine
 import Machine.Types as Machine
 import Machine.Heap as Heap
@@ -133,8 +133,8 @@ initModel flags
               Panic msg
           Ok (binds, kenv, tenv) ->
               let
-                  result1 = HsParser.parseExpr flags.expression
-                  result2 = HsParser.parseModule flags.declarations
+                  result1 = Language.parseExpr flags.expression
+                  result2 = Language.parseModule flags.declarations
                   result3 = typecheck kenv tenv result1 result2
               in
                   Editing
@@ -333,10 +333,10 @@ renderStep opts count step (conf, info)
 -- render a configuration to HTML
 htmlConfStep : Options -> Int -> Int -> Machine.Conf -> Maybe (Html msg)
 htmlConfStep cfg step count conf 
-    = HsPretty.ppConfStep cfg (step==count) step conf |>
+    = Portray.ppConfStep cfg (step==count) step conf |>
       Maybe.andThen
           (\doc -> Just <|
-               Pretty.Renderer.pretty cfg.columns HsPretty.htmlRenderer doc)
+               Pretty.Renderer.pretty cfg.columns Portray.htmlRenderer doc)
 
                 
                   
@@ -392,7 +392,7 @@ editUpdate : Msg -> EditModel -> Model
 editUpdate msg model =
     case msg of
         EditExpr str ->
-            let result = HsParser.parseExpr str
+            let result = Language.parseExpr str
             in Editing { model |
                          flags = { expression = str
                                  , declarations = model.flags.declarations }
@@ -400,7 +400,7 @@ editUpdate msg model =
                        , typeChecked = Ok Nothing
                        }
         EditDecls str ->
-            let result = HsParser.parseModule str
+            let result = Language.parseModule str
             in Editing { model |
                          flags = { expression = model.flags.expression
                                  , declarations = str }

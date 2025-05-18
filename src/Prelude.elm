@@ -8,14 +8,14 @@ module Prelude exposing (prelude)
 
 import AST exposing (Module, Bind)
 import Parser
-import HsParser exposing (toplevelModule)
+import Language exposing (toplevelModule)
 import Typecheck exposing (KindEnv, TyEnv, tcModule, initialKindEnv, initialTypeEnv)
 import Tc 
 
 -- result of parsing and typechecking the prelude text below
 preludeModule : Result String Module
 preludeModule
-    = Result.mapError HsParser.deadEndsToString <|
+    = Result.mapError Language.deadEndsToString <|
       Parser.run toplevelModule preludeText 
 
 

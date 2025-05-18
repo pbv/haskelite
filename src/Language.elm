@@ -2,7 +2,7 @@
   Parser for Haskelite, a small subset of Haskell
   Pedro Vasconcelos, 2021-2024
 -}
-module HsParser exposing (..)
+module Language exposing (..)
 
 import Parser exposing (Parser, 
                         (|.), (|=),
@@ -10,7 +10,6 @@ import Parser exposing (Parser,
                         succeed, problem, oneOf, andThen, commit,
                         backtrackable, lazy)
 import Parser.Workaround 
-import Indent 
 import AST exposing (..)
 import Types exposing (..)
 import Shows
@@ -144,11 +143,10 @@ topDeclList
       , trailing = Parser.Forbidden
       }
 
--- indented local declarations
-indentedDeclList : Parser (List Decl)
-indentedDeclList
-    = Indent.list declaration "indented binding"
-        
+-- local declarations
+declList : Parser (List Decl)
+declList = sepBy1 declaration semicolon
+      
 -- a single top-level declaration
 topDeclaration : Parser Decl
 topDeclaration
@@ -178,11 +176,11 @@ typeDeclaration : Parser Decl
 typeDeclaration
     = succeed (\(tycon,vs) ty -> Alias {tycon=tycon, args=vs, tyexp=ty})
          |. keyword "type"
-         |. spaces
+         |. whitespaceOrComment
          |= simpleType
-         |. spaces
+         |. whitespaceOrComment
          |. operator "="
-         |. spaces
+         |. whitespaceOrComment
          |= typeExpr
 
 
@@ -193,11 +191,11 @@ dataDeclaration : Parser Decl
 dataDeclaration
     = succeed makeDataDecl
          |. keyword "data"
-         |. spaces
+         |. whitespaceOrComment
          |= simpleType
-         |. spaces
+         |. whitespaceOrComment
          |. operator "="
-         |. spaces
+         |. whitespaceOrComment
          |= dataAlternatives 
 
 
@@ -255,13 +253,13 @@ dataAlternative : Parser (Name, List Type)
 dataAlternative
     = succeed (\tag ts -> (tag,ts))
           |= upperIdentifier
-          |. spaces
+          |. whitespace
           |= Parser.sequence
              { start = ""
              , end = ""
              , separator = ""
-             , spaces = spaces
-             , item = delimitedType
+             , spaces = whitespace
+             , item = atomicType
              , trailing = Parser.Forbidden                      
              }
 
@@ -272,6 +270,7 @@ equation
     = getParseChomped_ equationLHS |>
       andThen (\((name,patts), prefix) ->
           succeed (makeEquation name patts)
+              |. whitespace     
               |= equationAlts prefix
               |. whitespace
               |= whereBindings)
@@ -286,7 +285,8 @@ whereBindings
     = oneOf
       [ succeed identity
           |. keyword "where"
-          |= lazy (\_ -> bindings)
+          |. whitespace
+          |= lazy (\_ -> indented bindings)
       , succeed []
       ]
                  
@@ -347,8 +347,17 @@ unwind_ expr args
 equationAlts : String -> Parser Matching
 equationAlts prefix
     = oneOf
-      [ succeed joinAlts
-             |= Indent.list (equationGuard prefix) "indented guard"
+      [ succeed (\alt alts -> joinAlts (alt::alts))
+            |= equationGuard prefix
+            |. whitespace
+            |= Parser.sequence
+               { start = ""
+               , separator = ""
+               , end = ""
+               , spaces = whitespace
+               , item = equationGuard prefix
+               , trailing = Parser.Forbidden
+               }
       , succeed (\(expr,info) -> Return expr (Just (prefix++info)))
            |= getParseChomped_ equationRHS
       ]
@@ -356,27 +365,27 @@ equationAlts prefix
 equationRHS : Parser Expr
 equationRHS
     = succeed identity
-           |. spaces
+           |. whitespace
            |. operator "="
-           |. spaces
+           |. whitespace
            |= topExpr   
 
 
 -- an equation guard, i.e. "| cond = expr"
 equationGuard :  String -> Parser Matching
 equationGuard prefix 
-    = succeed (\ ((e1,e2), info) -> makeGuard e1 e2 (prefix++info))
+    = succeed (\((e1,e2), info) -> makeGuard e1 e2 (prefix++info))
          |= getParseChomped_ guardedExpr
               
 guardedExpr : Parser (Expr, Expr)
 guardedExpr
     = succeed Tuple.pair
           |. operator "|"
-          |. spaces
+          |. whitespace
           |= topExpr
-          |. spaces
+          |. whitespace
           |. operator "="
-          |. spaces
+          |. whitespace
           |= topExpr
 
 
@@ -425,9 +434,9 @@ typeSignature : Parser Decl
 typeSignature
     = succeed TypeSig
          |= identifierOrOperator
-         |. spaces
+         |. whitespace
          |. operator "::"
-         |. spaces
+         |. whitespace
          |= typeExpr
 
 -- principal non-terminal for type expressions
@@ -435,14 +444,14 @@ typeExpr : Parser Type
 typeExpr
     = succeed insertArrows
            |= typeApplication
-           |. spaces
+           |. whitespace
            |= oneOf
               [ Parser.sequence
                 { start = "->"
                 , end = ""
                 , separator = "->"
                 , item = typeApplication
-                , spaces = spaces
+                , spaces = whitespace
                 , trailing = Parser.Forbidden
                 }
               , succeed []
@@ -468,18 +477,18 @@ typeApplication
              { start = ""
              , end = ""
              , separator = ""
-             , item = delimitedType
+             , item = atomicType
              , spaces = spaces
              , trailing = Parser.Forbidden
              }
-      , delimitedType
+      , atomicType
       ]
 
            
           
--- self-delimited types
-delimitedType : Parser Type
-delimitedType
+-- atomic types
+atomicType : Parser Type
+atomicType
     = oneOf
       [ succeed (\c -> tyConst c [])
             |= upperIdentifier
@@ -487,14 +496,16 @@ delimitedType
             |= identifier    -- should be generalized if necessary
       , succeed tyList
             |. symbol "["
+            |. whitespace
             |= lazy (\_ -> typeExpr)
+            |. whitespace 
             |. symbol "]"
       , Parser.sequence
             { start = "("
             , end = ")"
             , separator = ","
             , item = lazy (\_ -> typeExpr)
-            , spaces = spaces
+            , spaces = whitespace
             , trailing = Parser.Forbidden
             } |> andThen makeTupleType
       ]
@@ -531,8 +542,7 @@ identifierOrOperator
                 |. symbol ")"
             ]
 
-      
-            
+                  
 infixOperator : Parser String
 infixOperator
     = Parser.chompWhile AST.operatorChar
@@ -542,31 +552,10 @@ infixOperator
                       else succeed s)
 
 
--- one or more decimal digits
-manyDigits1 : Parser String
-manyDigits1
-    = (Parser.chompIf Char.isDigit |. Parser.chompWhile Char.isDigit)
-      |> Parser.getChompedString
-
-
-
-floatLiteral : Parser String
-floatLiteral = succeed (\n f -> n ++ "." ++ f) 
-                   |= manyDigits1
-                   |. symbol "."
-                   |= manyDigits1
-         
-intLiteral : Parser Int
-intLiteral = manyDigits1 |> andThen
-             (\prefix ->
-                  case String.toInt prefix of
-                      Just n -> succeed n
-                      Nothing -> problem "integer literal")
-
-              
-delimitedPattern : Parser Pattern
-delimitedPattern
-    = delimited |> andThen patternFromExpr
+             
+atomicPattern : Parser Pattern
+atomicPattern
+    = atomicExpr |> andThen patternFromExpr
 
 pattern : Parser Pattern
 pattern
@@ -632,48 +621,41 @@ type alias BinOp = Expr -> Expr -> Expr
 --
 infixLeft : Parser Expr -> List (Name, BinOp) -> Parser Expr
 infixLeft operand table
-    = succeed identity
-         |= operand
-         |. spaces
-        |> andThen (infixLeftCont operand table)
-         
-infixLeftCont : Parser Expr -> List (Name, BinOp) -> Expr -> Parser Expr     
-infixLeftCont operand table accum
-    = oneOf
-      <| List.map (\(op, func) -> 
-                       succeed (func accum)
-                           |. operator op
-                           |. spaces
-                           |= operand
-                           |. spaces
-                           |> andThen (infixLeftCont operand table)) table
-          ++ [succeed accum]
+    = let continue expr
+             = oneOf <|
+               List.map (\(op,func) ->
+                             succeed (\item -> Parser.Loop (func expr item))
+                                |. whitespace_
+                                |. operator op
+                                |. whitespace_
+                                |= operand) table
+                   ++ [succeed (Parser.Done expr)]
+      in operand |> andThen (\start -> Parser.loop start continue)
 
               
 -- parse infix right associative operators
 --
 infixRight : Parser Expr -> List (Name, BinOp) -> Parser Expr
 infixRight operand table
-    = succeed identity
-         |= operand
-         |. spaces
-       |> andThen (infixRightCont operand table)
+    = let go acc
+           = oneOf <|
+             List.map (\(op,func) ->
+                             succeed (\item ->
+                                          Parser.Loop ((func,item)::acc))
+                                |. whitespace_
+                                |. operator op
+                                |. whitespace_
+                                |= operand) table
+                   ++ [succeed (Parser.Done (List.reverse acc))]
+      in operand |> andThen (\start -> Parser.loop [] go
+                 |> andThen (\list -> succeed (applyRight list start)))
 
-
-infixRightCont : Parser Expr -> List (Name, BinOp) -> Expr -> Parser Expr
-infixRightCont operand table accum
-    = oneOf
-      <| List.map (\(op,func) -> 
-                       succeed identity
-                           |. operator op
-                           |. spaces
-                           |= operand
-                           |. spaces
-                           |> andThen (\y -> infixRightCont operand table y 
-                           |> andThen (\r -> succeed (func accum r)))
-                  ) table
-          ++ [succeed accum]
-
+applyRight : List (a -> a -> a, a) -> a -> a
+applyRight lst x
+    = case lst of
+          [] -> x
+          ((f,y)::fs) ->  f x (applyRight fs y)
+                               
 
 -- parse non-associative operators
 --
@@ -765,17 +747,17 @@ applicativeExpr
                   application ]
 
 
--- delimited expressions
+-- atomic expressions
 --
-delimited : Parser Expr
-delimited =
+atomicExpr : Parser Expr
+atomicExpr =
     oneOf
-    [ succeed Var  
-          |= identifier
-    , succeed (notImplemented "floats are not supported")
-           |= backtrackable floatLiteral
-    , succeed Number
+    [ succeed Number
           |= intLiteral
+    , succeed (notImplemented "floats are not supported")
+          |= backtrackable floatLiteral
+    , succeed Var  
+          |= identifier
     , succeed Char
           |= charLiteral
     , succeed stringToList
@@ -840,7 +822,7 @@ listLike
                           { start = ""
                           , end = "]"
                           , separator = ","
-                          , spaces = spaces
+                          , spaces = whitespace
                           , item = lazy (\_ -> topExpr)
                           , trailing = Parser.Forbidden
                           }
@@ -851,12 +833,12 @@ listLike
 listComp : Parser (Expr, List Qual)
 listComp
     = succeed Tuple.pair
-          |. spaces    
+          |. whitespace    
           |= lazy (\_ -> topExpr)
-          |. spaces
+          |. whitespace
           |= Parser.sequence
              { start = "|"
-             , spaces = spaces
+             , spaces = whitespace
              , separator = ","
              , end = "]"
              , item = listQual
@@ -869,17 +851,17 @@ listQual
       [ backtrackable <|
             succeed Gen
                |= lazy (\_ -> pattern)
-               |. spaces
+               |. whitespace
                |. symbol "<-"
-               |. spaces   
+               |. whitespace
                |= lazy (\_ -> topExpr)
       , succeed LetQual
                |. keyword "let"
-               |. spaces
+               |. whitespace
                |= identifier
-               |. spaces   
+               |. whitespace
                |. operator "="
-               |. spaces
+               |. whitespace
                |= lazy (\_ -> topExpr)
       , succeed Guard
                |= lazy (\_ -> topExpr)
@@ -894,7 +876,7 @@ literalTuple
       { start = "("
       , end = ")"
       , separator = ","
-      , spaces = spaces
+      , spaces = whitespace
       , item = lazy (\_ -> topExpr)
       , trailing = Parser.Forbidden
       } |> andThen makeTuple
@@ -936,7 +918,7 @@ prefixNeg : Parser Expr
 prefixNeg
     = succeed (App (Var "negate"))
          |. symbol "-"
-         |= delimited
+         |= atomicExpr
 
            
              
@@ -952,22 +934,23 @@ infixApp
 application : Parser Expr       
 application
     = succeed makeApp
-         |= delimited
-         |. spaces
-         |= delimitedList
+         |= atomicExpr
+         |. whitespace_
+         |= Parser.sequence
+            { start = ""
+            , end = ""
+            , separator = ""
+            , spaces = whitespace_
+            , item = atomicExpr
+            , trailing = Parser.Forbidden
+            }
 
-delimitedList : Parser (List Expr)
-delimitedList
-    = Parser.sequence
-      { start = ""
-      , end = ""
-      , separator = ""
-      , spaces = spaces
-      , item = delimited
-      , trailing = Parser.Forbidden
-      }
-           
-
+-- whitespace indented further right than the current level
+whitespace_ : Parser ()
+whitespace_
+    = oneOf [ backtrackable (whitespace |> andThen (\_ -> checkIndent (<)))
+            , succeed () ]
+    
 lambdaExpr : Parser Expr
 lambdaExpr
     = getParseChomped lambdaExprAux 
@@ -978,17 +961,17 @@ lambdaExprAux
                    AST.lambda Nothing
                        (makePatterns patts (Return expr (Just info))))
          |. symbol "\\"
-         |. spaces
+         |. whitespace
          |= Parser.sequence
             { start = ""
             , end = ""
             , separator = ""
-            , spaces = spaces
-            , item = delimitedPattern
+            , spaces = whitespace
+            , item = atomicPattern
             , trailing = Parser.Forbidden
             }
-         |. symbol "->"   
-         |. spaces
+         |. symbol "->"
+         |. whitespace
          |= lazy (\_ -> topExpr)
 
 -- add a list of patterns to a matching 
@@ -1001,26 +984,28 @@ letExpr : Parser Expr
 letExpr
     = succeed Let
          |. keyword "let"
-         |= lazy (\_ -> bindings)
-         |. spaces
+         |. whitespace
+         |= lazy (\_ -> indented bindings)
+         |. whitespace
          |. keyword "in"
-         |. spaces
-         |= lazy (\_ -> topExpr)  
+         |. whitespace
+         |= lazy (\_ -> topExpr)
 
 
 caseExpr : Parser Expr
 caseExpr
     = succeed Case
          |. keyword "case"
-         |. spaces
+         |. whitespace
          |= lazy (\_ -> topExpr)
-         |. spaces
+         |. whitespace
          |. keyword "of"
-         |= caseAlts
+         |. whitespace
+         |= indented caseAlts
 
 caseAlts : Parser (List (Pattern,Expr,Info))
 caseAlts
-    = Indent.list caseAlt "indented case alternative"
+    = sepBy1 caseAlt semicolon
            
 
 caseAlt : Parser (Pattern, Expr, Info)
@@ -1028,9 +1013,9 @@ caseAlt
     = getParseChomped <|
       succeed (\patt expr info -> (patt,expr, info))
          |= lazy (\_ -> pattern)
-         |. spaces   
+         |. whitespace
          |. symbol "->"
-         |. spaces
+         |. whitespace
          |= lazy (\_ -> topExpr)
             
     
@@ -1038,7 +1023,7 @@ caseAlt
 bindings : Parser (List Bind)
 bindings
     = succeed collectBinds
-         |= indentedDeclList 
+         |= declList
       |> andThen (\binds -> case checkBinds binds of
                                 Err msg ->
                                     problem msg
@@ -1050,15 +1035,15 @@ if_then_else : Parser Expr
 if_then_else
     = succeed IfThenElse
          |. keyword "if"
-         |. spaces
+         |. whitespace
          |= lazy (\_ -> topExpr)
-         |. spaces
+         |. whitespace
          |. keyword "then"
-         |. spaces
+         |. whitespace
          |= lazy (\_ -> topExpr)
-         |. spaces
+         |. whitespace
          |. keyword "else"
-         |. spaces
+         |. whitespace
          |= lazy (\_ -> topExpr)
                 
     
@@ -1073,7 +1058,28 @@ identifierList
       , trailing = Parser.Forbidden
       }
                    
+-- one or more decimal digits
+manyDigits1 : Parser String
+manyDigits1
+    = (Parser.chompIf Char.isDigit |. Parser.chompWhile Char.isDigit)
+      |> Parser.getChompedString
 
+
+floatLiteral : Parser String
+floatLiteral = succeed (\n f -> n ++ "." ++ f) 
+                   |= manyDigits1
+                   |. symbol "."
+                   |= manyDigits1
+         
+intLiteral : Parser Int
+intLiteral = manyDigits1 |> andThen
+             (\prefix ->
+                  case String.toInt prefix of
+                      Just n -> succeed n
+                      Nothing -> problem "integer literal")
+       
+  
+    
 -- lower case identifiers    
 identifier : Parser String
 identifier
@@ -1083,6 +1089,12 @@ identifier
       , reserved = reservedWords
       }
 
+reservedWords : Set String    
+reservedWords
+    = Set.fromList [ "if", "then", "else", "let", "in", "case", "of",
+                         "where", "data", "type" ]
+
+   
 -- upper case identifiers    
 upperIdentifier : Parser String
 upperIdentifier
@@ -1092,6 +1104,10 @@ upperIdentifier
       , reserved = Set.empty
       }
 
+    
+         
+
+    
 charLiteral : Parser Char
 charLiteral 
     = succeed identity
@@ -1141,10 +1157,6 @@ getChompedChar p
                          _ -> problem "character literal")
       
                   
-reservedWords : Set String    
-reservedWords
-    = Set.fromList [ "if", "then", "else",
-                     "let", "in", "case", "of", "where", "data" ]
 
 
 -- consume whitespaces (including newlines) or comments
@@ -1155,7 +1167,7 @@ whitespaceOrComment
           [ Parser.Workaround.lineCommentAfter "--"
           , Parser.multiComment "{-" "-}" Parser.Nestable
           , whitespace
-          ]           
+          ]
 
 -- whitespace, including newlines
 whitespace : Parser ()
@@ -1167,6 +1179,48 @@ spaces : Parser ()
 spaces
     = Parser.chompWhile (\c -> c==' ' || c=='\t')
 
+semicolon : Parser ()
+semicolon
+    = oneOf [symbol ";", checkIndent (==)]
+
+--
+-- compare the the indentation level  against the current column
+--
+checkIndent : (Int -> Int -> Bool) -> Parser ()
+checkIndent cmp =
+  succeed (\indent column -> cmp indent column)
+    |= Parser.getIndent
+    |= Parser.getCol
+    |> andThen (\b -> if b then succeed ()
+                      else problem "indentation")
+       
+--
+-- parse a sequence of items separated by a given parser
+--
+sepBy1 : Parser a -> Parser () -> Parser (List a)
+sepBy1 itemp separator
+    = let next items =
+              oneOf [ succeed (\item -> Parser.Loop (item::items))
+                          |. whitespace
+                          |. separator
+                          |. whitespace
+                          |= itemp
+                    , succeed (Parser.Done (List.reverse items))
+                    ]
+      in 
+          itemp |> andThen (\item -> Parser.loop [item] next)
+              
+      
+--      
+-- Remember the current column indentation level and run a parser
+--
+indented : Parser a -> Parser a
+indented parser
+    = Parser.getCol |> andThen (\col -> Parser.withIndent col parser)
+ 
+
+
+      
 ----------------------------------------------------------------------      
 -- helper functions
 ----------------------------------------------------------------------
@@ -1197,11 +1251,12 @@ getParseChomped_ parser
 
 
 ifProgress : Parser a -> Int -> Parser (Parser.Step Int ())
-ifProgress parser offset =
-  succeed identity
-    |. parser
-    |= Parser.getOffset
-    |> Parser.map (\newOffset -> if offset == newOffset then Parser.Done () else Parser.Loop newOffset)
+ifProgress parser offset
+    = succeed (\newOffset -> if offset == newOffset
+                             then Parser.Done ()
+                             else Parser.Loop newOffset)
+           |. parser
+           |= Parser.getOffset
       
 
 -- check a property and abort parsing if it fails       

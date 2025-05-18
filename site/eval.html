@@ -21,8 +21,10 @@
     <script>
       var decls =
 	  "-- A recursive type for arithmetic expressions\n"+
-	  "data Expr = Num Int | Add Expr Expr | Mult Expr Expr\n\n"+
-	  "-- example expression: (2*3)+1\n"+
+	  "data Expr = Num Int\n"+
+	  "          | Add Expr Expr\n"+
+	  "          | Mult Expr Expr\n\n"+
+	  "-- Example expression: (2*3)+1\n"+
 	  "example :: Expr\n"+
 	  "example = Add (Mult (Num 2) (Num 3)) (Num 1)\n\n"+
 	  "-- Recursive function to evaluate an expression\n"+

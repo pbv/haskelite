@@ -24,10 +24,16 @@
 	  "-- flatten a tree into a list\n"+
 	  "-- if the tree respects the BST property, the result list will be ordered\n"+
 	  "flatten :: BST a -> [a]\n"+
-	  "flatten Leaf = []\n"+
-	  "flatten (Node x left right) = flatten left ++ [x] ++ flatten right\n\n"+
+	  "flatten t = worker t []\n\n"+
+	  "-- recursive worker with an accumulating parameter\n"+
+	  "worker :: BST a -> [a] -> [a]\n"+
+	  "worker Leaf acc = acc\n"+
+	  "worker (Node x left right) acc\n"+
+          "       = worker left (x : worker right acc)\n\n"+
 	  "-- an example BST\n"+
-	  "example = Node 3 (Node 2 (Node 1 Leaf Leaf) Leaf) (Node 5 (Node 4 Leaf Leaf) (Node 6 Leaf Leaf))\n";
+	  "example = Node 3\n"+
+	  "               (Node 2 (Node 1 Leaf Leaf) Leaf)\n"+
+	  "               (Node 5 (Node 4 Leaf Leaf) (Node 6 Leaf Leaf))\n";
 
 
       var app = Elm.Haskelite.init({

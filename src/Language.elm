@@ -1,13 +1,13 @@
 {-
-  Parser for Haskelite, a small subset of Haskell
-  Pedro Vasconcelos, 2021-2024
+  A parser for a small subset of Haskell
+  Pedro Vasconcelos, 2021-2025
 -}
 module Language exposing (..)
 
 import Parser exposing (Parser, 
                         (|.), (|=),
                         token, symbol, keyword, variable,
-                        succeed, problem, oneOf, andThen, commit,
+                        succeed, problem, oneOf, andThen, 
                         backtrackable, lazy)
 import Parser.Workaround 
 import AST exposing (..)
@@ -752,10 +752,10 @@ applicativeExpr
 atomicExpr : Parser Expr
 atomicExpr =
     oneOf
-    [ succeed Number
-          |= intLiteral
-    , succeed (notImplemented "floats are not supported")
+    [  succeed (notImplemented "floats are not supported")
           |= backtrackable floatLiteral
+    , succeed Number
+          |= intLiteral
     , succeed Var  
           |= identifier
     , succeed Char
@@ -1058,25 +1058,38 @@ identifierList
       , trailing = Parser.Forbidden
       }
                    
--- one or more decimal digits
-manyDigits1 : Parser String
-manyDigits1
-    = (Parser.chompIf Char.isDigit |. Parser.chompWhile Char.isDigit)
-      |> Parser.getChompedString
 
+intLiteral : Parser Int
+intLiteral
+    = Parser.getChompedString integral |> andThen
+      (\s -> case String.toInt s of
+                 Nothing ->
+                     problem "integer literal"
+                 Just n ->
+                     succeed n)
 
 floatLiteral : Parser String
-floatLiteral = succeed (\n f -> n ++ "." ++ f) 
-                   |= manyDigits1
-                   |. symbol "."
-                   |= manyDigits1
-         
-intLiteral : Parser Int
-intLiteral = manyDigits1 |> andThen
-             (\prefix ->
-                  case String.toInt prefix of
-                      Just n -> succeed n
-                      Nothing -> problem "integer literal")
+floatLiteral
+    = Parser.getChompedString floating
+          
+integral : Parser ()
+integral
+    = Parser.chompIf Char.isDigit |. Parser.chompWhile Char.isDigit
+    
+floating : Parser ()
+floating = integral
+           |. symbol "."
+           |. integral
+           |. oneOf [exponent, succeed ()]
+
+exponent : Parser ()
+exponent
+    = Parser.chompIf (\x -> x == 'e' || x == 'E')
+      |. oneOf [ Parser.chompIf (\x -> x == '+' || x == '-')
+               , succeed ()
+               ]
+      |. integral
+
        
   
     

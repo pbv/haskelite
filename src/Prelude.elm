@@ -143,6 +143,10 @@ minimum [] = error "minimum: empty list"
 minimum [x] = x
 minimum (x:xs) = min x (minimum xs) 
 
+elem :: a -> [a] -> Bool
+elem x [] = False                
+elem x (y:ys) = x == y || elem x ys
+                 
 take :: Int -> [a] -> [a]
 take n xs | n<=0 = []
 take n [] = []
